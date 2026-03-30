@@ -1,0 +1,15 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Google Drive
+.gdoc
+*.gdoc
+*.gsheet
+*.gslides
+
+# Editor
+.cursor/
+*.swp
+*.swo

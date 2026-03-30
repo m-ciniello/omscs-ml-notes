@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>pca_ica.md</title>
+<meta http-equiv="Content-type" content="text/html;charset=UTF-8">
+
+<style>
+/* https://github.com/microsoft/vscode/blob/master/extensions/markdown-language-features/media/markdown.css */
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+body {
+	font-family: var(--vscode-markdown-font-family, -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif);
+	font-size: var(--vscode-markdown-font-size, 14px);
+	padding: 0 26px;
+	line-height: var(--vscode-markdown-line-height, 22px);
+	word-wrap: break-word;
+}
+
+#code-csp-warning {
+	position: fixed;
+	top: 0;
+	right: 0;
+	color: white;
+	margin: 16px;
+	text-align: center;
+	font-size: 12px;
+	font-family: sans-serif;
+	background-color:#444444;
+	cursor: pointer;
+	padding: 6px;
+	box-shadow: 1px 1px 1px rgba(0,0,0,.25);
+}
+
+#code-csp-warning:hover {
+	text-decoration: none;
+	background-color:#007acc;
+	box-shadow: 2px 2px 2px rgba(0,0,0,.25);
+}
+
+body.scrollBeyondLastLine {
+	margin-bottom: calc(100vh - 22px);
+}
+
+body.showEditorSelection .code-line {
+	position: relative;
+}
+
+body.showEditorSelection .code-active-line:before,
+body.showEditorSelection .code-line:hover:before {
+	content: "";
+	display: block;
+	position: absolute;
+	top: 0;
+	left: -12px;
+	height: 100%;
+}
+
+body.showEditorSelection li.code-active-line:before,
+body.showEditorSelection li.code-line:hover:before {
+	left: -30px;
+}
+
+.vscode-light.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(0, 0, 0, 0.15);
+}
+
+.vscode-light.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(0, 0, 0, 0.40);
+}
+
+.vscode-light.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+.vscode-dark.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(255, 255, 255, 0.4);
+}
+
+.vscode-dark.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(255, 255, 255, 0.60);
+}
+
+.vscode-dark.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+.vscode-high-contrast.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(255, 160, 0, 0.7);
+}
+
+.vscode-high-contrast.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(255, 160, 0, 1);
+}
+
+.vscode-high-contrast.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+img {
+	max-width: 100%;
+	max-height: 100%;
+}
+
+a {
+	text-decoration: none;
+}
+
+a:hover {
+	text-decoration: underline;
+}
+
+a:focus,
+input:focus,
+select:focus,
+textarea:focus {
+	outline: 1px solid -webkit-focus-ring-color;
+	outline-offset: -1px;
+}
+
+hr {
+	border: 0;
+	height: 2px;
+	border-bottom: 2px solid;
+}
+
+h1 {
+	padding-bottom: 0.3em;
+	line-height: 1.2;
+	border-bottom-width: 1px;
+	border-bottom-style: solid;
+}
+
+h1, h2, h3 {
+	font-weight: normal;
+}
+
+table {
+	border-collapse: collapse;
+}
+
+table > thead > tr > th {
+	text-align: left;
+	border-bottom: 1px solid;
+}
+
+table > thead > tr > th,
+table > thead > tr > td,
+table > tbody > tr > th,
+table > tbody > tr > td {
+	padding: 5px 10px;
+}
+
+table > tbody > tr + tr > td {
+	border-top: 1px solid;
+}
+
+blockquote {
+	margin: 0 7px 0 5px;
+	padding: 0 16px 0 10px;
+	border-left-width: 5px;
+	border-left-style: solid;
+}
+
+code {
+	font-family: Menlo, Monaco, Consolas, "Droid Sans Mono", "Courier New", monospace, "Droid Sans Fallback";
+	font-size: 1em;
+	line-height: 1.357em;
+}
+
+body.wordWrap pre {
+	white-space: pre-wrap;
+}
+
+pre:not(.hljs),
+pre.hljs code > div {
+	padding: 16px;
+	border-radius: 3px;
+	overflow: auto;
+}
+
+pre code {
+	color: var(--vscode-editor-foreground);
+	tab-size: 4;
+}
+
+/** Theming */
+
+.vscode-light pre {
+	background-color: rgba(220, 220, 220, 0.4);
+}
+
+.vscode-dark pre {
+	background-color: rgba(10, 10, 10, 0.4);
+}
+
+.vscode-high-contrast pre {
+	background-color: rgb(0, 0, 0);
+}
+
+.vscode-high-contrast h1 {
+	border-color: rgb(0, 0, 0);
+}
+
+.vscode-light table > thead > tr > th {
+	border-color: rgba(0, 0, 0, 0.69);
+}
+
+.vscode-dark table > thead > tr > th {
+	border-color: rgba(255, 255, 255, 0.69);
+}
+
+.vscode-light h1,
+.vscode-light hr,
+.vscode-light table > tbody > tr + tr > td {
+	border-color: rgba(0, 0, 0, 0.18);
+}
+
+.vscode-dark h1,
+.vscode-dark hr,
+.vscode-dark table > tbody > tr + tr > td {
+	border-color: rgba(255, 255, 255, 0.18);
+}
+
+</style>
+
+<style>
+/* Tomorrow Theme */
+/* http://jmblog.github.com/color-themes-for-google-code-highlightjs */
+/* Original theme - https://github.com/chriskempson/tomorrow-theme */
+
+/* Tomorrow Comment */
+.hljs-comment,
+.hljs-quote {
+	color: #8e908c;
+}
+
+/* Tomorrow Red */
+.hljs-variable,
+.hljs-template-variable,
+.hljs-tag,
+.hljs-name,
+.hljs-selector-id,
+.hljs-selector-class,
+.hljs-regexp,
+.hljs-deletion {
+	color: #c82829;
+}
+
+/* Tomorrow Orange */
+.hljs-number,
+.hljs-built_in,
+.hljs-builtin-name,
+.hljs-literal,
+.hljs-type,
+.hljs-params,
+.hljs-meta,
+.hljs-link {
+	color: #f5871f;
+}
+
+/* Tomorrow Yellow */
+.hljs-attribute {
+	color: #eab700;
+}
+
+/* Tomorrow Green */
+.hljs-string,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-addition {
+	color: #718c00;
+}
+
+/* Tomorrow Blue */
+.hljs-title,
+.hljs-section {
+	color: #4271ae;
+}
+
+/* Tomorrow Purple */
+.hljs-keyword,
+.hljs-selector-tag {
+	color: #8959a8;
+}
+
+.hljs {
+	display: block;
+	overflow-x: auto;
+	color: #4d4d4c;
+	padding: 0.5em;
+}
+
+.hljs-emphasis {
+	font-style: italic;
+}
+
+.hljs-strong {
+	font-weight: bold;
+}
+</style>
+
+<style>
+/*
+ * Markdown PDF CSS
+ */
+
+ body {
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif, "Meiryo";
+	padding: 0 12px;
+}
+
+pre {
+	background-color: #f8f8f8;
+	border: 1px solid #cccccc;
+	border-radius: 3px;
+	overflow-x: auto;
+	white-space: pre-wrap;
+	overflow-wrap: break-word;
+}
+
+pre:not(.hljs) {
+	padding: 23px;
+	line-height: 19px;
+}
+
+blockquote {
+	background: rgba(127, 127, 127, 0.1);
+	border-color: rgba(0, 122, 204, 0.5);
+}
+
+.emoji {
+	height: 1.4em;
+}
+
+code {
+	font-size: 14px;
+	line-height: 19px;
+}
+
+/* for inline code */
+:not(pre):not(.hljs) > code {
+	color: #C9AE75; /* Change the old color so it seems less like an error */
+	font-size: inherit;
+}
+
+/* Page Break : use <div class="page"/> to insert page break
+-------------------------------------------------------- */
+.page {
+	page-break-after: always;
+}
+
+</style>
+
+<script src="https://unpkg.com/mermaid/dist/mermaid.min.js"></script>
+</head>
+<body>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: document.body.classList.contains('vscode-dark') || document.body.classList.contains('vscode-high-contrast')
+          ? 'dark'
+          : 'default'
+    });
+  </script>
+<h1 id="principal-component-analysis-and-independent-component-analysis">Principal Component Analysis and Independent Component Analysis</h1>
+<h3 id="from-variance-maximization-to-independent-sources">From Variance Maximization to Independent Sources</h3>
+<p><em>OMSCS ML | Continuous Latent Variables Unit</em></p>
+<hr>
+<h2 id="table-of-contents">Table of Contents</h2>
+<ol>
+<li><a href="#1-motivation">Motivation: Low-Dimensional Structure in High-Dimensional Data</a></li>
+<li><a href="#2-max-variance">PCA: Maximum Variance Formulation</a>
+<ul>
+<li>2.1 The Setup</li>
+<li>2.2 Deriving the First Principal Component</li>
+<li>2.3 Additional Components by Induction</li>
+</ul>
+</li>
+<li><a href="#3-min-error">PCA: Minimum Reconstruction Error Formulation</a>
+<ul>
+<li>3.1 The Setup</li>
+<li>3.2 Optimizing the Projection Coordinates</li>
+<li>3.3 Optimizing the Basis Directions</li>
+<li>3.4 Why Both Formulations Agree</li>
+</ul>
+</li>
+<li><a href="#4-applications">Applications of PCA</a>
+<ul>
+<li>4.1 Data Compression and Visualization</li>
+<li>4.2 Whitening (Sphereing)</li>
+</ul>
+</li>
+<li><a href="#5-ppca">Probabilistic PCA</a>
+<ul>
+<li>5.1 Motivation and the PPCA-to-VAE Arc</li>
+<li>5.2 The Generative Model</li>
+<li>5.3 The Marginal Distribution $p(\mathbf{x})$</li>
+<li>5.4 Maximum Likelihood Solution</li>
+<li>5.5 The Posterior $p(\mathbf{z} \mid \mathbf{x})$ and the Latent Projection</li>
+<li>5.6 EM for PPCA (Pointer)</li>
+<li>5.7 Factor Analysis: One Structural Difference</li>
+</ul>
+</li>
+<li><a href="#6-pca-to-ica">From PCA to ICA: Why Non-Gaussianity Matters</a>
+<ul>
+<li>6.1 PCA's Fundamental Limitation: Rotational Ambiguity</li>
+<li>6.2 The Cocktail Party Problem</li>
+<li>6.3 The ICA Model</li>
+<li>6.4 Ambiguities Inherent in ICA</li>
+<li>6.5 Why Gaussian Latents Are Forbidden</li>
+<li>6.6 Independence vs. Uncorrelatedness</li>
+</ul>
+</li>
+<li><a href="#7-ica-estimation">ICA Estimation: Finding Independent Components</a>
+<ul>
+<li>7.1 The Core Idea: Non-Gaussianity as a Target</li>
+<li>7.2 Kurtosis</li>
+<li>7.3 Negentropy</li>
+<li>7.4 Mutual Information and the Infomax Principle</li>
+<li>7.5 Preprocessing: Centering and Whitening</li>
+<li>7.6 The FastICA Algorithm</li>
+</ul>
+</li>
+<li><a href="#8-sources">Sources and Further Reading</a></li>
+</ol>
+<hr>
+<h2 id="1-motivation-low-dimensional-structure-in-high-dimensional-data">1. Motivation: Low-Dimensional Structure in High-Dimensional Data</h2>
+<p>A recurring theme in machine learning is that high-dimensional data often lives on a much lower-dimensional subspace — or at least stays close to one. The data's <em>observed</em> dimensionality ($D$) is the number of features we measure; its <em>intrinsic</em> dimensionality is the number of degrees of freedom actually driving variation.</p>
+<p><strong>A concrete example.</strong> Consider a dataset of portrait photographs, each stored as a 256×256 grayscale image — $D = 65{,}536$ dimensions. Yet the space of natural-looking faces is controlled by a much smaller number of factors: lighting direction, head pose (left-right tilt, up-down), facial expression, and a set of identity-specific features. Empirically, somewhere between 50 and 200 directions account for almost all meaningful variation in a large face dataset; the remaining tens of thousands of pixel dimensions are largely redundant once those factors are fixed. The high dimensionality is an artifact of the pixel representation, not of the underlying structure.</p>
+<p>The same pattern appears in motion capture data. Recording an actor walking attaches 50 markers to the body and tracks their 3D positions — $D = 150$ dimensions. But walking is a periodic, mechanically constrained motion: once you know the gait phase and a few parameters like stride length and speed, the positions of all 150 coordinates are largely determined. The intrinsic dimensionality is perhaps a handful; the rest is noise and redundancy.</p>
+<p><strong>Why does this matter?</strong> Two reasons. First, <em>computational efficiency</em>: algorithms that scale with $D$ are expensive when $D$ is large, but if the true structure is $M$-dimensional with $M \ll D$, we can work in the lower-dimensional space. Second, <em>generalization</em>: a model that exploits the manifold structure concentrates probability mass where data actually appears, rather than spreading it diffusely across all of $\mathbb{R}^D$.</p>
+<p><strong>The modeling strategy.</strong> Assume each observed data point $\mathbf{x} \in \mathbb{R}^D$ is generated from a lower-dimensional latent variable $\mathbf{z} \in \mathbb{R}^M$ with $M &lt; D$, via some (possibly noisy) mapping. Finding this mapping — and the values of $\mathbf{z}$ for each observation — is the problem these notes address.</p>
+<p>We start with the simplest possible version: a <em>linear</em> mapping and <em>Gaussian</em> latent distribution. This is PCA and its probabilistic generalization. We then ask what happens when we relax the Gaussian assumption, which leads to ICA.</p>
+<hr>
+<h2 id="2-pca-maximum-variance-formulation">2. PCA: Maximum Variance Formulation</h2>
+<h3 id="21-the-setup">2.1 The Setup</h3>
+<p><strong>Notation.</strong> We have $N$ data points ${\mathbf{x}<em>n}</em>{n=1}^N$ with $\mathbf{x}_n \in \mathbb{R}^D$. We want to find a direction $\mathbf{u}_1 \in \mathbb{R}^D$ to project onto — intuitively, the direction along which the data varies most.</p>
+<p>Define the sample mean:
+$$\bar{\mathbf{x}} = \frac{1}{N} \sum_{n=1}^N \mathbf{x}_n$$</p>
+<p>and the sample covariance matrix:
+$$\mathbf{S} = \frac{1}{N} \sum_{n=1}^N (\mathbf{x}_n - \bar{\mathbf{x}})(\mathbf{x}_n - \bar{\mathbf{x}})^T \in \mathbb{R}^{D \times D}$$</p>
+<p>Note that $\mathbf{S}$ is symmetric ($\mathbf{S}^T = \mathbf{S}$) and positive semidefinite. Both properties will matter shortly.</p>
+<p><strong>Why maximize variance?</strong> Picture dropping 2D data points perpendicularly onto a number line — each point lands at a single scalar value, its projection. If the line runs through the main spread of the data, the projected points land far apart and remain distinguishable. If the line runs perpendicular to the spread, all points collapse near the same value and the structure is lost. Maximizing the variance of the projected values is precisely the criterion that keeps the projected points as spread out and distinguishable as possible.</p>
+<p><strong>The normalization convention.</strong> We are searching for a <em>direction</em>, not a vector with a particular magnitude. We therefore constrain $\mathbf{u}_1$ to be a unit vector: $\mathbf{u}_1^T \mathbf{u}_1 = 1$. Without this, the optimization is unbounded — we could scale $|\mathbf{u}_1| \to \infty$ to inflate the projected variance arbitrarily.</p>
+<p><strong>The projection.</strong> Each data point $\mathbf{x}_n$ projects onto the scalar $\mathbf{u}_1^T \mathbf{x}_n$. The mean of the projected values is $\mathbf{u}_1^T \bar{\mathbf{x}}$, and the variance of the projected values is:</p>
+<p>$$\frac{1}{N} \sum_{n=1}^N \left( \mathbf{u}_1^T \mathbf{x}_n - \mathbf{u}<em>1^T \bar{\mathbf{x}} \right)^2 = \frac{1}{N} \sum</em>{n=1}^N \left( \mathbf{u}_1^T (\mathbf{x}_n - \bar{\mathbf{x}}) \right)^2 = \mathbf{u}_1^T \mathbf{S} \mathbf{u}_1$$</p>
+<p>The last step rewrites each squared scalar as a quadratic form: for $\mathbf{v}_n = \mathbf{x}_n - \bar{\mathbf{x}}$, we have $(\mathbf{u}_1^T\mathbf{v}_n)^2 = \mathbf{u}_1^T(\mathbf{v}_n\mathbf{v}_n^T)\mathbf{u}_1$. Summing over $n$ and dividing by $N$ gives $\mathbf{u}_1^T\mathbf{S}\mathbf{u}_1$ by definition of $\mathbf{S}$.</p>
+<p><strong>So the problem is:</strong>
+$$\max_{\mathbf{u}_1} ; \mathbf{u}_1^T \mathbf{S} \mathbf{u}_1 \qquad \text{subject to} \qquad \mathbf{u}_1^T \mathbf{u}_1 = 1$$</p>
+<p>This is a Lagrange-multiplier problem. (See the Lagrange Multipliers notes for the general method; here we apply it directly.)</p>
+<h3 id="22-deriving-the-first-principal-component">2.2 Deriving the First Principal Component</h3>
+<p><strong>Forming the Lagrangian.</strong> Introduce a multiplier $\lambda_1$ for the constraint $\mathbf{u}_1^T \mathbf{u}_1 - 1 = 0$. The Lagrangian is:</p>
+<p>$$\mathcal{L}(\mathbf{u}_1, \lambda_1) = \mathbf{u}_1^T \mathbf{S} \mathbf{u}_1 + \lambda_1 \left(1 - \mathbf{u}_1^T \mathbf{u}_1\right)$$</p>
+<p><strong>Taking the gradient.</strong> Differentiate with respect to $\mathbf{u}<em>1$ and set to zero. For the first term, we use the identity $\nabla</em>{\mathbf{u}} (\mathbf{u}^T \mathbf{A} \mathbf{u}) = 2\mathbf{A}\mathbf{u}$, which holds whenever $\mathbf{A}$ is symmetric — which $\mathbf{S}$ is. To see why, write $f(\mathbf{u}) = \mathbf{u}^T\mathbf{A}\mathbf{u} = \sum_i \sum_j u_i A_{ij} u_j$ and differentiate with respect to a single component $u_k$. By the product rule, the $k$th partial derivative picks up two contributions — once when $i = k$ and once when $j = k$:</p>
+<p>$$\frac{\partial f}{\partial u_k} = \sum_j A_{kj} u_j + \sum_i u_i A_{ik} = (\mathbf{A}\mathbf{u})_k + (\mathbf{A}^T\mathbf{u})_k$$</p>
+<p>When $\mathbf{A}$ is symmetric ($\mathbf{A} = \mathbf{A}^T$), both terms are identical, giving $\partial f / \partial u_k = 2(\mathbf{A}\mathbf{u})<em>k$. Stacking all $k$ gives $\nabla</em>\mathbf{u} f = 2\mathbf{A}\mathbf{u}$. For the second term, $\nabla_{\mathbf{u}}(\mathbf{u}^T\mathbf{u}) = 2\mathbf{u}$. Setting the combined gradient to zero:</p>
+<p>$$2\mathbf{S}\mathbf{u}_1 - 2\lambda_1 \mathbf{u}_1 = \mathbf{0}$$</p>
+<p>$$\boxed{\mathbf{S}\mathbf{u}_1 = \lambda_1 \mathbf{u}_1}$$</p>
+<p>This is the eigenvector equation for $\mathbf{S}$: at any stationary point of the constrained problem, $\mathbf{u}_1$ must be an eigenvector of the data covariance matrix with eigenvalue $\lambda_1$.</p>
+<p><strong>Identifying the maximum.</strong> Stationary points exist wherever $\mathbf{u}_1$ is any eigenvector of $\mathbf{S}$ — but which one maximizes the projected variance? Left-multiply the eigenvector equation by $\mathbf{u}_1^T$:</p>
+<p>$$\mathbf{u}_1^T \mathbf{S} \mathbf{u}_1 = \lambda_1 \underbrace{\mathbf{u}_1^T \mathbf{u}<em>1}</em>{=1} = \lambda_1$$</p>
+<p>The projected variance <em>equals the eigenvalue</em>. To see why this is meaningful: $\mathbf{u}_1^T\mathbf{S}\mathbf{u}_1$ is a quadratic form — it applies $\mathbf{S}$ to $\mathbf{u}_1$ to get a new vector $\mathbf{S}\mathbf{u}_1$, then asks how much of that vector points in the direction of $\mathbf{u}_1$. When $\mathbf{u}_1$ is an eigenvector, $\mathbf{S}\mathbf{u}_1 = \lambda_1\mathbf{u}_1$, so the answer is simply $\lambda_1$ — the eigenvalue is the factor by which $\mathbf{S}$ stretches $\mathbf{u}_1$ along its own direction, which is exactly the variance of the data in that direction. Choosing the direction of largest stretch therefore means choosing the direction of maximum data spread. Since $\mathbf{S}$ is positive semidefinite all eigenvalues are $\geq 0$, and the maximum is achieved by choosing $\mathbf{u}_1$ to be the eigenvector corresponding to the <strong>largest eigenvalue</strong> $\lambda_1$ of $\mathbf{S}$. This eigenvector is called the <strong>first principal component</strong>.</p>
+<p><strong>So what?</strong> The algebra has revealed something geometrically meaningful: the direction of maximum data spread is precisely the top eigenvector of the covariance matrix. The eigenvectors of $\mathbf{S}$ are the natural coordinate axes of the data's variance structure, and the eigenvalues tell us how much variance is captured in each direction. The covariance matrix <em>encodes</em> all pairwise spread information, and its eigenvectors diagonalize it, producing a coordinate system where the variables are uncorrelated.</p>
+<h3 id="23-additional-components-by-induction">2.3 Additional Components by Induction</h3>
+<p>For an $M$-dimensional projection, we want $M$ orthonormal directions $\mathbf{u}_1, \ldots, \mathbf{u}_M$ that jointly maximize total projected variance. The argument extends by induction (see Bishop Exercise 12.1 for the full proof):</p>
+<ul>
+<li>Assume the first $m$ directions are the top-$m$ eigenvectors of $\mathbf{S}$.</li>
+<li>To find the $(m+1)$th direction, maximize projected variance subject to normalization <em>and</em> orthogonality to all previous directions. Enforce these constraints via Lagrange multipliers.</li>
+<li>Using the orthonormality of the existing eigenvectors, the cross-constraint terms vanish and one again arrives at $\mathbf{S}\mathbf{u}<em>{m+1} = \lambda</em>{m+1}\mathbf{u}_{m+1}$.</li>
+<li>The maximum is achieved by the $(m+1)$th largest eigenvector.</li>
+</ul>
+<p><strong>The PCA result:</strong> The optimal $M$-dimensional linear projection that maximizes variance of the projected data is the projection onto the $M$ eigenvectors $\mathbf{u}_1, \ldots, \mathbf{u}_M$ of $\mathbf{S}$ corresponding to the $M$ largest eigenvalues $\lambda_1 \geq \cdots \geq \lambda_M$. The resulting <strong>principal subspace</strong> is unique when eigenvalues are distinct.</p>
+<hr>
+<h2 id="3-pca-minimum-reconstruction-error-formulation">3. PCA: Minimum Reconstruction Error Formulation</h2>
+<p>There is an equivalent way to derive PCA that gives direct intuition for what the projection <em>costs</em> when we discard dimensions. Instead of asking &quot;which direction preserves the most variance?&quot;, we ask &quot;which direction loses the least information when we project?&quot;</p>
+<h3 id="31-the-setup">3.1 The Setup</h3>
+<p>Introduce a complete orthonormal basis ${\mathbf{u}<em>i}</em>{i=1}^D$ for $\mathbb{R}^D$, satisfying $\mathbf{u}_i^T \mathbf{u}<em>j = \delta</em>{ij}$ (the Kronecker delta: 1 if $i=j$, else 0).</p>
+<p>Because the basis is complete, every data point can be represented <em>exactly</em> as a linear combination of the basis vectors:
+$$\mathbf{x}<em>n = \sum</em>{i=1}^D \alpha_{ni}, \mathbf{u}_i$$</p>
+<p>for some coefficients $\alpha_{ni}$. To find what those coefficients must be, take the inner product of both sides with a specific basis vector $\mathbf{u}_j$:</p>
+<p>$$\mathbf{u}<em>j^T \mathbf{x}<em>n = \mathbf{u}<em>j^T \sum</em>{i=1}^D \alpha</em>{ni}, \mathbf{u}<em>i = \sum</em>{i=1}^D \alpha</em>{ni}, \underbrace{\mathbf{u}<em>j^T \mathbf{u}<em>i}</em>{=,\delta</em>{ij}}$$</p>
+<p>The orthonormality condition kills every term in the sum except $i = j$, leaving:</p>
+<p>$$\mathbf{u}_j^T \mathbf{x}<em>n = \alpha</em>{nj}$$</p>
+<p>So the coefficient of $\mathbf{u}_j$ in the expansion is simply the projection of $\mathbf{x}_n$ onto $\mathbf{u}_j$. Substituting back:</p>
+<p>$$\mathbf{x}<em>n = \sum</em>{i=1}^D \left(\mathbf{x}_n^T \mathbf{u}_i\right) \mathbf{u}_i$$</p>
+<p>We want to <em>approximate</em> $\mathbf{x}_n$ using only the first $M$ basis vectors, plus fixed offsets for the remaining $D - M$:</p>
+<p>$$\tilde{\mathbf{x}}<em>n = \underbrace{\sum</em>{i=1}^M z_{ni} \mathbf{u}<em>i}</em>{\text{data-point-specific}} + \underbrace{\sum_{i=M+1}^D b_i \mathbf{u}<em>i}</em>{\text{shared across all points}}$$</p>
+<p>Here $z_{ni}$ varies per data point (capturing what is individual about $\mathbf{x}_n$), and $b_i$ is a constant shared across all data points (our single best guess for the discarded directions). We choose the ${\mathbf{u}<em>i}$, ${z</em>{ni}}$, and ${b_i}$ to minimize the average squared reconstruction error:</p>
+<p>$$J = \frac{1}{N} \sum_{n=1}^N |\mathbf{x}_n - \tilde{\mathbf{x}}_n|^2$$</p>
+<h3 id="32-optimizing-the-projection-coordinates">3.2 Optimizing the Projection Coordinates</h3>
+<p><strong>Minimizing over $z_{nj}$ for the kept directions.</strong> Write out $J$ explicitly with the approximation substituted:</p>
+<p>$$J = \frac{1}{N}\sum_{n=1}^N \left|\mathbf{x}<em>n - \sum</em>{i=1}^M z_{ni}\mathbf{u}<em>i - \sum</em>{i=M+1}^D b_i\mathbf{u}_i\right|^2$$</p>
+<p>Differentiating with respect to $z_{nj}$ (using the chain rule $\frac{\partial}{\partial z_{nj}}|\mathbf{e}|^2 = 2\mathbf{e}^T \frac{\partial \mathbf{e}}{\partial z_{nj}}$ where $\mathbf{e} = \mathbf{x}_n - \tilde{\mathbf{x}}_n$, and noting $\frac{\partial \tilde{\mathbf{x}}<em>n}{\partial z</em>{nj}} = \mathbf{u}<em>j$ since only the $j$th kept term depends on $z</em>{nj}$):</p>
+<p>$$\frac{\partial J}{\partial z_{nj}} = \frac{2}{N}(\tilde{\mathbf{x}}_n - \mathbf{x}_n)^T\mathbf{u}_j = 0$$</p>
+<p>Setting this to zero gives $\tilde{\mathbf{x}}_n^T\mathbf{u}_j = \mathbf{x}_n^T\mathbf{u}_j$. Now expand the left side using the definition of $\tilde{\mathbf{x}}_n$ and orthonormality:</p>
+<p>$$\tilde{\mathbf{x}}<em>n^T\mathbf{u}<em>j = \left(\sum</em>{i=1}^M z</em>{ni}\mathbf{u}<em>i + \sum</em>{i=M+1}^D b_i\mathbf{u}<em>i\right)^T\mathbf{u}<em>j = \sum</em>{i=1}^M z</em>{ni}\underbrace{\mathbf{u}<em>i^T\mathbf{u}<em>j}</em>{=,\delta</em>{ij}} + \sum_{i=M+1}^D b_i\underbrace{\mathbf{u}<em>i^T\mathbf{u}<em>j}</em>{=,0} = z</em>{nj}$$</p>
+<p>The second sum vanishes because $j \leq M$ and the discarded basis vectors are orthogonal to $\mathbf{u}_j$. Therefore:</p>
+<p>$$z_{nj} = \mathbf{x}_n^T \mathbf{u}_j$$</p>
+<p>The optimal per-point coefficient is the projection of $\mathbf{x}_n$ onto $\mathbf{u}_j$.</p>
+<p><strong>Minimizing over $b_j$ for the discarded directions.</strong> By the same chain rule, with $\frac{\partial \tilde{\mathbf{x}}_n}{\partial b_j} = \mathbf{u}_j$ (only the $j$th discarded term depends on $b_j$):</p>
+<p>$$\frac{\partial J}{\partial b_j} = \frac{2}{N}\sum_{n=1}^N (\tilde{\mathbf{x}}_n - \mathbf{x}_n)^T\mathbf{u}_j = 0$$</p>
+<p>By the same orthonormality argument, $\tilde{\mathbf{x}}_n^T\mathbf{u}_j = b_j$ for $j &gt; M$. So:</p>
+<p>$$\frac{1}{N}\sum_{n=1}^N (b_j - \mathbf{x}_n^T\mathbf{u}<em>j) = 0 \implies b_j = \frac{1}{N}\sum</em>{n=1}^N \mathbf{x}_n^T\mathbf{u}_j = \bar{\mathbf{x}}^T\mathbf{u}_j$$</p>
+<p>The optimal constant for a discarded direction is the projection of the sample mean onto that direction — the best single guess for an entire dimension, in the least-squares sense.</p>
+<p><strong>The displacement vector.</strong> Now substitute both optimal solutions back and compute the error explicitly. Using the exact expansion $\mathbf{x}<em>n = \sum</em>{i=1}^D (\mathbf{x}_n^T\mathbf{u}_i)\mathbf{u}_i$:</p>
+<p>$$\mathbf{x}_n - \tilde{\mathbf{x}}<em>n = \sum</em>{i=1}^D (\mathbf{x}_n^T\mathbf{u}<em>i)\mathbf{u}<em>i - \sum</em>{i=1}^M z</em>{ni}\mathbf{u}<em>i - \sum</em>{i=M+1}^D b_i\mathbf{u}_i$$</p>
+<p>Split the first sum at $M$ and group terms:</p>
+<p>$$= \sum_{i=1}^M \underbrace{(\mathbf{x}<em>n^T\mathbf{u}<em>i - z</em>{ni})}</em>{=,0}\mathbf{u}<em>i ;+; \sum</em>{i=M+1}^D (\mathbf{x}_n^T\mathbf{u}_i - b_i)\mathbf{u}_i$$</p>
+<p>The kept-direction terms vanish because $z_{ni} = \mathbf{x}_n^T\mathbf{u}_i$. Substituting $b_i = \bar{\mathbf{x}}^T\mathbf{u}_i$ in the remaining terms:</p>
+<p>$$\mathbf{x}_n - \tilde{\mathbf{x}}<em>n = \sum</em>{i=M+1}^D \left{(\mathbf{x}_n - \bar{\mathbf{x}})^T \mathbf{u}_i\right} \mathbf{u}_i$$</p>
+<p>The reconstruction error lies entirely in the subspace spanned by the <em>discarded</em> basis vectors. Here is the geometric intuition for why this must be the case. Think of the principal subspace as a flat plane embedded in $\mathbb{R}^D$. Any point in $\mathbb{R}^D$ can be decomposed into two parts: its component <em>within</em> the plane, and its component <em>perpendicular</em> to the plane. The approximation $\tilde{\mathbf{x}}<em>n$ is constrained to lie on the plane — but within the plane, we have complete freedom: the $z</em>{ni}$ are free parameters we can tune independently for each data point. We used that freedom optimally by setting $z_{ni} = \mathbf{x}_n^T\mathbf{u}_i$, which places $\tilde{\mathbf{x}}_n$ at exactly the right in-plane position so that the in-plane error is zero. The only remaining error is the part of $\mathbf{x}_n$ that sticks out perpendicularly from the plane — the component in the discarded directions — which we have no freedom to correct because the $b_i$ are shared constants, not per-point variables. The minimum error is therefore always the perpendicular distance from $\mathbf{x}_n$ to the principal subspace, and the error vector always points orthogonally away from it.</p>
+<h3 id="33-optimizing-the-basis-directions">3.3 Optimizing the Basis Directions</h3>
+<p>After substituting the optimal coordinates, $J$ depends only on the choice of basis directions. The squared norm of the displacement vector is:</p>
+<p>$$|\mathbf{x}_n - \tilde{\mathbf{x}}<em>n|^2 = \left|\sum</em>{i=M+1}^D {(\mathbf{x}_n - \bar{\mathbf{x}})^T\mathbf{u}<em>i}\mathbf{u}<em>i\right|^2 = \sum</em>{i=M+1}^D\sum</em>{j=M+1}^D {(\mathbf{x}_n-\bar{\mathbf{x}})^T\mathbf{u}_i}{(\mathbf{x}_n-\bar{\mathbf{x}})^T\mathbf{u}_j},\underbrace{\mathbf{u}<em>i^T\mathbf{u}<em>j}</em>{=,\delta</em>{ij}}$$</p>
+<p>The orthonormality condition $\mathbf{u}_i^T\mathbf{u}<em>j = \delta</em>{ij}$ kills all cross-terms ($i \neq j$), leaving only diagonal terms:</p>
+<p>$$= \sum_{i=M+1}^D \left[(\mathbf{x}_n - \bar{\mathbf{x}})^T\mathbf{u}_i\right]^2$$</p>
+<p>Rewriting each squared scalar as a quadratic form (the same trick as in Section 2.1):</p>
+<p>$$= \sum_{i=M+1}^D \mathbf{u}_i^T(\mathbf{x}_n - \bar{\mathbf{x}})(\mathbf{x}_n - \bar{\mathbf{x}})^T\mathbf{u}_i$$</p>
+<p>Summing over $n$, dividing by $N$, and recognising $\mathbf{S} = \frac{1}{N}\sum_n (\mathbf{x}_n-\bar{\mathbf{x}})(\mathbf{x}_n-\bar{\mathbf{x}})^T$:</p>
+<p>$$J = \sum_{i=M+1}^D \mathbf{u}_i^T \mathbf{S} \mathbf{u}_i$$</p>
+<p>We want to minimize this over the discarded directions ${\mathbf{u}<em>i}</em>{i=M+1}^D$, subject to orthonormality. Introducing Lagrange multipliers for each constraint $\mathbf{u}_i^T\mathbf{u}_i = 1$ and the off-diagonal constraints $\mathbf{u}_i^T\mathbf{u}_j = 0$ ($i \neq j$), the stationarity condition again yields the eigenvector equation $\mathbf{S}\mathbf{u}_i = \lambda_i\mathbf{u}_i$. Back-substituting $\mathbf{u}_i^T\mathbf{S}\mathbf{u}_i = \lambda_i$:</p>
+<p>$$J = \sum_{i=M+1}^D \lambda_i$$</p>
+<p>To <em>minimize</em> $J$, we choose the discarded directions to be the eigenvectors with the <em>smallest</em> eigenvalues.</p>
+<h3 id="34-why-both-formulations-agree">3.4 Why Both Formulations Agree</h3>
+<p>Both formulations yield exactly the same principal subspace: the span of the $M$ eigenvectors with the <em>largest</em> eigenvalues.</p>
+<ul>
+<li>Maximum variance: keep the $M$ directions with the most variance (the $M$ largest eigenvalues).</li>
+<li>Minimum error: discard the $D-M$ directions with the least variance (the $D-M$ smallest eigenvalues).</li>
+</ul>
+<p>These are two sides of the same coin. The total variance of the data equals $\sum_{i=1}^D \lambda_i$ (the trace of $\mathbf{S}$). Keeping the top $M$ eigenvalues to maximize retained variance is identical to discarding the bottom $D-M$ to minimize lost variance.</p>
+<p><strong>So what?</strong> The reconstruction error $J = \sum_{i=M+1}^D \lambda_i$ is a direct, interpretable diagnostic: it tells us exactly how much information we discard at each dimensionality.</p>
+<p>To make this concrete: suppose your data lives in $D = 3$ dimensions but you suspect near-planar structure ($M = 2$). After running PCA you find eigenvalues $\lambda_1 = 5.0$, $\lambda_2 = 4.8$, $\lambda_3 = 0.02$. The reconstruction error from projecting to $M = 2$ is $J = 0.02$ — just 0.2% of the total variance $9.82$. You can safely discard the third dimension. If instead the eigenvalues were $\lambda_1 = 3.5$, $\lambda_2 = 3.3$, $\lambda_3 = 2.9$, projecting to 2D loses $J = 2.9$ out of $9.7$ — nearly 30% of the variance — and three dimensions are genuinely necessary. The eigenvalue spectrum is the readout: a sharp drop signals a natural cutoff; a flat spectrum signals that the data has no preferred low-dimensional structure.</p>
+<hr>
+<h2 id="4-applications-of-pca">4. Applications of PCA</h2>
+<h3 id="41-data-compression-and-visualization">4.1 Data Compression and Visualization</h3>
+<p>Once we have the principal components $\mathbf{u}_1, \ldots, \mathbf{u}_M$, the PCA approximation to any data point is:</p>
+<p>$$\tilde{\mathbf{x}}<em>n = \bar{\mathbf{x}} + \sum</em>{i=1}^M \left(\mathbf{x}_n^T \mathbf{u}_i - \bar{\mathbf{x}}^T \mathbf{u}_i\right) \mathbf{u}_i$$</p>
+<p>which reads as: &quot;start at the sample mean, then move along each principal direction by the amount that $\mathbf{x}<em>n$ deviates from the mean in that direction.&quot; The compressed representation stores only the $M$ coordinates $z</em>{ni} = \mathbf{x}_n^T\mathbf{u}_i - \bar{\mathbf{x}}^T\mathbf{u}_i$ per data point, replacing a $D$-dimensional vector with an $M$-dimensional one.</p>
+<p>For visualization, we choose $M = 2$ and plot each point at $(\mathbf{x}_n^T\mathbf{u}_1, \mathbf{x}_n^T\mathbf{u}_2)$ — a scatterplot in the plane of maximum variance.</p>
+<h3 id="42-whitening-sphereing">4.2 Whitening (Sphereing)</h3>
+<p>PCA can be used not for dimensionality reduction but for <em>normalization</em>. <strong>Whitening</strong> (also called sphereing) transforms data to have zero mean and identity covariance — decorrelating variables and placing them on a common scale. This is a prerequisite for many algorithms that assume spherical distributions, and it is standard preprocessing for ICA (see Section 7.5).</p>
+<p><strong>The whitening transform.</strong> Write the eigendecomposition of $\mathbf{S}$ in matrix form: $\mathbf{S} = \mathbf{U}\mathbf{L}\mathbf{U}^T$, where $\mathbf{U}$ is the $D \times D$ orthogonal matrix whose columns are eigenvectors, and $\mathbf{L} = \text{diag}(\lambda_1, \ldots, \lambda_D)$ is diagonal. Define:</p>
+<p>$$\mathbf{y}_n = \mathbf{L}^{-1/2} \mathbf{U}^T (\mathbf{x}_n - \bar{\mathbf{x}})$$</p>
+<p>where $\mathbf{L}^{-1/2} = \text{diag}(\lambda_1^{-1/2}, \ldots, \lambda_D^{-1/2})$ is the entry-wise inverse square root.</p>
+<p><strong>Verifying the covariance.</strong> The sample covariance of ${\mathbf{y}_n}$ is:</p>
+<p>$$\frac{1}{N}\sum_{n=1}^N \mathbf{y}_n \mathbf{y}<em>n^T = \mathbf{L}^{-1/2}\mathbf{U}^T \left(\frac{1}{N}\sum</em>{n=1}^N (\mathbf{x}_n - \bar{\mathbf{x}})(\mathbf{x}_n - \bar{\mathbf{x}})^T\right) \mathbf{U}\mathbf{L}^{-1/2}$$</p>
+<p>Substituting $\mathbf{S} = \mathbf{U}\mathbf{L}\mathbf{U}^T$:</p>
+<p>$$= \mathbf{L}^{-1/2}\mathbf{U}^T (\mathbf{U}\mathbf{L}\mathbf{U}^T) \mathbf{U}\mathbf{L}^{-1/2} = \mathbf{L}^{-1/2}\underbrace{(\mathbf{U}^T\mathbf{U})}<em>{=\mathbf{I}}\mathbf{L}\underbrace{(\mathbf{U}^T\mathbf{U})}</em>{=\mathbf{I}}\mathbf{L}^{-1/2} = \mathbf{L}^{-1/2}\mathbf{L}\mathbf{L}^{-1/2} = \mathbf{I}$$</p>
+<p>The whitened data has identity covariance. The zero mean follows from $\mathbb{E}[\mathbf{y}_n] = \mathbf{L}^{-1/2}\mathbf{U}^T\mathbb{E}[\mathbf{x}_n - \bar{\mathbf{x}}] = \mathbf{0}$.</p>
+<p><strong>Intuition.</strong> The transform does two things sequentially: $\mathbf{U}^T(\cdot)$ rotates the data into the eigenvector coordinate system, making the covariance diagonal (variables become uncorrelated); then $\mathbf{L}^{-1/2}$ rescales each axis to unit variance. The result is a spherical cloud of data — identical variance in every direction.</p>
+<p><strong>A caution.</strong> Near-zero eigenvalues lead to near-infinite scaling $\lambda_i^{-1/2}$, amplifying directions of negligible variance. In practice, eigenvalues below a threshold are typically discarded before whitening — this combines dimensionality reduction and normalization in a single step.</p>
+<p><strong>The dual trick (high-dimensional data).</strong> When $D \gg N$ (e.g., few images of millions of pixels), computing the full $D \times D$ covariance matrix costs $O(ND^2)$ and its eigenvectors cost $O(D^3)$. Since at most $N-1$ eigenvalues are nonzero (a set of $N$ points cannot vary independently in more than $N-1$ directions), one can instead work with the $N \times N$ matrix $\frac{1}{N}\tilde{\mathbf{X}}\tilde{\mathbf{X}}^T$ (where $\tilde{\mathbf{X}}$ is the centered data matrix), which has the same nonzero eigenvalues and can be solved in $O(N^3)$. The $D$-dimensional eigenvectors are recovered by a single matrix-vector multiplication. This is worth knowing exists; the derivation is in Bishop §12.1.4.</p>
+<hr>
+<h2 id="5-probabilistic-pca">5. Probabilistic PCA</h2>
+<h3 id="51-motivation-and-the-ppca-to-vae-arc">5.1 Motivation and the PPCA-to-VAE Arc</h3>
+<p>Standard PCA is a deterministic algorithm: given data, compute eigenvectors. It has no notion of probability, uncertainty, or missing observations. By recasting PCA as a probabilistic generative model — Probabilistic PCA, or PPCA — we gain a likelihood function, a proper density over observations, a natural EM algorithm, and a clean handle on the structure that modern deep generative models extend.</p>
+<p><strong>Why PPCA matters for modern ML.</strong> PPCA is the simplest member of a family: <em>linear-Gaussian latent variable models</em>. Its generative structure is a Gaussian prior over a latent variable $\mathbf{z}$, a linear map from $\mathbf{z}$ to the data mean, and Gaussian noise. Because everything is linear and Gaussian, every relevant quantity — the marginal $p(\mathbf{x})$, the posterior $p(\mathbf{z}|\mathbf{x})$, the ELBO — has a closed-form expression. This is the <em>tractable</em> baseline.</p>
+<p>The Variational Autoencoder (VAE) is exactly PPCA with the linear decoder $\mathbf{W}$ replaced by a neural network $f_\theta$. That single change breaks linearity and makes the posterior intractable, forcing us to use the ELBO and an approximate encoder — all the machinery derived in the EM algorithm notes. The prior, the ELBO structure, and the &quot;encode-to-latent, decode-to-data&quot; frame are <em>directly inherited</em> from PPCA. Understanding PPCA makes the VAE legible rather than mysterious.</p>
+<h3 id="52-the-generative-model">5.2 The Generative Model</h3>
+<p>PPCA assumes:</p>
+<p><strong>Prior over the latent variable:</strong>
+$$p(\mathbf{z}) = \mathcal{N}(\mathbf{z} \mid \mathbf{0}, \mathbf{I}), \qquad \mathbf{z} \in \mathbb{R}^M$$</p>
+<p>A standard isotropic Gaussian — <em>isotropic</em> meaning the variance is the same in every direction, which here is enforced by the identity covariance $\mathbf{I}$: no direction in latent space is treated as special. There is no loss of generality: any non-standard Gaussian prior $\mathcal{N}(\mathbf{m}, \boldsymbol{\Sigma})$ can be absorbed into a reparameterization of $\mathbf{W}$ and $\boldsymbol{\mu}$, leaving the marginal distribution $p(\mathbf{x})$ unchanged.</p>
+<p><strong>Conditional distribution of observations given latent:</strong>
+$$p(\mathbf{x} \mid \mathbf{z}) = \mathcal{N}(\mathbf{x} \mid \mathbf{W}\mathbf{z} + \boldsymbol{\mu}, \sigma^2 \mathbf{I}), \qquad \mathbf{x} \in \mathbb{R}^D$$</p>
+<p>where $\mathbf{W} \in \mathbb{R}^{D \times M}$ is the <em>loading matrix</em> (columns span the principal subspace), $\boldsymbol{\mu} \in \mathbb{R}^D$ is the data mean, and $\sigma^2$ is a scalar noise variance applied isotropically — the same in every direction.</p>
+<p><strong>The generative process.</strong> To generate one data point:</p>
+<ol>
+<li>Sample $\mathbf{z} \sim \mathcal{N}(\mathbf{0}, \mathbf{I})$</li>
+<li>Compute the mean $\mathbf{W}\mathbf{z} + \boldsymbol{\mu}$</li>
+<li>Add noise $\boldsymbol{\epsilon} \sim \mathcal{N}(\mathbf{0}, \sigma^2\mathbf{I})$</li>
+</ol>
+<p>Equivalently: $\mathbf{x} = \mathbf{W}\mathbf{z} + \boldsymbol{\mu} + \boldsymbol{\epsilon}$.</p>
+<p><strong>Intuition.</strong> The model says every observation is a noisy version of a point on the $M$-dimensional principal subspace. The subspace is defined by $\mathbf{W}$; the location along the subspace is determined by $\mathbf{z}$; and $\sigma^2$ controls how far off-subspace observations can be. When $\sigma^2 \to 0$, observations lie exactly on the subspace and we recover standard PCA.</p>
+<h3 id="53-the-marginal-distribution-pmathbfx">5.3 The Marginal Distribution $p(\mathbf{x})$</h3>
+<p>To fit the model, we need $p(\mathbf{x})$ — the marginal over observed data, obtained by integrating out the latent variable:</p>
+<p>$$p(\mathbf{x}) = \int p(\mathbf{x} \mid \mathbf{z}) p(\mathbf{z}) , d\mathbf{z}$$</p>
+<p>Since $\mathbf{x} = \mathbf{W}\mathbf{z} + \boldsymbol{\mu} + \boldsymbol{\epsilon}$ is a linear function of two independent Gaussians, the marginal is also Gaussian. We find it by computing the mean and covariance of $\mathbf{x}$ directly.</p>
+<p><strong>Mean of $\mathbf{x}$:</strong>
+$$\mathbb{E}[\mathbf{x}] = \mathbb{E}[\mathbf{W}\mathbf{z} + \boldsymbol{\mu} + \boldsymbol{\epsilon}] = \mathbf{W}\underbrace{\mathbb{E}[\mathbf{z}]}<em>{=\mathbf{0}} + \boldsymbol{\mu} + \underbrace{\mathbb{E}[\boldsymbol{\epsilon}]}</em>{=\mathbf{0}} = \boldsymbol{\mu}$$</p>
+<p><strong>Covariance of $\mathbf{x}$.</strong> The covariance is $\mathbb{E}[(\mathbf{x} - \boldsymbol{\mu})(\mathbf{x} - \boldsymbol{\mu})^T] = \mathbb{E}[(\mathbf{W}\mathbf{z} + \boldsymbol{\epsilon})(\mathbf{W}\mathbf{z} + \boldsymbol{\epsilon})^T]$. Expanding:</p>
+<p>$$= \mathbb{E}[\mathbf{W}\mathbf{z}\mathbf{z}^T\mathbf{W}^T] + \mathbb{E}[\mathbf{W}\mathbf{z}\boldsymbol{\epsilon}^T] + \mathbb{E}[\boldsymbol{\epsilon}\mathbf{z}^T\mathbf{W}^T] + \mathbb{E}[\boldsymbol{\epsilon}\boldsymbol{\epsilon}^T]$$</p>
+<p>Since $\mathbf{z}$ and $\boldsymbol{\epsilon}$ are independent with zero means, the cross terms $\mathbb{E}[\mathbf{z}\boldsymbol{\epsilon}^T] = \mathbb{E}[\mathbf{z}]\mathbb{E}[\boldsymbol{\epsilon}]^T = \mathbf{0}$ vanish. Therefore:</p>
+<p>$$= \mathbf{W}\underbrace{\mathbb{E}[\mathbf{z}\mathbf{z}^T]}<em>{=\mathbf{I}}\mathbf{W}^T + \underbrace{\mathbb{E}[\boldsymbol{\epsilon}\boldsymbol{\epsilon}^T]}</em>{=\sigma^2\mathbf{I}} = \mathbf{W}\mathbf{W}^T + \sigma^2\mathbf{I}$$</p>
+<p>Therefore:
+$$\boxed{p(\mathbf{x}) = \mathcal{N}(\mathbf{x} \mid \boldsymbol{\mu}, \mathbf{C}), \qquad \mathbf{C} = \mathbf{W}\mathbf{W}^T + \sigma^2\mathbf{I}}$$</p>
+<p><strong>Unpacking $\mathbf{C}$.</strong> The marginal covariance has a structured form:</p>
+<ul>
+<li>$\mathbf{W}\mathbf{W}^T$ is rank $M$, capturing variance <em>along</em> the principal subspace.</li>
+<li>$\sigma^2\mathbf{I}$ adds uniform variance in <em>all</em> directions.</li>
+</ul>
+<p>In any direction orthogonal to the principal subspace, $\mathbf{W}\mathbf{W}^T$ contributes nothing, and the variance is just $\sigma^2$. This is the &quot;pancake&quot; intuition: the distribution is a Gaussian disk, concentrated in the principal directions and uniformly thin in all orthogonal directions.</p>
+<p><strong>So what?</strong> We now have a proper probability distribution over observations. This is the key advantage over standard PCA: the model assigns low probability to points far from the training cloud <em>in all directions</em>, not just far from the subspace. We can evaluate likelihood, compare models, and perform inference — none of which is possible with a deterministic projection.</p>
+<h3 id="54-maximum-likelihood-solution">5.4 Maximum Likelihood Solution</h3>
+<p>Given $N$ i.i.d. observations ${\mathbf{x}<em>n}$, maximizing the log-likelihood with respect to $\boldsymbol{\mu}$ gives, straightforwardly, $\boldsymbol{\mu}</em>{\text{ML}} = \bar{\mathbf{x}}$. After substituting this, the log-likelihood becomes:</p>
+<p>$$\ln p(\mathbf{X} \mid \mathbf{W}, \sigma^2) = -\frac{N}{2}\left{D\ln(2\pi) + \ln|\mathbf{C}| + \text{Tr}\left(\mathbf{C}^{-1}\mathbf{S}\right)\right}$$</p>
+<p>Maximizing over $\mathbf{W}$ and $\sigma^2$ is non-trivial but has a closed-form solution (Tipping and Bishop, 1999):</p>
+<p>$$\mathbf{W}_{\text{ML}} = \mathbf{U}_M (\mathbf{L}<em>M - \sigma^2</em>{\text{ML}}\mathbf{I})^{1/2} \mathbf{R}$$</p>
+<p>where:</p>
+<ul>
+<li>$\mathbf{U}_M \in \mathbb{R}^{D \times M}$: columns are the $M$ eigenvectors of $\mathbf{S}$ with the $M$ largest eigenvalues.</li>
+<li>$\mathbf{L}_M = \text{diag}(\lambda_1, \ldots, \lambda_M)$: diagonal matrix of those eigenvalues.</li>
+<li>$\mathbf{R} \in \mathbb{R}^{M \times M}$: an <em>arbitrary</em> orthogonal matrix, reflecting the rotational non-identifiability of the model (discussed below).</li>
+</ul>
+<p>The corresponding optimal noise variance is:</p>
+<p>$$\sigma^2_{\text{ML}} = \frac{1}{D - M} \sum_{i=M+1}^D \lambda_i$$</p>
+<p>To see why this makes sense: in the discarded directions, the model has no signal ($\mathbf{W}$ has no components there), so all variance in those directions must be attributed to noise. The MLE simply sets $\sigma^2$ to the average of the eigenvalues it cannot explain — the mean residual variance across the $D - M$ discarded dimensions.</p>
+<p><strong>The ML solution selects the top eigenvectors.</strong> All other subsets of $M$ eigenvectors are saddle points, not maxima (Tipping and Bishop, 1999). This confirms that PPCA recovers exactly the same principal subspace as standard PCA, but via a principled maximum-likelihood procedure.</p>
+<p><strong>Rotational non-identifiability.</strong> The matrix $\mathbf{R}$ is arbitrary because the model is invariant to any rotation of the latent space. Replacing $\mathbf{W}$ with $\tilde{\mathbf{W}} = \mathbf{W}\mathbf{R}$ and $\mathbf{z}$ with $\tilde{\mathbf{z}} = \mathbf{R}^T\mathbf{z}$ leaves $\mathbf{W}\mathbf{z} = \tilde{\mathbf{W}}\tilde{\mathbf{z}}$ unchanged. Since $p(\mathbf{z}) = \mathcal{N}(\mathbf{0}, \mathbf{I})$ is spherically symmetric (invariant to rotations), the prior on $\tilde{\mathbf{z}}$ is also $\mathcal{N}(\mathbf{0}, \mathbf{I})$, and the entire model is identical. No data can distinguish between $\mathbf{W}$ and $\mathbf{W}\mathbf{R}$ for any orthogonal $\mathbf{R}$.</p>
+<p>This is the same non-identifiability that afflicts Factor Analysis (see Section 5.7) and is the reason ICA is needed when we want interpretable individual components rather than just the subspace.</p>
+<h3 id="55-the-posterior-pmathbfz-mid-mathbfx-and-the-latent-projection">5.5 The Posterior $p(\mathbf{z} \mid \mathbf{x})$ and the Latent Projection</h3>
+<p>For visualization and compression, we want to map observations <em>back</em> to the latent space. Since PPCA is a linear-Gaussian model, the posterior is Gaussian with a closed-form expression (derived from the general linear-Gaussian result; see Bishop §2.3):</p>
+<p>$$p(\mathbf{z} \mid \mathbf{x}) = \mathcal{N}!\left(\mathbf{z} ;\Big|; \mathbf{M}^{-1}\mathbf{W}^T(\mathbf{x} - \boldsymbol{\mu}), ; \sigma^2 \mathbf{M}^{-1}\right)$$</p>
+<p>where $\mathbf{M} = \mathbf{W}^T\mathbf{W} + \sigma^2\mathbf{I} \in \mathbb{R}^{M \times M}$ is small ($M \times M$) and easily invertible.</p>
+<p><strong>Key features of the posterior:</strong></p>
+<ul>
+<li>The <em>mean</em> $\mathbb{E}[\mathbf{z} \mid \mathbf{x}] = \mathbf{M}^{-1}\mathbf{W}^T(\mathbf{x} - \boldsymbol{\mu})$ depends on the specific $\mathbf{x}$ — it is the best guess for the latent position given the observation.</li>
+<li>The <em>covariance</em> $\sigma^2\mathbf{M}^{-1}$ is independent of $\mathbf{x}$ — the uncertainty about the latent position is the same for every observation, determined solely by the noise level and the loading matrix.</li>
+</ul>
+<p><strong>Connection to standard PCA.</strong> In the limit $\sigma^2 \to 0$, $\mathbf{M} \to \mathbf{W}^T\mathbf{W}$ and the posterior mean becomes $(\mathbf{W}^T\mathbf{W})^{-1}\mathbf{W}^T(\mathbf{x} - \boldsymbol{\mu})$ — the orthogonal projection of $(\mathbf{x} - \boldsymbol{\mu})$ onto the column space of $\mathbf{W}$, which is exactly standard PCA. For $\sigma^2 &gt; 0$, the posterior mean is pulled toward the origin relative to the orthogonal projection — a regularization effect reflecting uncertainty about the latent position. The posterior covariance becomes zero in this limit, and the density becomes singular.</p>
+<p><strong>So what?</strong> The PPCA posterior is the closed-form version of what the VAE encoder approximates. In PPCA, $p(\mathbf{z}|\mathbf{x})$ is a tractable Gaussian because the model is linear-Gaussian. In the VAE, the decoder $f_\theta$ is a neural network, making $p(\mathbf{z}|\mathbf{x})$ intractable — the encoder $q_\phi(\mathbf{z}|\mathbf{x})$ is trained to approximate it, and the ELBO is maximized rather than the exact likelihood. The PPCA posterior is the anchor that makes this connection precise.</p>
+<h3 id="56-em-for-ppca-pointer">5.6 EM for PPCA (Pointer)</h3>
+<p>PPCA has a closed-form ML solution, but there are practical reasons to use EM instead: it avoids forming the $D \times D$ covariance matrix explicitly, handles missing data naturally, and extends to models like Factor Analysis where no closed form exists.</p>
+<p>The EM algorithm for PPCA follows the standard pattern from the EM algorithm notes. The E-step computes $\mathbb{E}[\mathbf{z}_n]$ and $\mathbb{E}[\mathbf{z}_n\mathbf{z}_n^T]$ under the current posterior; the M-step updates $\mathbf{W}$ and $\sigma^2$ by maximizing the expected complete-data log-likelihood. For the detailed derivation and equations, see the EM algorithm notes.</p>
+<p>A useful physical analogy makes the geometric meaning of the EM steps clear. Picture the data points as masses attached by springs to a rigid rod representing the principal subspace. In the E-step, the rod is held fixed and each mass slides along the rod to minimize its spring energy — this is orthogonal projection. In the M-step, the attachment points are fixed and the rod is released to settle at the minimum-energy position — this rotates the subspace to better fit the data. Iterating converges to the ML solution.</p>
+<h3 id="57-factor-analysis-one-structural-difference">5.7 Factor Analysis: One Structural Difference</h3>
+<p>Factor Analysis (FA) differs from PPCA in a single assumption. In PPCA, the noise covariance is $\sigma^2\mathbf{I}$ — isotropic, the same in every direction. In FA:</p>
+<p>$$p(\mathbf{x} \mid \mathbf{z}) = \mathcal{N}(\mathbf{x} \mid \mathbf{W}\mathbf{z} + \boldsymbol{\mu}, \boldsymbol{\Psi})$$</p>
+<p>where $\boldsymbol{\Psi} = \text{diag}(\psi_1, \ldots, \psi_D)$ is <em>diagonal</em>, allowing each observed variable its own independent noise variance. The columns of $\mathbf{W}$ are called <strong>factor loadings</strong> (they capture correlations between observed variables); the diagonal elements $\psi_i$ are called <strong>uniquenesses</strong> (variance unique to each variable, unexplained by the shared factors).</p>
+<p>This change has a concrete consequence for symmetry: FA is covariant under <em>component-wise rescaling</em> of the data (rescaling variable $i$ by $a_i$ is absorbed into rescaling $\psi_i$ and the $i$th row of $\mathbf{W}$), whereas PPCA is covariant under <em>rotations</em> of the data space. FA is therefore the right tool when different variables have inherently different noise levels; PPCA when the noise is isotropic.</p>
+<p>Both models share the rotational non-identifiability of the latent space. This is the source of historical controversy in FA: analysts have tried to &quot;interpret&quot; individual factors, but any rotation $\mathbf{W} \to \mathbf{W}\mathbf{R}$ produces an equivalent model. The problem is not FA-specific — it is endemic to any latent variable model with a Gaussian (rotationally symmetric) latent prior.</p>
+<hr>
+<h2 id="6-from-pca-to-ica-why-non-gaussianity-matters">6. From PCA to ICA: Why Non-Gaussianity Matters</h2>
+<p>PCA and ICA form a natural hierarchy in what they can identify. PCA finds the <em>subspace</em> of maximum variance, but within that subspace cannot determine a canonical orientation — any rotation is equally valid. ICA goes further: given non-Gaussian sources, it finds the specific rotation that makes the recovered components statistically <em>independent</em>, not just uncorrelated. The tool that makes ICA possible, and PCA blind to, is non-Gaussianity.</p>
+<h3 id="61-pcas-fundamental-limitation-rotational-ambiguity">6.1 PCA's Fundamental Limitation: Rotational Ambiguity</h3>
+<p>As established in Section 5.4, the PPCA likelihood is invariant under any rotation $\mathbf{W} \to \mathbf{W}\mathbf{R}$ of the latent space. This is not a modeling weakness that more data can resolve — it is a fundamental property of Gaussian distributions.</p>
+<p><strong>Why?</strong> A multivariate Gaussian $\mathcal{N}(\mathbf{0}, \mathbf{I})$ has density proportional to $\exp(-|\mathbf{z}|^2/2)$. This function depends only on the norm $|\mathbf{z}|$, not on the direction — it is <em>spherically symmetric</em>. Any rotation of $\mathbf{z}$ leaves the distribution unchanged. Consequently, the distribution of $\mathbf{W}\mathbf{z}$ is indistinguishable from $(\mathbf{W}\mathbf{R})(\mathbf{R}^T\mathbf{z})$ for any orthogonal $\mathbf{R}$: both produce a Gaussian with the same covariance $\mathbf{W}\mathbf{W}^T$.</p>
+<p>PCA finds the subspace of maximum variance, but within that subspace it returns an arbitrary basis. The principal components are unique only when eigenvalues are distinct — and even then, the signs of the eigenvectors are undetermined.</p>
+<p><strong>The question this raises.</strong> Is there a <em>preferred</em> rotation — one that reveals meaningful structure? If the latent variables have non-Gaussian marginals and are <em>genuinely statistically independent</em>, then the distribution is no longer spherically symmetric and a preferred orientation exists. This is the motivation for ICA.</p>
+<h3 id="62-the-cocktail-party-problem">6.2 The Cocktail Party Problem</h3>
+<p>The canonical motivation for ICA (following Hyvärinen and Oja, 2000):</p>
+<p>Two speakers talk simultaneously in a room. Two microphones at different positions record their voices. Each microphone captures a weighted mixture of the two speech signals. Let $s_1(t)$ and $s_2(t)$ be the speech signals (sources) and $x_1(t)$, $x_2(t)$ the microphone recordings. Then:</p>
+<p>$$x_j(t) = \sum_k a_{jk} s_k(t), \qquad j = 1, 2$$</p>
+<p>or in matrix form: $\mathbf{x}(t) = \mathbf{A}\mathbf{s}(t)$.</p>
+<p>The mixing coefficients $a_{jk}$ depend on the distances and acoustic properties of the room. Given only the recorded signals $\mathbf{x}(t)$ — without knowing $\mathbf{A}$ or the original sources — can we recover $s_1$ and $s_2$?</p>
+<p>This is <strong>blind source separation</strong> (&quot;blind&quot; because neither the sources nor the mixing matrix are observed). ICA solves it by exploiting the statistical independence of the sources: the activity of one speaker does not provide information about the other.</p>
+<h3 id="63-the-ica-model">6.3 The ICA Model</h3>
+<p><strong>The model.</strong> We observe $n$ linear mixtures of $n$ independent components:</p>
+<p>$$\mathbf{x} = \mathbf{A}\mathbf{s}$$</p>
+<p>where $\mathbf{x} \in \mathbb{R}^n$ is the vector of observations, $\mathbf{s} \in \mathbb{R}^n$ is the vector of independent sources, and $\mathbf{A} \in \mathbb{R}^{n \times n}$ is the unknown <em>mixing matrix</em>, assumed square and invertible. Both $\mathbf{s}$ and $\mathbf{A}$ are unknown; we observe only $\mathbf{x}$.</p>
+<p><strong>Goal.</strong> Estimate the <em>demixing matrix</em> $\mathbf{W} = \mathbf{A}^{-1}$ such that $\hat{\mathbf{s}} = \mathbf{W}\mathbf{x}$ recovers the sources.</p>
+<p><strong>The key assumption.</strong> The components $s_1, \ldots, s_n$ are <em>statistically independent</em>: their joint density factorizes as:
+$$p(\mathbf{s}) = \prod_{j=1}^n p_j(s_j)$$</p>
+<p>Each source has its own marginal density $p_j$; knowing the value of one source gives no information about any other.</p>
+<p><strong>Relationship to PPCA.</strong> In PPCA, the latent variable also has a factored prior — $\mathcal{N}(\mathbf{0}, \mathbf{I}) = \prod_j \mathcal{N}(0, 1)$ — but the marginals are Gaussian. ICA allows non-Gaussian marginals and assumes a noise-free model ($\mathbf{x} = \mathbf{A}\mathbf{s}$ exactly). When the marginals are non-Gaussian, the rotational ambiguity vanishes: there is a unique mixing matrix (up to permutation and scaling) that makes the recovered components independent.</p>
+<h3 id="64-ambiguities-inherent-in-ica">6.4 Ambiguities Inherent in ICA</h3>
+<p>Even with non-Gaussian sources, two fundamental ambiguities remain:</p>
+<p><strong>Scaling ambiguity.</strong> We cannot determine the variance of the independent components, because any scalar factor absorbed into $s_i$ can be cancelled by the corresponding column of $\mathbf{A}$. <em>Convention</em>: fix the variance of each $s_i$ to 1, i.e., $\mathbb{E}[s_i^2] = 1$. A sign ambiguity persists ($s_i$ and $-s_i$ are indistinguishable).</p>
+<p><strong>Permutation ambiguity.</strong> We cannot determine the order of the components, because any permutation of the sources can be absorbed into the columns of $\mathbf{A}$. <em>Convention</em>: accept whatever ordering the algorithm produces.</p>
+<p>These ambiguities are fundamental and unavoidable without additional prior information. In practice they are rarely consequential: the goal is usually to identify the sources and their mixing structure, not to order them in any particular way.</p>
+<h3 id="65-why-gaussian-latents-are-forbidden">6.5 Why Gaussian Latents Are Forbidden</h3>
+<p>This is the central constraint of ICA, and it deserves a precise explanation.</p>
+<p><strong>The argument.</strong> Suppose all sources $s_1, \ldots, s_n$ are Gaussian and independent, and the mixing matrix $\mathbf{A}$ is orthogonal. Then the observations $\mathbf{x} = \mathbf{A}\mathbf{s}$ are a linear transformation of independent Gaussians. Their covariance is $\mathbf{A},\mathbb{E}[\mathbf{s}\mathbf{s}^T],\mathbf{A}^T = \mathbf{A}\mathbf{I}\mathbf{A}^T = \mathbf{I}$ (using independence and unit variance of the sources, and orthogonality of $\mathbf{A}$). So the observations are i.i.d. standard Gaussians.</p>
+<p>The joint density is $p(\mathbf{x}) = (2\pi)^{-n/2}\exp(-|\mathbf{x}|^2/2)$, which is <em>rotationally symmetric</em> — it depends only on $|\mathbf{x}|$. For any other orthogonal matrix $\mathbf{B}$, substituting $\mathbf{A}\mathbf{B}^T$ for $\mathbf{A}$ (and $\mathbf{B}\mathbf{s}$ for $\mathbf{s}$) produces exactly the same distribution over $\mathbf{x}$, since $\mathbf{B}\mathbf{s}$ is still i.i.d. standard Gaussian. No data can ever distinguish between these infinitely many mixing matrices. The mixing matrix is not identifiable.</p>
+<p><strong>Intuition.</strong> A spherically symmetric distribution contains no information about &quot;special directions&quot; — every axis is equivalent. Non-Gaussian distributions break this symmetry: they have preferred orientations (the directions of the independent components), which ICA finds.</p>
+<p><strong>The practical rule.</strong> At most one source can be Gaussian for the ICA model to be identifiable. Real-world signals — speech, images, financial returns — typically have heavier tails or sharper peaks than Gaussians (supergaussian distributions), which is why ICA is so effective for them.</p>
+<h3 id="66-independence-vs-uncorrelatedness">6.6 Independence vs. Uncorrelatedness</h3>
+<p>A crucial and commonly confused distinction:</p>
+<p><strong>Uncorrelated</strong>: $\mathbb{E}[s_i s_j] - \mathbb{E}[s_i]\mathbb{E}[s_j] = 0$ for $i \neq j$ (zero linear correlation). This is a <em>second-order</em> property — it constrains only pairwise covariances.</p>
+<p><strong>Independent</strong>: $p(s_i, s_j) = p(s_i)p(s_j)$ for all $i \neq j$. This constrains the entire joint distribution, not just second moments.</p>
+<p><strong>Independence implies uncorrelatedness, but the converse fails.</strong> A clean discrete counterexample: draw $(y_1, y_2)$ uniformly from ${(0,1),(0,-1),(1,0),(-1,0)}$. Then $\mathbb{E}[y_1 y_2] = 0$ (uncorrelated), but knowing $y_1 = 1$ forces $y_2 = 0$ (dependent). The factorization condition is violated: $\mathbb{E}[y_1^2 y_2^2] = 0 \neq \frac{1}{4} = \mathbb{E}[y_1^2]\mathbb{E}[y_2^2]$.</p>
+<p><strong>Relevance to PCA vs. ICA.</strong> PCA finds an orthogonal rotation that <em>decorrelates</em> the data — after PCA, the principal components have zero covariance. But decorrelation is only a second-order condition. For non-Gaussian distributions, zero covariance does not imply statistical independence. ICA goes further: it finds the transformation that makes the components statistically independent — zero covariance <em>and</em> zero higher-order dependence. This is why ICA can find the original sources where PCA cannot: the sources are independent, not merely uncorrelated.</p>
+<hr>
+<h2 id="7-ica-estimation-finding-independent-components">7. ICA Estimation: Finding Independent Components</h2>
+<h3 id="71-the-core-idea-non-gaussianity-as-a-target">7.1 The Core Idea: Non-Gaussianity as a Target</h3>
+<p>The Central Limit Theorem tells us that sums of independent random variables tend toward Gaussian distributions. This has a useful converse for ICA: a linear combination $y = \mathbf{w}^T\mathbf{x} = \mathbf{w}^T\mathbf{A}\mathbf{s} = \mathbf{z}^T\mathbf{s}$ (where $\mathbf{z} = \mathbf{A}^T\mathbf{w}$) is a weighted sum of independent non-Gaussian sources. Such a sum is <em>more Gaussian</em> than the individual sources unless $\mathbf{z}$ has only one nonzero component — in which case $y = z_k s_k$ is a single source scaled by a constant, which has the same (non-Gaussian) distribution as $s_k$.</p>
+<p><strong>The consequence.</strong> To recover one independent component, find the direction $\mathbf{w}$ that makes $\mathbf{w}^T\mathbf{x}$ <em>as non-Gaussian as possible</em>. The resulting $\mathbf{w}$ selects exactly one source.</p>
+<p>To find all $n$ components, maximize non-Gaussianity repeatedly, constraining each new direction to be orthogonal (in the whitened space) to all previously found ones. This ensures the recovered components are uncorrelated — and, under the ICA model, genuinely independent.</p>
+<h3 id="72-kurtosis">7.2 Kurtosis</h3>
+<p>The kurtosis of a zero-mean, unit-variance random variable $y$ is:</p>
+<p>$$\text{kurt}(y) = \mathbb{E}[y^4] - 3$$</p>
+<p><strong>Why $-3$?</strong> For a standard Gaussian, $\mathbb{E}[y^4] = 3$ — a consequence of the moment-generating function. Subtracting 3 normalizes kurtosis to zero for Gaussians and nonzero for most non-Gaussian distributions. For general (not necessarily unit-variance) zero-mean $y$, the definition is $\mathbb{E}[y^4] - 3(\mathbb{E}[y^2])^2$, which reduces to the formula above when $\mathbb{E}[y^2] = 1$.</p>
+<p><strong>Supergaussian vs. subgaussian.</strong> Distributions with positive kurtosis are <strong>supergaussian</strong> (leptokurtic) — more peaked at zero with heavier tails than a Gaussian. The Laplace distribution is the canonical example. Distributions with negative kurtosis are <strong>subgaussian</strong> (platykurtic) — flatter near zero with lighter tails. The uniform distribution is the canonical example. Both are exploitable for ICA.</p>
+<p><strong>Useful linearity properties</strong> (following Hyvärinen and Oja, 2000): for independent $x_1$ and $x_2$, and scalar $\alpha$:
+$$\text{kurt}(x_1 + x_2) = \text{kurt}(x_1) + \text{kurt}(x_2), \qquad \text{kurt}(\alpha x_1) = \alpha^4 , \text{kurt}(x_1)$$</p>
+<p>These make the optimization landscape analyzable. For $y = z_1 s_1 + z_2 s_2$ with constraint $z_1^2 + z_2^2 = 1$, the kurtosis magnitude is $|z_1^4,\text{kurt}(s_1) + z_2^4,\text{kurt}(s_2)|$. This is maximized when exactly one of $z_1$, $z_2$ is nonzero — precisely when $y$ equals one source.</p>
+<p><strong>Drawbacks.</strong> Kurtosis is sensitive to outliers: a single extreme value can dominate the fourth moment. In practice, more robust measures are preferred.</p>
+<h3 id="73-negentropy">7.3 Negentropy</h3>
+<p><strong>Setup: Entropy and the Gaussian maximum.</strong> The differential entropy of a continuous random vector $\mathbf{y}$ with density $f(\mathbf{y})$ is:
+$$H(\mathbf{y}) = -\int f(\mathbf{y}) \log f(\mathbf{y}) , d\mathbf{y}$$</p>
+<p>A fundamental result of information theory (Cover and Thomas, 1991) states: <em>among all continuous random variables with the same covariance matrix, the Gaussian has the largest differential entropy</em>. The Gaussian is the &quot;most spread out&quot; or &quot;most random&quot; distribution given fixed second-order statistics.</p>
+<p><strong>Negentropy.</strong> To get a non-Gaussianity measure that is zero for Gaussians and positive otherwise, define:
+$$J(\mathbf{y}) = H(\mathbf{y}_{\text{gauss}}) - H(\mathbf{y})$$</p>
+<p>where $\mathbf{y}_{\text{gauss}}$ is a Gaussian with the same covariance as $\mathbf{y}$. Since the Gaussian maximizes entropy, $J(\mathbf{y}) \geq 0$ always, with equality if and only if $\mathbf{y}$ is Gaussian. This is the <em>entropy gap</em> between the best-case (Gaussian) and the actual distribution.</p>
+<p>Negentropy is theoretically optimal — it is the information-theoretically natural measure of non-Gaussianity — and invariant to invertible linear transformations. The problem is computational: computing it requires estimating $f(\mathbf{y})$, which is expensive.</p>
+<p><strong>Practical approximations</strong> (Hyvärinen, 1998). Based on the maximum-entropy principle, negentropy can be approximated by:</p>
+<p>$$J(y) \approx \sum_i k_i \left[\mathbb{E}{G_i(y)} - \mathbb{E}{G_i(\nu)}\right]^2$$</p>
+<p>where $\nu \sim \mathcal{N}(0,1)$, the $k_i$ are positive constants, and $G_i$ are nonquadratic functions chosen for robustness. Two particularly effective choices are:</p>
+<p>$$G_1(u) = \frac{1}{a_1} \log \cosh(a_1 u) \quad (a_1 \approx 1), \qquad G_2(u) = -\exp!\left(-\frac{u^2}{2}\right)$$</p>
+<p>These approximations combine the computational tractability of moment-based measures with the robustness of information-theoretic ones, making them the practical default in ICA.</p>
+<h3 id="74-mutual-information-and-the-infomax-principle">7.4 Mutual Information and the Infomax Principle</h3>
+<p><strong>Mutual information</strong> between $n$ scalar variables $y_1, \ldots, y_n$ is:
+$$I(y_1, \ldots, y_n) = \sum_{i=1}^n H(y_i) - H(\mathbf{y})$$</p>
+<p>This equals the Kullback-Leibler divergence between the joint density $f(\mathbf{y})$ and the product of marginals $\prod_i f_i(y_i)$ — a natural measure of how much the joint distribution differs from independence. It is always $\geq 0$, with equality if and only if the $y_i$ are statistically independent.</p>
+<p><strong>ICA as mutual information minimization.</strong> Define the ICA transformation as $\mathbf{y} = \mathbf{W}\mathbf{x}$. Minimizing $I(y_1, \ldots, y_n)$ over $\mathbf{W}$ finds the transformation that makes the outputs as independent as possible.</p>
+<p><strong>Connection to negentropy.</strong> When the $y_i$ are constrained to be uncorrelated and unit-variance (which whitening ensures), it can be shown that:
+$$I(y_1, \ldots, y_n) = C - \sum_i J(y_i)$$</p>
+<p>where $C$ is a constant independent of $\mathbf{W}$. Therefore <em>minimizing mutual information is equivalent to maximizing the sum of negentropies</em>. This gives rigorous justification for the heuristic idea of finding &quot;maximally non-Gaussian&quot; directions.</p>
+<p><strong>The Infomax Principle</strong> (Bell and Sejnowski, 1995) derives ICA from a neural network perspective: maximize the output entropy of a neural network with nonlinear outputs. Several authors proved that, with nonlinearities chosen as the CDFs of the source densities, this is equivalent to maximum likelihood estimation of the ICA model. So maximum likelihood, mutual information minimization, and infomax are all equivalent formulations of the same optimization — three ways of expressing the same target.</p>
+<h3 id="75-preprocessing-centering-and-whitening">7.5 Preprocessing: Centering and Whitening</h3>
+<p>Before applying ICA, two preprocessing steps are standard.</p>
+<p><strong>Centering.</strong> Subtract the sample mean: $\mathbf{x} \leftarrow \mathbf{x} - \mathbb{E}[\mathbf{x}]$. The ICA model can be estimated on centered data; the source means are recovered afterward via $\mathbf{A}^{-1}\mathbb{E}[\mathbf{x}]$.</p>
+<p><strong>Whitening.</strong> Transform $\mathbf{x}$ to $\tilde{\mathbf{x}}$ such that $\mathbb{E}[\tilde{\mathbf{x}}\tilde{\mathbf{x}}^T] = \mathbf{I}$. Using the PCA transform from Section 4.2, $\tilde{\mathbf{x}} = \mathbf{L}^{-1/2}\mathbf{U}^T\mathbf{x}$ achieves this.</p>
+<p><strong>Why whitening helps.</strong> After whitening, the transformed mixing matrix $\tilde{\mathbf{A}}$ must satisfy $\tilde{\mathbf{A}}\tilde{\mathbf{A}}^T = \mathbf{I}$ — it must be <em>orthogonal</em>. This is because:
+$$\mathbb{E}[\tilde{\mathbf{x}}\tilde{\mathbf{x}}^T] = \tilde{\mathbf{A}},\mathbb{E}[\mathbf{s}\mathbf{s}^T],\tilde{\mathbf{A}}^T = \tilde{\mathbf{A}}\mathbf{I}\tilde{\mathbf{A}}^T = \mathbf{I} \implies \tilde{\mathbf{A}}\tilde{\mathbf{A}}^T = \mathbf{I}$$</p>
+<p>where we used the unit-variance assumption on sources. An orthogonal $n \times n$ matrix has $n(n-1)/2$ free parameters (the angles parameterizing $n$-dimensional rotations), compared to $n^2$ for a general matrix. <strong>Whitening solves half the ICA problem</strong>: it reduces the search from all invertible matrices to the much smaller space of orthogonal ones. The remaining task — finding the right rotation within this space — is what the ICA algorithm must do.</p>
+<h3 id="76-the-fastica-algorithm">7.6 The FastICA Algorithm</h3>
+<p>The FastICA algorithm (Hyvärinen and Oja, 1997) is a fixed-point iteration for finding the unit-weight vector $\mathbf{w}$ that maximizes the negentropy approximation $J(\mathbf{w}^T\tilde{\mathbf{x}})$.</p>
+<p><strong>The fixed-point update.</strong> At a maximum of $J(\mathbf{w}^T\tilde{\mathbf{x}})$ subject to $|\mathbf{w}|=1$, the first-order optimality conditions (Kuhn-Tucker) together with a Newton-step approximation (exploiting the whitened covariance $\mathbb{E}[\tilde{\mathbf{x}}\tilde{\mathbf{x}}^T] = \mathbf{I}$ to simplify the Jacobian) yield:</p>
+<p>$$\mathbf{w}^+ = \mathbb{E}\left{\tilde{\mathbf{x}} , g(\mathbf{w}^T\tilde{\mathbf{x}})\right} - \mathbb{E}\left{g'(\mathbf{w}^T\tilde{\mathbf{x}})\right} \mathbf{w}$$</p>
+<p>followed by normalization $\mathbf{w} \leftarrow \mathbf{w}^+ / |\mathbf{w}^+|$, where $g = G'$ is the derivative of the chosen nonquadratic function $G$. For the two practical choices from Section 7.3:</p>
+<p>$$g_1(u) = \tanh(a_1 u), \qquad g_2(u) = u \exp(-u^2/2)$$</p>
+<p>The algorithm for one component: initialize $\mathbf{w}$ randomly (unit length), then iterate the update above until $|\mathbf{w}<em>{\text{new}}^T \mathbf{w}</em>{\text{old}}| \approx 1$ (new and old $\mathbf{w}$ are colinear modulo sign).</p>
+<p><strong>Finding multiple components.</strong> To find $p$ components, run the single-component algorithm $p$ times, deflating after each one by projecting out the already-found directions (Gram-Schmidt). Alternatively, use <em>symmetric decorrelation</em>: update all $p$ weight vectors simultaneously, then orthogonalize the full matrix via $\mathbf{W} \leftarrow (\mathbf{W}\mathbf{W}^T)^{-1/2}\mathbf{W}$, so no component is privileged over others.</p>
+<p><strong>Properties.</strong> FastICA converges cubically (vs. linearly for gradient methods), has no step-size parameter to tune, works for both sub- and supergaussian sources with appropriate choice of $g$, and can estimate components one-by-one when only a subset is needed. It is the standard practical algorithm for ICA in signal processing (EEG/MEG artifact removal), image processing (natural image feature extraction), and financial data analysis.</p>
+<p><strong>So what?</strong> FastICA operationalizes the entire ICA theory: given centered, whitened data, it iteratively rotates coordinate axes to maximize non-Gaussianity, converging to the demixing matrix that recovers the original independent sources.</p>
+<hr>
+<h2 id="8-sources-and-further-reading">8. Sources and Further Reading</h2>
+<p><strong>Assigned readings:</strong></p>
+<ul>
+<li>
+<p><strong>Bishop, <em>Pattern Recognition and Machine Learning</em> (2006), Chapter 12.</strong> Primary source for Sections 1–5. Sections 12.1 (PCA), 12.2 (Probabilistic PCA, EM, Bayesian PCA, Factor Analysis), and 12.4.1 (ICA as nonlinear latent variable model). All numbered equations in Sections 2–5 follow Bishop's derivations directly.</p>
+</li>
+<li>
+<p><strong>Hyvärinen and Oja, &quot;Independent Component Analysis: Algorithms and Applications,&quot; <em>Neural Networks</em> 13(4-5):411–430, 2000.</strong> Primary source for Sections 6–7. The FastICA derivation, negentropy approximations, measures of non-Gaussianity, and the three-formulations equivalence follow this paper closely.</p>
+</li>
+<li>
+<p><strong>Isbell and Viola, &quot;Restructuring Sparse High Dimensional Data for Effective Retrieval,&quot; <em>NIPS</em> 1999.</strong> Assigned reading; provides empirical illustration of the PCA vs. ICA distinction through text retrieval. The key observation — that ICA axes yield highly kurtotic (non-Gaussian) document projections while PCA axes yield near-Gaussian ones — illustrates Section 7.1 in a concrete application domain.</p>
+</li>
+</ul>
+<p><strong>Key results and their attributions:</strong></p>
+<ul>
+<li>
+<p>The PCA derivation as a constrained eigenvector problem (Sections 2–3) is standard; the treatment here follows Bishop §12.1.</p>
+</li>
+<li>
+<p>The maximum likelihood solution for PPCA (Section 5.4) — including the closed-form $\mathbf{W}<em>{\text{ML}}$ and the result that $\sigma^2</em>{\text{ML}}$ equals the average of discarded eigenvalues — was proved by Tipping and Bishop (1999b). The result that all other stationary points are saddle points is also from Tipping and Bishop (1999b). A related conjecture was made independently by Roweis (1998).</p>
+</li>
+<li>
+<p>The result that Gaussian latents are unidentifiable in ICA (Section 6.5) is standard; the proof via rotational symmetry follows Hyvärinen and Oja §3.3.</p>
+</li>
+<li>
+<p>The infomax principle was introduced by Bell and Sejnowski (1995); equivalence between infomax and maximum likelihood was proved by Cardoso (1997) and Pearlmutter and Parra (1997).</p>
+</li>
+<li>
+<p>The FastICA fixed-point algorithm and its convergence analysis are from Hyvärinen (1999a); the connection to maximum likelihood is proved in Hyvärinen (1999b).</p>
+</li>
+<li>
+<p>The additivity of kurtosis for independent variables and the kurtosis-based optimization landscape analysis (Section 7.2) follow Delfosse and Loubaton (1995), cited in Hyvärinen and Oja.</p>
+</li>
+<li>
+<p>Results in Section 5.5 for the PPCA posterior follow the general linear-Gaussian result of Bishop §2.3 (equation 2.116); the derivation is not reproduced here.</p>
+</li>
+</ul>
+<p><strong>For deeper reading:</strong></p>
+<ul>
+<li>
+<p><strong>Tipping and Bishop (1999b), &quot;Probabilistic Principal Component Analysis,&quot; <em>J. Royal Statistical Society B</em>.</strong> The original PPCA paper; contains the proof of the closed-form ML solution and the saddle-point characterization.</p>
+</li>
+<li>
+<p><strong>Bell and Sejnowski (1995), &quot;An Information-Maximization Approach to Blind Separation and Blind Deconvolution,&quot; <em>Neural Computation</em> 7:1129–1159.</strong> The original infomax ICA paper.</p>
+</li>
+<li>
+<p><strong>Comon (1994), &quot;Independent Component Analysis — A New Concept?&quot;, <em>Signal Processing</em> 36:287–314.</strong> Provides the formal definition of ICA and proves identifiability for non-Gaussian sources.</p>
+</li>
+<li>
+<p><strong>Cover and Thomas, <em>Elements of Information Theory</em>, 2nd ed. (2006).</strong> Standard reference for the maximum-entropy property of the Gaussian (Section 7.3) and the properties of differential entropy and mutual information used throughout Section 7.</p>
+</li>
+</ul>
+
+</body>
+</html>
