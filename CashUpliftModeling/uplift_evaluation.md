@@ -81,7 +81,7 @@ $$
 
 **The random baseline.** A model with no ranking ability (equivalent to targeting users at random) produces a straight line from $(0, 0)$ to $(1, \text{total uplift})$. The value of the uplift model is the area *between* its curve and this random baseline.
 
-[FIG:ORIGINAL — cumulative gain chart (uplift curve) showing three curves: the model's curve (rising steeply then flattening), the random baseline (straight line), and the perfect model (which rises as steeply as theoretically possible). The x-axis is "fraction of population targeted" and the y-axis is "cumulative incremental conversions/GMV". The shaded area between the model curve and the random line represents the model's value.]
+<img src="images/cumulative_gain_chart.png" alt="Cumulative Gain Chart — the model curve (blue) rises steeply then flattens, the random baseline (dashed) is a straight line, and the perfect model (green dotted) captures all uplift immediately. The shaded area is the model's value-add." width="520">
 
 The cumulative gain chart is intuitive but has a practical issue: the local denominators $n_t(\phi)$ and $n_c(\phi)$ can be small or unbalanced in the top-ranked segments, making the uplift rate estimate noisy. The Qini curve addresses this with a different normalization.
 
@@ -236,7 +236,7 @@ $$
 
 **Why this works despite the fundamental problem.** We can't observe individual treatment effects, but within a group of users, the difference in mean outcomes between treated and control is an unbiased estimate of the group-level CATE (by the same randomization argument from [Note 1](causal_inference_uplift_modeling.md)). Larger groups give more precise estimates, which is why we bin into deciles rather than evaluating calibration per-user.
 
-[FIG:ORIGINAL — calibration plot for an uplift model showing predicted CATE (x-axis) vs. observed uplift (y-axis) with decile bins, the 45-degree perfect calibration line, and error bars on the observed uplift estimates]
+<img src="images/calibration_plot.png" alt="Uplift Calibration Plot — each dot is a decile bin. Points near the 45° dashed line indicate good calibration; points below it mean the model over-predicts uplift. Error bars reflect the statistical uncertainty of the observed uplift within each bin." width="440">
 
 **Recalibration.** If the model is well-ranked but poorly calibrated (common with boosted tree models that shrink predictions), a simple post-hoc fix is **isotonic regression** of $\hat{\tau}$ against the transformed outcome $Y^*$. Isotonic regression fits a monotonically non-decreasing step function, which by construction preserves the ranking while adjusting the scale to match observed uplift levels.
 
