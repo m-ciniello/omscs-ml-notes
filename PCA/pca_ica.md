@@ -273,9 +273,21 @@ Once we have the principal components $\mathbf{u}_1, \ldots, \mathbf{u}_M$, the 
 
 $$\tilde{\mathbf{x}}_n = \bar{\mathbf{x}} + \sum_{i=1}^M \left(\mathbf{x}_n^T \mathbf{u}_i - \bar{\mathbf{x}}^T \mathbf{u}_i\right) \mathbf{u}_i$$
 
-which reads as: "start at the sample mean, then move along each principal direction by the amount that $\mathbf{x}_n$ deviates from the mean in that direction." The compressed representation stores only the $M$ coordinates $z_{ni} = \mathbf{x}_n^T\mathbf{u}_i - \bar{\mathbf{x}}^T\mathbf{u}_i$ per data point, replacing a $D$-dimensional vector with an $M$-dimensional one.
+which reads as: "start at the sample mean, then move along each principal direction by the amount that $\mathbf{x}_n$ deviates from the mean in that direction." The compressed representation stores only the $M$ coordinates $z_{ni} = (\mathbf{x}_n - \bar{\mathbf{x}})^T\mathbf{u}_i$ per data point, replacing a $D$-dimensional vector with an $M$-dimensional one.
+
+**Matrix form.** Stacking the top $M$ eigenvectors as columns of $\mathbf{U}_M \in \mathbb{R}^{D \times M}$, the two steps are:
+
+$$\underbrace{\mathbf{z}_n = \mathbf{U}_M^T(\mathbf{x}_n - \bar{\mathbf{x}})}_{\text{compress: } D \to M} \qquad \underbrace{\tilde{\mathbf{x}}_n = \bar{\mathbf{x}} + \mathbf{U}_M\mathbf{z}_n}_{\text{reconstruct: } M \to D}$$
+
+Substituting the first into the second gives the full round-trip: $\tilde{\mathbf{x}}_n = \bar{\mathbf{x}} + \mathbf{U}_M\mathbf{U}_M^T(\mathbf{x}_n - \bar{\mathbf{x}})$, where $\mathbf{U}_M\mathbf{U}_M^T$ is the orthogonal projection matrix onto the principal subspace.
+
+**Connection to the pseudoinverse.** For a general (non-orthonormal) basis $\mathbf{W} \in \mathbb{R}^{D \times M}$, the least-squares projection onto the column space of $\mathbf{W}$ uses the Moore-Penrose pseudoinverse: $\mathbf{z} = (\mathbf{W}^T\mathbf{W})^{-1}\mathbf{W}^T(\mathbf{x} - \bar{\mathbf{x}})$. For PCA's orthonormal eigenvectors, $\mathbf{U}_M^T\mathbf{U}_M = \mathbf{I}_M$, so $(\mathbf{U}_M^T\mathbf{U}_M)^{-1} = \mathbf{I}_M$ and the pseudoinverse simplifies to just $\mathbf{U}_M^T$ — the transpose *is* the inverse because the columns are orthonormal. This distinction matters in Section 5.5, where the PPCA loading matrix $\mathbf{W}$ is *not* orthonormal and the full pseudoinverse (with an additional noise-correction term) is needed.
 
 For visualization, we choose $M = 2$ and plot each point at $(\mathbf{x}_n^T\mathbf{u}_1, \mathbf{x}_n^T\mathbf{u}_2)$ — a scatterplot in the plane of maximum variance.
+
+[FIG:ORIGINAL — PCA 2D projection visualization: a high-dimensional dataset (e.g. Iris or digits) shown both in its original feature space and as a 2D scatterplot after projection onto the first two principal components, with class labels colored to show that meaningful structure is preserved in the low-dimensional view]
+
+**A limitation to note.** This projection is deterministic: it maps each $\mathbf{x}_n$ to a single point in $\mathbb{R}^M$ with no notion of uncertainty. It implicitly treats the data as noise-free — every deviation from the mean is attributed to signal, projected onto the subspace, and trusted completely. When there *is* noise (i.e., variation off the principal subspace), this projection can overcommit to noisy fluctuations. Section 5.5 introduces a noise-aware alternative via the PPCA posterior, which shrinks the projection toward the origin in proportion to how noisy the data is and provides an explicit uncertainty estimate for each latent code.
 
 ### 4.2 Whitening (Sphereing)
 
@@ -311,15 +323,19 @@ The whitened data has identity covariance. The zero mean follows from $\mathbb{E
 
 Standard PCA is a deterministic algorithm: given data, compute eigenvectors. It has no notion of probability, uncertainty, or missing observations. By recasting PCA as a probabilistic generative model — Probabilistic PCA, or PPCA — we gain a likelihood function, a proper density over observations, a natural EM algorithm, and a clean handle on the structure that modern deep generative models extend.
 
-**Why PPCA matters for modern ML.** PPCA is the simplest member of a family: *linear-Gaussian latent variable models*. Its generative structure is a Gaussian prior over a latent variable $\mathbf{z}$, a linear map from $\mathbf{z}$ to the data mean, and Gaussian noise. Because everything is linear and Gaussian, every relevant quantity — the marginal $p(\mathbf{x})$, the posterior $p(\mathbf{z}|\mathbf{x})$, the ELBO — has a closed-form expression. This is the *tractable* baseline.
+**Why PPCA matters for modern ML.** PPCA is the simplest member of a family: *linear-Gaussian latent variable models*. Its generative structure is a Gaussian prior over a latent variable $\mathbf{z}$, a linear map from $\mathbf{z}$ to the data mean, and Gaussian noise. Because everything is linear and Gaussian, every relevant quantity — the marginal $p(\mathbf{x})$, the posterior $p(\mathbf{z}|\mathbf{x})$, the ELBO (Evidence Lower BOund — the tractable optimization target derived in the EM algorithm notes) — has a closed-form expression. This is the *tractable* baseline.
 
 The Variational Autoencoder (VAE) is exactly PPCA with the linear decoder $\mathbf{W}$ replaced by a neural network $f_\theta$. That single change breaks linearity and makes the posterior intractable, forcing us to use the ELBO and an approximate encoder — all the machinery derived in the EM algorithm notes. The prior, the ELBO structure, and the "encode-to-latent, decode-to-data" frame are *directly inherited* from PPCA. Understanding PPCA makes the VAE legible rather than mysterious.
 
 ### 5.2 The Generative Model
 
-The core design question is: how do we build a probability distribution over $\mathbf{x} \in \mathbb{R}^D$ that bakes in the assumption of low-dimensional structure? The answer is to write down an explicit generative process — a recipe for how observations could have been produced — and then read off the implied distributions.
+Standard PCA expresses the assumption "data lives near an $M$-dimensional subspace" as an optimization problem — find the subspace that maximizes variance or minimizes reconstruction error. To turn this into a probability model, we need a distribution $p(\mathbf{x})$ over $\mathbb{R}^D$ that assigns high probability to points near the subspace and low probability to points far from it.
 
-**Starting from the generative equation.** We want every observation to be (approximately) a point on an $M$-dimensional linear subspace plus some noise. The most direct way to express this is:
+**What "near a subspace" means geometrically.** An $M$-dimensional subspace is not a separate space — it is a flat $M$-dimensional surface *embedded inside* $\mathbb{R}^D$. For example, a plane ($M = 2$) through the origin in $\mathbb{R}^3$ ($D = 3$) is a 2-dimensional subspace sitting inside 3D space. Every point $\mathbf{x} \in \mathbb{R}^3$ can be decomposed into a component *on* the plane (its perpendicular projection) and a component *off* the plane (the residual). "Data lives near the subspace" means the off-subspace residuals are small — most of the structure in each observation is captured by just $M$ coordinates on the subspace, with only small perturbations in the remaining $D - M$ directions. In PPCA, the on-subspace component is $\mathbf{W}\mathbf{z}$ (an $M$-dimensional latent code mapped into $\mathbb{R}^D$ via the loading matrix $\mathbf{W}$) and the off-subspace perturbation is $\boldsymbol{\epsilon}$, controlled by $\sigma^2$.
+
+The natural way to construct the distribution $p(\mathbf{x})$ with this geometry is through a generative process: write down a recipe for how each observation could have been produced, and then derive the distributions it implies ($p(\mathbf{x})$, $p(\mathbf{z}|\mathbf{x})$, etc.) from that recipe.
+
+**Starting from the generative equation.** To generate a $D$-dimensional observation, we specify just $M$ coordinates on the subspace and then add noise. The most direct way to express this is:
 
 $$\mathbf{x} = \mathbf{W}\mathbf{z} + \boldsymbol{\mu} + \boldsymbol{\epsilon}$$
 
@@ -345,11 +361,15 @@ $$p(\mathbf{x} \mid \mathbf{z}) = \mathcal{N}(\mathbf{x} \mid \mathbf{W}\mathbf{
 
 $$p(\mathbf{z}) = \mathcal{N}(\mathbf{z} \mid \mathbf{0}, \mathbf{I}), \qquad \mathbf{z} \in \mathbb{R}^M$$
 
-This might seem restrictive. Why not a general Gaussian $\mathcal{N}(\mathbf{m}, \boldsymbol{\Sigma})$ with arbitrary mean and covariance? Because such a model is no more expressive — any general Gaussian prior is equivalent to a standard Gaussian prior with reparameterized loading matrix and mean. To see this, suppose we used $p(\mathbf{z}) = \mathcal{N}(\mathbf{m}, \boldsymbol{\Sigma})$. Introduce the change of variables $\mathbf{z}' = \boldsymbol{\Sigma}^{-1/2}(\mathbf{z} - \mathbf{m})$, so that $\mathbf{z} = \boldsymbol{\Sigma}^{1/2}\mathbf{z}' + \mathbf{m}$ and $p(\mathbf{z}') = \mathcal{N}(\mathbf{0}, \mathbf{I})$ by construction. Substituting into the generative equation:
+This might seem restrictive. Why not a general Gaussian $\mathcal{N}(\mathbf{m}, \boldsymbol{\Sigma})$ with arbitrary mean and covariance? Because such a model is no more expressive — any general Gaussian prior is equivalent to a standard Gaussian prior with reparameterized loading matrix and mean.
+
+To see this, suppose we used $p(\mathbf{z}) = \mathcal{N}(\mathbf{m}, \boldsymbol{\Sigma})$. Introduce the change of variables $\mathbf{z}' = \boldsymbol{\Sigma}^{-1/2}(\mathbf{z} - \mathbf{m})$. This is the whitening transform from Section 4.2 applied to the latent space: subtract the mean $\mathbf{m}$ (centering) and multiply by $\boldsymbol{\Sigma}^{-1/2}$ (decorrelate and normalize to unit variance). The result has mean $\mathbb{E}[\mathbf{z}'] = \boldsymbol{\Sigma}^{-1/2}(\mathbb{E}[\mathbf{z}] - \mathbf{m}) = \mathbf{0}$ and covariance $\text{Cov}(\mathbf{z}') = \boldsymbol{\Sigma}^{-1/2}\boldsymbol{\Sigma}\,\boldsymbol{\Sigma}^{-1/2} = \mathbf{I}$, so $p(\mathbf{z}') = \mathcal{N}(\mathbf{0}, \mathbf{I})$.
+
+Now invert the change of variables — $\mathbf{z} = \boldsymbol{\Sigma}^{1/2}\mathbf{z}' + \mathbf{m}$ — and substitute into the generative equation:
 
 $$\mathbf{x} = \mathbf{W}\mathbf{z} + \boldsymbol{\mu} + \boldsymbol{\epsilon} = \mathbf{W}(\boldsymbol{\Sigma}^{1/2}\mathbf{z}' + \mathbf{m}) + \boldsymbol{\mu} + \boldsymbol{\epsilon} = \underbrace{(\mathbf{W}\boldsymbol{\Sigma}^{1/2})}_{\mathbf{W}'}\mathbf{z}' + \underbrace{(\mathbf{W}\mathbf{m} + \boldsymbol{\mu})}_{\boldsymbol{\mu}'} + \boldsymbol{\epsilon}$$
 
-The general-prior model with parameters $(\mathbf{W}, \boldsymbol{\mu}, \mathbf{m}, \boldsymbol{\Sigma})$ is identical to the standard-prior model with parameters $(\mathbf{W}', \boldsymbol{\mu}')$. The extra degrees of freedom $\mathbf{m}$ and $\boldsymbol{\Sigma}$ are completely absorbed into $\mathbf{W}'$ and $\boldsymbol{\mu}'$ — no data can ever distinguish the two. Fixing $p(\mathbf{z}) = \mathcal{N}(\mathbf{0}, \mathbf{I})$ is genuinely without loss of generality.
+The general-prior model with parameters $(\mathbf{W}, \boldsymbol{\mu}, \mathbf{m}, \boldsymbol{\Sigma})$ is identical to the standard-prior model with parameters $(\mathbf{W}', \boldsymbol{\mu}')$. The prior's covariance structure $\boldsymbol{\Sigma}$ is absorbed into the columns of $\mathbf{W}' = \mathbf{W}\boldsymbol{\Sigma}^{1/2}$ (reshaping which directions the loading matrix spans), and the prior's mean $\mathbf{m}$ is absorbed into the data-space offset $\boldsymbol{\mu}' = \mathbf{W}\mathbf{m} + \boldsymbol{\mu}$ (shifting the subspace center). No data can ever distinguish the two parameterizations. Fixing $p(\mathbf{z}) = \mathcal{N}(\mathbf{0}, \mathbf{I})$ is genuinely without loss of generality.
 
 **Summary: the PPCA model.** Putting both pieces together:
 
@@ -372,7 +392,7 @@ To fit the model, we need $p(\mathbf{x})$ — the marginal over observed data, o
 
 $$p(\mathbf{x}) = \int p(\mathbf{x} \mid \mathbf{z}) p(\mathbf{z}) \, d\mathbf{z}$$
 
-Since $\mathbf{x} = \mathbf{W}\mathbf{z} + \boldsymbol{\mu} + \boldsymbol{\epsilon}$ is a linear function of two independent Gaussians, the marginal is also Gaussian. We find it by computing the mean and covariance of $\mathbf{x}$ directly.
+Since $\mathbf{x} = \mathbf{W}\mathbf{z} + \boldsymbol{\mu} + \boldsymbol{\epsilon}$ is a linear function of two independent Gaussians, the marginal is also Gaussian (by the closure of Gaussian distributions under linear transformations: any affine function of jointly Gaussian variables is Gaussian). We find it by computing the mean and covariance of $\mathbf{x}$ directly.
 
 **Mean of $\mathbf{x}$:**
 $$\mathbb{E}[\mathbf{x}] = \mathbb{E}[\mathbf{W}\mathbf{z} + \boldsymbol{\mu} + \boldsymbol{\epsilon}] = \mathbf{W}\underbrace{\mathbb{E}[\mathbf{z}]}_{=\mathbf{0}} + \boldsymbol{\mu} + \underbrace{\mathbb{E}[\boldsymbol{\epsilon}]}_{=\mathbf{0}} = \boldsymbol{\mu}$$
@@ -404,20 +424,27 @@ Substituting $\mathbf{C} = \mathbf{W}\mathbf{W}^T + \sigma^2\mathbf{I}$ and usin
 
 $$\text{Var}(\mathbf{v}^T\mathbf{x}) = \mathbf{v}^T\mathbf{W}\mathbf{W}^T\mathbf{v} + \sigma^2\underbrace{\mathbf{v}^T\mathbf{v}}_{=1} = \|\mathbf{W}^T\mathbf{v}\|^2 + \sigma^2$$
 
-where we used the identity $\mathbf{v}^T(\mathbf{A}^T\mathbf{A})\mathbf{v} = \|\mathbf{A}\mathbf{v}\|^2$ with $\mathbf{A} = \mathbf{W}^T$. Now the two cases are explicit:
+where we used the identity $\mathbf{v}^T(\mathbf{A}^T\mathbf{A})\mathbf{v} = \|\mathbf{A}\mathbf{v}\|^2$ with $\mathbf{A} = \mathbf{W}^T$. The term $\|\mathbf{W}^T\mathbf{v}\|^2$ measures how much the probe direction $\mathbf{v}$ overlaps with the principal subspace: $\mathbf{W}^T\mathbf{v}$ is the vector of inner products between $\mathbf{v}$ and each column of $\mathbf{W}$, so its norm is large when $\mathbf{v}$ aligns with the subspace and zero when $\mathbf{v}$ is perpendicular to it.
 
-- **$\mathbf{v}$ lies in the principal subspace** (the column space of $\mathbf{W}$): $\mathbf{W}^T\mathbf{v}$ is the coordinate representation of $\mathbf{v}$ in the $M$-dimensional latent space, and $\|\mathbf{W}^T\mathbf{v}\|^2 > 0$. The total variance is *signal* ($\|\mathbf{W}^T\mathbf{v}\|^2$) plus *noise* ($\sigma^2$).
-- **$\mathbf{v}$ is orthogonal to the principal subspace**: $\mathbf{v}$ is perpendicular to every column of $\mathbf{W}$, so $\mathbf{W}^T\mathbf{v} = \mathbf{0}$ and $\|\mathbf{W}^T\mathbf{v}\|^2 = 0$. The total variance collapses to just $\sigma^2$ — pure noise, no signal whatsoever.
+**A concrete example.** Take $D = 3$, $M = 1$, with loading matrix $\mathbf{W} = (3, 0, 0)^T$ (a single principal direction along the $x$-axis) and $\sigma^2 = 0.1$:
 
-This is the precise version of the "pancake" intuition: in the $M$ principal directions the distribution is spread out by the signal plus noise; in all $D - M$ orthogonal directions it is uniformly thin, with spread controlled only by $\sigma^2$. The distribution concentrates on the principal subspace, and as $\sigma^2 \to 0$ it collapses onto it entirely — recovering standard PCA.
+- Probe along the subspace: $\mathbf{v} = (1, 0, 0)^T$. Then $\mathbf{W}^T\mathbf{v} = 3$, so $\text{Var} = 9 + 0.1 = 9.1$. The data is *spread out* in this direction — signal dominates.
+- Probe perpendicular to it: $\mathbf{v} = (0, 1, 0)^T$. Then $\mathbf{W}^T\mathbf{v} = 0$, so $\text{Var} = 0 + 0.1 = 0.1$. The data is *thin* in this direction — only noise.
+
+The pattern generalizes to arbitrary $D$ and $M$:
+
+- **$\mathbf{v}$ lies in the principal subspace** (the column space of $\mathbf{W}$): $\|\mathbf{W}^T\mathbf{v}\|^2 > 0$, so the total variance is *signal* plus *noise*.
+- **$\mathbf{v}$ is orthogonal to the principal subspace**: $\mathbf{v}$ is perpendicular to every column of $\mathbf{W}$, so each inner product is zero, $\mathbf{W}^T\mathbf{v} = \mathbf{0}$, and the total variance collapses to just $\sigma^2$ — pure noise, no signal.
+
+**The pancake picture.** Imagine the data cloud in $\mathbb{R}^D$. In the $M$ directions spanned by $\mathbf{W}$, the cloud is stretched out (variance = signal + noise). In all $D - M$ remaining directions, the cloud is uniformly thin (variance = $\sigma^2$ only). The result is a pancake-shaped distribution: flat and extended along the subspace, thin in every perpendicular direction. As $\sigma^2 \to 0$ the pancake gets infinitely thin — the distribution collapses onto the subspace entirely, and we recover standard PCA. In the example above, the data forms a cigar along the $x$-axis: 9.1 units of spread lengthwise, only 0.1 in each perpendicular direction.
 
 Also worth noting: $\mathbf{W}\mathbf{W}^T$ is rank $M$ (not full rank $D$), because $\mathbf{W}$ is $D \times M$ with $M < D$ — it maps $\mathbb{R}^M$ into $\mathbb{R}^D$ and can span at most $M$ directions. The $\sigma^2\mathbf{I}$ term is what fills in the remaining $D - M$ directions with nonzero variance, making $\mathbf{C}$ full rank and the Gaussian non-degenerate.
 
 **So what?** It is worth pausing to ask why we computed $p(\mathbf{x})$ at all. After all, the generative process only requires $p(\mathbf{z})$ and $p(\mathbf{x}|\mathbf{z})$ — sample a latent code, then sample an observation. That is the *forward* direction: latent $\to$ data.
 
-But a model is only useful if we can also run *backward*: data $\to$ parameters and latent codes. That backward direction requires $p(\mathbf{x})$ in two ways:
+But to learn the model from data, we also need to run *backward*: data $\to$ parameters and latent codes. That backward direction requires $p(\mathbf{x})$ in two ways:
 
-- **Fitting the model.** To estimate $\mathbf{W}$ and $\sigma^2$ from data, we maximize the likelihood of the observations. That likelihood *is* $p(\mathbf{x})$ — there is no other way to write down $\log p(\mathbf{X} \mid \mathbf{W}, \sigma^2)$. This is exactly what Section 5.4 does.
+- **Fitting the model.** To estimate $\mathbf{W}$ and $\sigma^2$ from data, we maximize the likelihood of the observations — and the likelihood of each observation is exactly $p(\mathbf{x})$, since $\mathbf{z}$ has been integrated out. This is what Section 5.4 does.
 - **Mapping observations back to latent codes.** By Bayes' theorem, $p(\mathbf{z}|\mathbf{x}) \propto p(\mathbf{x}|\mathbf{z})p(\mathbf{z})$, with $p(\mathbf{x})$ as the normalizing constant. Section 5.5 derives this posterior in closed form.
 
 As a bonus, $p(\mathbf{x})$ lets you assign an actual probability to any observation — useful for anomaly detection and model comparison. Standard PCA can only tell you the distance from the subspace; PPCA tells you the full probability under the model. Computing $p(\mathbf{x})$ is what converts the generative story into a proper probabilistic model that can be fit, evaluated, and queried.
@@ -432,7 +459,7 @@ Summing over $n$, the first two terms scale trivially to $-\frac{N}{2}(D\ln(2\pi
 
 $$\sum_{n=1}^N (\mathbf{x}_n - \boldsymbol{\mu})^T\mathbf{C}^{-1}(\mathbf{x}_n - \boldsymbol{\mu}) = \sum_{n=1}^N \text{Tr}\!\left(\mathbf{C}^{-1}(\mathbf{x}_n - \boldsymbol{\mu})(\mathbf{x}_n - \boldsymbol{\mu})^T\right) = \text{Tr}\!\left(\mathbf{C}^{-1} \sum_{n=1}^N (\mathbf{x}_n - \boldsymbol{\mu})(\mathbf{x}_n - \boldsymbol{\mu})^T\right)$$
 
-where the last step pulls $\mathbf{C}^{-1}$ (constant in $n$) outside the sum using linearity of the trace. Dividing by $N$ inside the trace recognizes the sample covariance $\mathbf{S}_\mu = \frac{1}{N}\sum_n (\mathbf{x}_n - \boldsymbol{\mu})(\mathbf{x}_n - \boldsymbol{\mu})^T$, giving a total contribution of $N\,\text{Tr}(\mathbf{C}^{-1}\mathbf{S}_\mu)$. Combining all terms:
+where the last step pulls $\mathbf{C}^{-1}$ (constant in $n$) outside the sum using linearity of the trace. The remaining sum is $N$ times the sample covariance by definition: $\sum_n (\mathbf{x}_n - \boldsymbol{\mu})(\mathbf{x}_n - \boldsymbol{\mu})^T = N\mathbf{S}_\mu$ where $\mathbf{S}_\mu = \frac{1}{N}\sum_n (\mathbf{x}_n - \boldsymbol{\mu})(\mathbf{x}_n - \boldsymbol{\mu})^T$. Substituting gives a total contribution of $\text{Tr}(\mathbf{C}^{-1} \cdot N\mathbf{S}_\mu) = N\,\text{Tr}(\mathbf{C}^{-1}\mathbf{S}_\mu)$. Combining all terms:
 
 $$\ln p(\mathbf{X} \mid \boldsymbol{\mu}, \mathbf{W}, \sigma^2) = -\frac{N}{2}\left\{D\ln(2\pi) + \ln|\mathbf{C}| + \text{Tr}\left(\mathbf{C}^{-1}\mathbf{S}_\mu\right)\right\}$$
 
@@ -440,7 +467,7 @@ $$\ln p(\mathbf{X} \mid \boldsymbol{\mu}, \mathbf{W}, \sigma^2) = -\frac{N}{2}\l
 
 $$\ln p(\mathbf{X} \mid \mathbf{W}, \sigma^2) = -\frac{N}{2}\left\{D\ln(2\pi) + \ln|\mathbf{C}| + \text{Tr}\left(\mathbf{C}^{-1}\mathbf{S}\right)\right\}$$
 
-**The closed-form solution for $\mathbf{W}$ and $\sigma^2$.** Maximizing over $\mathbf{W}$ and $\sigma^2$ is non-trivial — it requires the matrix determinant lemma and the Woodbury identity to handle $|\mathbf{C}|$ and $\mathbf{C}^{-1}$ analytically. The full derivation is in Tipping and Bishop (1999); the result is:
+**The closed-form solution for $\mathbf{W}$ and $\sigma^2$.** Maximizing over $\mathbf{W}$ and $\sigma^2$ is non-trivial — it requires the matrix determinant lemma and the Woodbury identity, two standard tools for working with structured matrices of the form $\mathbf{C} = \mathbf{W}\mathbf{W}^T + \sigma^2\mathbf{I}$. The Woodbury identity expresses $\mathbf{C}^{-1}$ using the $M \times M$ matrix $(\mathbf{W}^T\mathbf{W} + \sigma^2\mathbf{I})^{-1}$ rather than inverting the full $D \times D$ matrix; the determinant lemma similarly computes $|\mathbf{C}|$ in $O(M^3)$. Both exploit the low-rank-plus-diagonal structure of $\mathbf{C}$. The full derivation is in Tipping and Bishop (1999); the result is:
 
 $$\mathbf{W}_{\text{ML}} = \mathbf{U}_M (\mathbf{L}_M - \sigma^2_{\text{ML}}\mathbf{I})^{1/2} \mathbf{R}$$
 
@@ -449,7 +476,7 @@ where:
 - $\mathbf{L}_M = \text{diag}(\lambda_1, \ldots, \lambda_M)$: diagonal matrix of those eigenvalues.
 - $\mathbf{R} \in \mathbb{R}^{M \times M}$: an *arbitrary* orthogonal matrix, reflecting rotational non-identifiability (discussed below).
 
-**Reading the $\mathbf{W}_{\text{ML}}$ formula.** Setting $\mathbf{R} = \mathbf{I}$ for clarity, the $i$th column of $\mathbf{W}_{\text{ML}}$ is $\sqrt{\lambda_i - \sigma^2_{\text{ML}}}\,\mathbf{u}_i$. The scaling factor $\sqrt{\lambda_i - \sigma^2}$ is the key: $\lambda_i$ is the *total* observed variance in direction $\mathbf{u}_i$, but PPCA attributes $\sigma^2$ of that to noise. The remainder $\lambda_i - \sigma^2$ is the *signal* variance — the portion genuinely explained by the latent structure. The column is scaled by the signal standard deviation. As a sanity check: substituting back, the implied marginal covariance in direction $\mathbf{u}_i$ is $(\lambda_i - \sigma^2) + \sigma^2 = \lambda_i$, exactly matching the data. Directions where $\lambda_i \approx \sigma^2$ (signal barely above noise) get near-zero columns; strongly expressed directions ($\lambda_i \gg \sigma^2$) get large ones.
+**Reading the $\mathbf{W}_{\text{ML}}$ formula.** Setting $\mathbf{R} = \mathbf{I}$ for clarity, the $i$th column of $\mathbf{W}_{\text{ML}}$ is $\sqrt{\lambda_i - \sigma^2_{\text{ML}}}\,\mathbf{u}_i$. The scaling factor $\sqrt{\lambda_i - \sigma^2}$ is the key: $\lambda_i$ is the *total* observed variance in direction $\mathbf{u}_i$, but PPCA attributes $\sigma^2$ of that to noise. The remainder $\lambda_i - \sigma^2$ is the *signal* variance — the portion genuinely explained by the latent structure. The column is scaled by the signal standard deviation. As a sanity check, plug this $\mathbf{W}_{\text{ML}}$ back into the marginal covariance $\mathbf{C} = \mathbf{W}\mathbf{W}^T + \sigma^2\mathbf{I}$ from Section 5.3 and ask: what is the model's variance in direction $\mathbf{u}_i$? From the formula derived there, $\text{Var}(\mathbf{u}_i^T\mathbf{x}) = \|\mathbf{W}^T\mathbf{u}_i\|^2 + \sigma^2$. Since the $i$th column of $\mathbf{W}$ is $\sqrt{\lambda_i - \sigma^2}\,\mathbf{u}_i$ and all other columns are along orthogonal eigenvectors, $\mathbf{W}^T\mathbf{u}_i$ picks up only the $i$th component: $\|\mathbf{W}^T\mathbf{u}_i\|^2 = \lambda_i - \sigma^2$. The total model variance is $(\lambda_i - \sigma^2) + \sigma^2 = \lambda_i$ — exactly the observed data variance in that direction. Directions where $\lambda_i \approx \sigma^2$ (signal barely above noise) get near-zero columns; strongly expressed directions ($\lambda_i \gg \sigma^2$) get large ones.
 
 The corresponding optimal noise variance is:
 
@@ -459,17 +486,27 @@ In the discarded directions the model has no signal ($\mathbf{W}$ has no compone
 
 **The ML solution selects the top eigenvectors.** All other subsets of $M$ eigenvectors are saddle points, not maxima (Tipping and Bishop, 1999). This confirms that PPCA recovers exactly the same principal subspace as standard PCA, but via a principled maximum-likelihood procedure.
 
-**Rotational non-identifiability.** The matrix $\mathbf{R}$ is arbitrary because the model is invariant to any rotation of the latent space. Replacing $\mathbf{W}$ with $\tilde{\mathbf{W}} = \mathbf{W}\mathbf{R}$ and $\mathbf{z}$ with $\tilde{\mathbf{z}} = \mathbf{R}^T\mathbf{z}$ leaves $\mathbf{W}\mathbf{z} = \tilde{\mathbf{W}}\tilde{\mathbf{z}}$ unchanged. Since $p(\mathbf{z}) = \mathcal{N}(\mathbf{0}, \mathbf{I})$ is spherically symmetric (invariant to rotations), the prior on $\tilde{\mathbf{z}}$ is also $\mathcal{N}(\mathbf{0}, \mathbf{I})$, and the entire model is identical. No data can distinguish between $\mathbf{W}$ and $\mathbf{W}\mathbf{R}$ for any orthogonal $\mathbf{R}$.
+**Rotational non-identifiability.** The ML solution determines the subspace ($\mathbf{U}_M$), the signal strength ($\mathbf{L}_M - \sigma^2\mathbf{I}$), and the noise level ($\sigma^2$) — all from data. But it does *not* determine which basis to use *within* that subspace. That is what $\mathbf{R}$ controls: it rotates the coordinate axes inside the $M$-dimensional subspace without changing the subspace itself. Every choice of $\mathbf{R}$ gives a different $\mathbf{W}_{\text{ML}}$ but the exact same fit to the data. The ML solution is not a single matrix — it is a whole family $\{\mathbf{U}_M(\mathbf{L}_M - \sigma^2\mathbf{I})^{1/2}\mathbf{R} : \mathbf{R}^T\mathbf{R} = \mathbf{I}\}$, all equally optimal. In practice, one simply sets $\mathbf{R} = \mathbf{I}$.
 
-This is the same non-identifiability that afflicts Factor Analysis (see Section 5.7) and is the reason ICA is needed when we want interpretable individual components rather than just the subspace.
+**Why $\mathbf{R}$ cannot be recovered from data.** Here $\mathbf{R}$ is an **orthogonal matrix** — a square matrix satisfying $\mathbf{R}^T\mathbf{R} = \mathbf{R}\mathbf{R}^T = \mathbf{I}$, meaning its columns (and rows) are mutually orthonormal. Geometrically, multiplying by an orthogonal matrix performs a rigid rotation (or reflection) of space: it changes the orientation of coordinate axes without stretching, shrinking, or shearing. The defining property $\mathbf{R}^T = \mathbf{R}^{-1}$ is what makes the following cancellation work. Replacing $\mathbf{W}$ with $\tilde{\mathbf{W}} = \mathbf{W}\mathbf{R}$ and $\mathbf{z}$ with $\tilde{\mathbf{z}} = \mathbf{R}^T\mathbf{z}$ leaves the generative equation unchanged: $\tilde{\mathbf{W}}\tilde{\mathbf{z}} = \mathbf{W}\mathbf{R}\mathbf{R}^T\mathbf{z} = \mathbf{W}\mathbf{z}$. And since the prior $p(\mathbf{z}) = \mathcal{N}(\mathbf{0}, \mathbf{I})$ is spherically symmetric, $\tilde{\mathbf{z}} = \mathbf{R}^T\mathbf{z}$ has the same distribution $\mathcal{N}(\mathbf{0}, \mathbf{I})$. The two parameterizations therefore produce the exact same marginal: $\mathbf{C} = \mathbf{W}\mathbf{W}^T + \sigma^2\mathbf{I} = (\mathbf{W}\mathbf{R})(\mathbf{W}\mathbf{R})^T + \sigma^2\mathbf{I}$ (because $\mathbf{R}\mathbf{R}^T = \mathbf{I}$). The likelihood is identical for every possible dataset, no matter its size — the rotation $\mathbf{R}$ is fundamentally unrecoverable from observations.
+
+This is the same non-identifiability that afflicts Factor Analysis (see Section 5.7) and is the reason ICA is needed when we want to pin down a specific basis within the subspace — i.e., interpretable individual components rather than just the subspace as a whole.
 
 ### 5.5 The Posterior $p(\mathbf{z} \mid \mathbf{x})$ and the Latent Projection
 
-For visualization and compression, we want to map observations *back* to the latent space. Since PPCA is a linear-Gaussian model, the posterior is Gaussian with a closed-form expression (derived from the general linear-Gaussian result; see Bishop §2.3):
+For visualization and compression, we want to map observations *back* to the latent space. Standard PCA does this via a deterministic orthogonal projection $\mathbf{U}_M^T(\mathbf{x} - \bar{\mathbf{x}})$ (Section 4.1), which trusts the data completely and has no notion of uncertainty. The question is: can we do better when we know the data is noisy?
+
+PPCA answers this through the posterior $p(\mathbf{z}|\mathbf{x})$ — the distribution over latent codes given an observation. Since PPCA is a linear-Gaussian model, the posterior is Gaussian with a closed-form expression. The derivation applies the standard linear-Gaussian conditioning formula (Bishop §2.3, equation 2.116) to the joint distribution $p(\mathbf{z}, \mathbf{x})$; it is identical in structure to the general case derived in the EM algorithm notes, so we state the result here directly:
 
 $$p(\mathbf{z} \mid \mathbf{x}) = \mathcal{N}\!\left(\mathbf{z} \;\Big|\; \mathbf{M}^{-1}\mathbf{W}^T(\mathbf{x} - \boldsymbol{\mu}), \; \sigma^2 \mathbf{M}^{-1}\right)$$
 
 where $\mathbf{M} = \mathbf{W}^T\mathbf{W} + \sigma^2\mathbf{I} \in \mathbb{R}^{M \times M}$ is an $M \times M$ matrix (small and easily invertible).
+
+**Comparing the two projections.** The difference between the standard PCA projection and the PPCA posterior mean is a single term:
+
+$$\underbrace{(\mathbf{W}^T\mathbf{W})^{-1}\mathbf{W}^T(\mathbf{x} - \boldsymbol{\mu})}_{\text{standard PCA (pseudoinverse)}} \qquad \text{vs.} \qquad \underbrace{(\mathbf{W}^T\mathbf{W} + \sigma^2\mathbf{I})^{-1}\mathbf{W}^T(\mathbf{x} - \boldsymbol{\mu})}_{\text{PPCA posterior mean}}$$
+
+The only difference is the $\sigma^2\mathbf{I}$ added to the denominator. When $\sigma^2 = 0$ (no noise), the two are identical. When $\sigma^2 > 0$, the extra term shrinks the estimate toward zero — the noisier the data, the less the model trusts the raw projection. The posterior also provides something the pseudoinverse never can: an *uncertainty estimate* for each latent code via the posterior covariance $\sigma^2\mathbf{M}^{-1}$.
 
 **Reading the posterior mean.** The expression $\mathbf{M}^{-1}\mathbf{W}^T(\mathbf{x} - \boldsymbol{\mu})$ computes the best estimate of the latent code in two steps. First, $\mathbf{W}^T(\mathbf{x} - \boldsymbol{\mu})$ projects the centered observation into the $M$-dimensional latent space: each entry of the resulting vector is the inner product of $(\mathbf{x} - \boldsymbol{\mu})$ with the corresponding column of $\mathbf{W}$, measuring how strongly that principal direction is expressed in the data. Second, $\mathbf{M}^{-1}$ corrects this raw projection: $\mathbf{M} = \mathbf{W}^T\mathbf{W} + \sigma^2\mathbf{I}$ accounts for both the self-overlap of $\mathbf{W}$'s columns ($\mathbf{W}^T\mathbf{W}$) and the noise ($\sigma^2\mathbf{I}$), preventing the estimate from over-committing when the signal is noisy.
 
@@ -485,7 +522,7 @@ where $\mathbf{M} = \mathbf{W}^T\mathbf{W} + \sigma^2\mathbf{I} \in \mathbb{R}^{
 
 PPCA has a closed-form ML solution, but there are practical reasons to use EM instead: it avoids forming the $D \times D$ covariance matrix explicitly, handles missing data naturally, and extends to models like Factor Analysis where no closed form exists.
 
-The EM algorithm for PPCA follows the standard pattern from the EM algorithm notes. The E-step computes $\mathbb{E}[\mathbf{z}_n]$ and $\mathbb{E}[\mathbf{z}_n\mathbf{z}_n^T]$ under the current posterior; the M-step updates $\mathbf{W}$ and $\sigma^2$ by maximizing the expected complete-data log-likelihood. For the detailed derivation and equations, see the EM algorithm notes.
+The EM algorithm for PPCA follows the standard pattern from the EM algorithm notes. The E-step computes the posterior sufficient statistics $\mathbb{E}[\mathbf{z}_n]$ and $\mathbb{E}[\mathbf{z}_n\mathbf{z}_n^T]$ under the current posterior (using the closed-form posterior from Section 5.5). The M-step maximizes the expected complete-data log-likelihood with respect to $\mathbf{W}$ and $\sigma^2$, yielding closed-form update equations analogous to the ML solution but with the posterior statistics $\mathbb{E}[\mathbf{z}_n]$ and $\mathbb{E}[\mathbf{z}_n\mathbf{z}_n^T]$ standing in for the unknown latent variables. For the detailed derivation and equations, see the EM algorithm notes.
 
 A useful physical analogy makes the geometric meaning of the EM steps clear. Picture the data points as masses attached by springs to a rigid rod representing the principal subspace. In the E-step, the rod is held fixed and each mass slides along the rod to minimize its spring energy — this is orthogonal projection. In the M-step, the attachment points are fixed and the rod is released to settle at the minimum-energy position — this rotates the subspace to better fit the data. Iterating converges to the ML solution.
 
@@ -505,7 +542,7 @@ Both models share the rotational non-identifiability of the latent space. This i
 
 ## 6. From PCA to ICA: Why Non-Gaussianity Matters
 
-PCA and ICA form a natural hierarchy in what they can identify. PCA finds the *subspace* of maximum variance, but within that subspace cannot determine a canonical orientation — any rotation is equally valid. ICA goes further: given non-Gaussian sources, it finds the specific rotation that makes the recovered components statistically *independent*, not just uncorrelated. The tool that makes ICA possible, and PCA blind to, is non-Gaussianity.
+PCA and ICA form a natural hierarchy in what they can recover. PCA finds the *subspace* of maximum variance, but within that subspace cannot determine a canonical orientation — any rotation is equally valid. ICA goes further: given non-Gaussian sources, it finds the specific rotation that makes the recovered components statistically *independent*, not just uncorrelated. The tool that makes ICA possible — and to which PCA is blind — is non-Gaussianity.
 
 ![PCA compresses information (projects multiple signals into fewer dimensions); ICA separates information (recovers original independent sources from their mixtures). Both require centering; ICA often benefits from running PCA first as a whitening step.](images/pca_vs_ica_comparison.png)
 
@@ -513,7 +550,9 @@ PCA and ICA form a natural hierarchy in what they can identify. PCA finds the *s
 
 As established in Section 5.4, the PPCA likelihood is invariant under any rotation $\mathbf{W} \to \mathbf{W}\mathbf{R}$ of the latent space. This is not a modeling weakness that more data can resolve — it is a fundamental property of Gaussian distributions.
 
-**Why?** A multivariate Gaussian $\mathcal{N}(\mathbf{0}, \mathbf{I})$ has density proportional to $\exp(-\|\mathbf{z}\|^2/2)$. This function depends only on the norm $\|\mathbf{z}\|$, not on the direction — it is *spherically symmetric*. Any rotation of $\mathbf{z}$ leaves the distribution unchanged. Consequently, the distribution of $\mathbf{W}\mathbf{z}$ is indistinguishable from $(\mathbf{W}\mathbf{R})(\mathbf{R}^T\mathbf{z})$ for any orthogonal $\mathbf{R}$: both produce a Gaussian with the same covariance $\mathbf{W}\mathbf{W}^T$.
+**Why?** Recall from Section 5.2 that the PPCA latent prior is $\mathcal{N}(\mathbf{0}, \mathbf{I})$. The general multivariate Gaussian density is $p(\mathbf{z}) \propto \exp\!\bigl(-\tfrac{1}{2}(\mathbf{z} - \boldsymbol{\mu})^T \boldsymbol{\Sigma}^{-1}(\mathbf{z} - \boldsymbol{\mu})\bigr)$. Setting $\boldsymbol{\mu} = \mathbf{0}$ and $\boldsymbol{\Sigma} = \mathbf{I}$, the exponent reduces to $-\tfrac{1}{2}\mathbf{z}^T\mathbf{I}\,\mathbf{z} = -\tfrac{1}{2}\mathbf{z}^T\mathbf{z} = -\|\mathbf{z}\|^2/2$. So the density is proportional to $\exp(-\|\mathbf{z}\|^2/2)$, which depends only on the norm $\|\mathbf{z}\|$, not on the direction — it is *spherically symmetric*. Any rotation of $\mathbf{z}$ leaves the distribution unchanged. 
+
+Now consider replacing the loading matrix $\mathbf{W}$ with $\mathbf{W}\mathbf{R}$ for any orthogonal $\mathbf{R}$. The new model generates data as $\mathbf{x} = (\mathbf{W}\mathbf{R})\mathbf{z}'$ where $\mathbf{z}' \sim \mathcal{N}(\mathbf{0}, \mathbf{I})$. But we can equivalently write $\mathbf{z}' = \mathbf{R}^T\mathbf{z}$, and since $\mathbf{z} \sim \mathcal{N}(\mathbf{0}, \mathbf{I})$ is spherically symmetric, $\mathbf{R}^T\mathbf{z}$ has covariance $\mathbf{R}^T\mathbf{I}\,\mathbf{R} = \mathbf{I}$ — it is still $\mathcal{N}(\mathbf{0}, \mathbf{I})$. So $(\mathbf{W}\mathbf{R})\mathbf{z}' \sim \mathcal{N}\bigl(\mathbf{0},\; (\mathbf{W}\mathbf{R})\mathbf{I}(\mathbf{W}\mathbf{R})^T\bigr) = \mathcal{N}\bigl(\mathbf{0},\; \mathbf{W}\mathbf{R}\mathbf{R}^T\mathbf{W}^T\bigr) = \mathcal{N}(\mathbf{0},\; \mathbf{W}\mathbf{W}^T)$, which is exactly the same distribution as the original model $\mathbf{W}\mathbf{z}$. No dataset can distinguish the two — the rotation $\mathbf{R}$ is absorbed into the latent variable without a trace.
 
 PCA finds the subspace of maximum variance, but within that subspace it returns an arbitrary basis. The principal components are unique only when eigenvalues are distinct — and even then, the signs of the eigenvectors are undetermined.
 
@@ -556,9 +595,9 @@ Each source has its own marginal density $p_j$; knowing the value of one source 
 
 Even with non-Gaussian sources, two fundamental ambiguities remain:
 
-**Scaling ambiguity.** We cannot determine the variance of the independent components, because any scalar factor absorbed into $s_i$ can be cancelled by the corresponding column of $\mathbf{A}$. *Convention*: fix the variance of each $s_i$ to 1, i.e., $\mathbb{E}[s_i^2] = 1$. A sign ambiguity persists ($s_i$ and $-s_i$ are indistinguishable).
+**Scaling ambiguity.** We cannot determine the variance of the independent components, because any scalar factor absorbed into $s_i$ can be cancelled by the corresponding column of $\mathbf{A}$. Concretely, replacing $s_1 \to 2s_1$ and $\mathbf{a}_1 \to \tfrac{1}{2}\mathbf{a}_1$ (where $\mathbf{a}_1$ is the first column of $\mathbf{A}$) leaves $\mathbf{A}\mathbf{s}$ unchanged. *Convention*: fix the variance of each $s_i$ to 1, i.e., $\mathbb{E}[s_i^2] = 1$. A sign ambiguity persists ($s_i$ and $-s_i$ are indistinguishable).
 
-**Permutation ambiguity.** We cannot determine the order of the components, because any permutation of the sources can be absorbed into the columns of $\mathbf{A}$. *Convention*: accept whatever ordering the algorithm produces.
+**Permutation ambiguity.** We cannot determine the order of the components, because any permutation of the sources can be absorbed into the columns of $\mathbf{A}$. Concretely, swapping $s_1 \leftrightarrow s_2$ and simultaneously swapping columns 1 and 2 of $\mathbf{A}$ leaves $\mathbf{A}\mathbf{s}$ unchanged. *Convention*: accept whatever ordering the algorithm produces.
 
 These ambiguities are fundamental and unavoidable without additional prior information. In practice they are rarely consequential: the goal is usually to identify the sources and their mixing structure, not to order them in any particular way.
 
@@ -572,17 +611,29 @@ $$\text{Cov}(\mathbf{x}) = \mathbf{A}\,\mathbb{E}[\mathbf{s}\mathbf{s}^T]\,\math
 
 A Gaussian distribution is fully characterized by its mean and covariance — that is the *only* information the data can provide about $\mathbf{A}$. But $\mathbf{A}\mathbf{A}^T$ does not uniquely determine $\mathbf{A}$: for any orthogonal matrix $\mathbf{R}$, the matrix $\mathbf{A}' = \mathbf{A}\mathbf{R}$ satisfies $\mathbf{A}'\mathbf{A}'^T = \mathbf{A}\mathbf{R}\mathbf{R}^T\mathbf{A}^T = \mathbf{A}\mathbf{A}^T$. So infinitely many mixing matrices $\{\mathbf{A}\mathbf{R} : \mathbf{R}^T\mathbf{R} = \mathbf{I}\}$ all produce observations with the same Gaussian distribution. No data can distinguish them — the mixing matrix is not identifiable.
 
-**Why non-Gaussian sources escape this trap: a concrete example.** Let $s_1, s_2 \sim \text{Uniform}(-\sqrt{3}, \sqrt{3})$ independently — mean 0, variance 1. Their joint distribution is uniform on a **square** in the $(s_1, s_2)$ plane. Now consider two mixing matrices that share the same covariance product $\mathbf{A}\mathbf{A}^T = \mathbf{I}$:
+**Why non-Gaussian sources escape this trap: a concrete example.** The argument above showed that when sources are Gaussian, the *only* information the data provides about $\mathbf{A}$ is the covariance $\mathbf{A}\mathbf{A}^T$ — and that's not enough to pin down $\mathbf{A}$. The key question is: does this limitation go away with non-Gaussian sources? The covariance is *still* $\mathbf{A}\mathbf{A}^T$ regardless of the source distribution (it's just a second-moment calculation — all you need is zero mean and unit variance, not Gaussianity). What changes is that non-Gaussian distributions carry information *beyond* second moments — shape, kurtosis, higher-order structure — and that extra information *does* depend on $\mathbf{A}$ directly, not just on $\mathbf{A}\mathbf{A}^T$.
+
+Here is the cleanest illustration. Let $s_1, s_2 \sim \text{Uniform}(-\sqrt{3}, \sqrt{3})$ independently — mean 0, variance 1. Their joint distribution is uniform on a **square** in the $(s_1, s_2)$ plane. Now consider two mixing matrices that produce observations with the same covariance $\mathbf{A}\mathbf{A}^T = \mathbf{I}$:
 
 $$\mathbf{A}_1 = \mathbf{I}, \qquad \mathbf{A}_2 = \frac{1}{\sqrt{2}}\begin{pmatrix}1 & -1\\ 1 & 1\end{pmatrix} \quad \text{(45° rotation)}$$
 
-Under $\mathbf{A}_1$: $\mathbf{x} = \mathbf{s}$, so data is uniform on a square aligned with the axes. Under $\mathbf{A}_2$: the square is rotated 45° into a **diamond** shape. A square and a diamond are different distributions — any reasonable dataset distinguishes them. $\mathbf{A}$ *is* identifiable from data.
+Under $\mathbf{A}_1$: $\mathbf{x} = \mathbf{s}$, so data is uniform on a square aligned with the axes. Under $\mathbf{A}_2$: the square is rotated 45° into a **diamond** shape. The covariance is $\mathbf{I}$ in both cases — second moments can't tell them apart. But the *shapes* are visibly different: a square has flat edges along the axes while a diamond has corners there. That shape difference is the higher-order information that Gaussians don't have, and it's enough to determine which $\mathbf{A}$ was used. $\mathbf{A}$ is identifiable.
 
-For any non-Gaussian source distribution, the shape of the joint distribution of $\mathbf{x}$ depends on the specific projection directions of $\mathbf{A}$ — not just their covariance product $\mathbf{A}\mathbf{A}^T$ — so rotating $\mathbf{A}$ produces a visibly different distribution, and data can identify which $\mathbf{A}$ was used. For Gaussian sources specifically, the exponential-squared form $p_j(u) \propto \exp(-u^2/2)$ causes the product over sources to telescope: $\prod_j \exp(-(\mathbf{w}_j^T\mathbf{x})^2/2) = \exp(-\|\mathbf{W}\mathbf{x}\|^2/2) = \exp(-\mathbf{x}^T(\mathbf{A}\mathbf{A}^T)^{-1}\mathbf{x}/2)$ — a single quadratic form that depends only on $\mathbf{A}\mathbf{A}^T$, erasing all directional information about the individual axes of $\mathbf{A}$.
+Now run the same experiment with Gaussian sources. The joint distribution of $s_1, s_2 \sim \mathcal{N}(0,1)$ is a circle of equal-probability contours. Under $\mathbf{A}_1$ you see a circle; under $\mathbf{A}_2$ you see the same circle rotated 45° — which is still a circle. Same covariance, same shape, same everything. The two mixing matrices produce identical distributions because Gaussians have *no* higher-order structure to distinguish them. This is the unidentifiability made geometric: *you can tell which way a square is oriented, but not a circle*.
 
-**Intuition.** A Gaussian distribution is spherically symmetric in the whitened coordinate system — contours are circles, and every direction looks the same. Non-Gaussian sources break this symmetry: their joint distribution has preferred orientations (edges of the square, spikes of the Laplace, etc.) aligned with the independent component directions, which ICA finds.
+**Intuition.** The distinction comes down to symmetry. A Gaussian distribution is spherically symmetric — its contours are circles, and every direction looks the same. Rotating the coordinate axes changes nothing visible, so $\mathbf{A}$ is hidden. Non-Gaussian sources break this symmetry: their joint distribution has preferred orientations (edges of the square, spikes of the Laplace, etc.) that are aligned with the independent component directions. Rotating $\mathbf{A}$ rotates these features to new positions, producing a visibly different distribution. ICA works by finding the rotation that aligns these features back to the coordinate axes — recovering the original sources.
 
-**Comon's identifiability theorem (Comon, 1994).** The ICA model is identifiable — meaning $\mathbf{A}$ can be recovered up to the unavoidable scaling and permutation ambiguities — *if and only if at most one source is Gaussian*. This is a theorem, not merely a practical guideline: a single Gaussian source is tolerable because the non-Gaussian sources still break the rotational symmetry enough to determine $\mathbf{A}$; two or more Gaussian sources restore enough symmetry to make $\mathbf{A}$ unidentifiable. Real-world signals — speech, images, financial returns — are typically supergaussian, which is why ICA is effective for them.
+**Why Gaussians collapse algebraically.** The geometric intuition above has a precise algebraic counterpart. Since $\mathbf{x} = \mathbf{A}\mathbf{s}$, we can recover the sources as $\mathbf{s} = \mathbf{W}\mathbf{x}$ where $\mathbf{W} = \mathbf{A}^{-1}$. The multivariate change-of-variables formula then gives the density of $\mathbf{x}$ in terms of the source densities:
+
+$$p(\mathbf{x}) = \underbrace{|\det\mathbf{W}|}_{\text{Jacobian (constant)}} \;\prod_j p_j(\mathbf{w}_j^T \mathbf{x})$$
+
+The Jacobian $|\det\mathbf{W}|$ is a single scalar that accounts for how $\mathbf{A}$ stretches volumes — it depends on $\mathbf{A}$ as a whole but not on its individual columns, so it plays no role in the identifiability argument. The product term is what matters: each factor $p_j(\mathbf{w}_j^T\mathbf{x})$ evaluates the $j$-th source density along the $j$-th row of $\mathbf{W}$, so this product *does* depend on the individual directions in $\mathbf{A}$. When each source is Gaussian — $p_j(u) \propto \exp(-u^2/2)$ — this product telescopes:
+
+$$\prod_{j=1}^n \exp\!\Bigl(-\tfrac{1}{2}(\mathbf{w}_j^T\mathbf{x})^2\Bigr) = \exp\!\Bigl(-\tfrac{1}{2}\sum_j (\mathbf{w}_j^T\mathbf{x})^2\Bigr) = \exp\!\Bigl(-\tfrac{1}{2}\|\mathbf{W}\mathbf{x}\|^2\Bigr) = \exp\!\Bigl(-\tfrac{1}{2}\mathbf{x}^T\underbrace{(\mathbf{A}\mathbf{A}^T)^{-1}}_{\text{no trace of individual } \mathbf{w}_j}\mathbf{x}\Bigr)$$
+
+The first equality moves the product inside the exponent (sum of logs). The second recognizes the sum of squared projections as the squared norm $\|\mathbf{W}\mathbf{x}\|^2$. The third uses $\mathbf{W}^T\mathbf{W} = (\mathbf{A}^{-1})^T\mathbf{A}^{-1} = (\mathbf{A}\mathbf{A}^T)^{-1}$. The result is a single quadratic form in $\mathbf{A}\mathbf{A}^T$ — all information about the individual rows $\mathbf{w}_j$ (equivalently, the individual columns of $\mathbf{A}$) has been erased. For *any* non-Gaussian $p_j$, this telescoping fails: the product $\prod_j p_j(\mathbf{w}_j^T\mathbf{x})$ retains dependence on each $\mathbf{w}_j$ separately, so rotating $\mathbf{A}$ changes $p(\mathbf{x})$ — different mixing matrices produce observably different distributions, making $\mathbf{A}$ recoverable.
+
+**Comon's identifiability theorem (Comon, 1994).** The ICA model is identifiable — meaning $\mathbf{A}$ can be recovered up to the unavoidable scaling and permutation ambiguities — *if and only if at most one source is Gaussian*. This is a theorem, not merely a practical guideline: a single Gaussian source is tolerable because the non-Gaussian sources still break the rotational symmetry enough to determine $\mathbf{A}$; two or more Gaussian sources restore enough symmetry to make $\mathbf{A}$ unidentifiable. Real-world signals — speech, images, financial returns — are typically *supergaussian* (heavier tails and a sharper peak than a Gaussian, i.e. positive excess kurtosis), which is why ICA is effective for them.
 
 ### 6.6 Independence vs. Uncorrelatedness
 
@@ -592,7 +643,7 @@ A crucial and commonly confused distinction:
 
 **Independent**: $p(s_i, s_j) = p(s_i)p(s_j)$ for all $i \neq j$. This constrains the entire joint distribution, not just second moments.
 
-**Independence implies uncorrelatedness, but the converse fails.** A clean discrete counterexample: draw $(y_1, y_2)$ uniformly from $\{(0,1),(0,-1),(1,0),(-1,0)\}$. Then $\mathbb{E}[y_1 y_2] = 0$ (uncorrelated), but knowing $y_1 = 1$ forces $y_2 = 0$ (dependent). The factorization condition is violated: $\mathbb{E}[y_1^2 y_2^2] = 0 \neq \frac{1}{4} = \mathbb{E}[y_1^2]\mathbb{E}[y_2^2]$.
+**Independence implies uncorrelatedness, but the converse fails.** A clean discrete counterexample: draw $(y_1, y_2)$ uniformly from $\{(0,1),(0,-1),(1,0),(-1,0)\}$. These four points form a "plus" shape — the two variables take turns being nonzero, so they carry information about each other. Indeed $\mathbb{E}[y_1 y_2] = 0$ (uncorrelated), but knowing $y_1 = 1$ forces $y_2 = 0$ (dependent). The factorization condition is violated at higher moments: $\mathbb{E}[y_1^2 y_2^2] = 0 \neq \frac{1}{4} = \mathbb{E}[y_1^2]\mathbb{E}[y_2^2]$.
 
 **Relevance to PCA vs. ICA.** PCA finds an orthogonal rotation that *decorrelates* the data — after PCA, the principal components have zero covariance. But decorrelation is only a second-order condition. For non-Gaussian distributions, zero covariance does not imply statistical independence. ICA goes further: it finds the transformation that makes the components statistically independent — zero covariance *and* zero higher-order dependence. This is why ICA can find the original sources where PCA cannot: the sources are independent, not merely uncorrelated.
 
@@ -629,9 +680,9 @@ $$\text{kurt}(y) = \mathbb{E}[y^4] - 3$$
 **Useful linearity properties** (following Hyvärinen and Oja, 2000): for independent $x_1$ and $x_2$, and scalar $\alpha$:
 $$\text{kurt}(x_1 + x_2) = \text{kurt}(x_1) + \text{kurt}(x_2), \qquad \text{kurt}(\alpha x_1) = \alpha^4 \, \text{kurt}(x_1)$$
 
-These make the optimization landscape analyzable. For $y = z_1 s_1 + z_2 s_2$ with constraint $z_1^2 + z_2^2 = 1$, the kurtosis magnitude is $|z_1^4\,\text{kurt}(s_1) + z_2^4\,\text{kurt}(s_2)|$. This is maximized when exactly one of $z_1$, $z_2$ is nonzero — precisely when $y$ equals one source.
+These make the optimization landscape analyzable. For $y = z_1 s_1 + z_2 s_2$ with constraint $z_1^2 + z_2^2 = 1$, the kurtosis magnitude is $|z_1^4\,\text{kurt}(s_1) + z_2^4\,\text{kurt}(s_2)|$. On the unit circle, $z_1^4 + z_2^4 = (z_1^2 + z_2^2)^2 - 2z_1^2 z_2^2 = 1 - 2z_1^2 z_2^2$, which is maximized when $z_1 z_2 = 0$ — i.e., at the coordinate axes where one weight is zero and the other is $\pm 1$. That is precisely when $y$ equals a single source, confirming that kurtosis extrema coincide with isolated independent components.
 
-**Drawbacks.** Kurtosis is sensitive to outliers: a single extreme value can dominate the fourth moment. In practice, more robust measures are preferred.
+**Drawbacks.** Kurtosis is sensitive to outliers: because it depends on the fourth moment, a single extreme observation can dominate $\mathbb{E}[y^4]$ and distort the estimate. This is particularly problematic for heavy-tailed data (e.g. financial returns), where the sample kurtosis is unreliable. In practice, more robust measures are preferred.
 
 ### 7.3 Negentropy
 
@@ -657,7 +708,7 @@ where $\nu \sim \mathcal{N}(0,1)$, the $k_i$ are positive constants, and $G_i$ a
 
 $$G_1(u) = \frac{1}{a_1} \log \cosh(a_1 u) \quad (a_1 \approx 1), \qquad G_2(u) = -\exp\!\left(-\frac{u^2}{2}\right)$$
 
-These approximations combine the computational tractability of moment-based measures with the robustness of information-theoretic ones, making them the practical default in ICA.
+**Why these specific functions?** The key is that they measure non-Gaussianity through *bounded* nonlinearities rather than polynomial moments. Kurtosis uses $u^4$, which is unbounded and amplifies outliers. By contrast, $G_1$ grows like $|u|$ for large $u$ (since $\log\cosh(u) \approx |u| - \log 2$ for large $|u|$) and $G_2$ saturates to a constant — neither lets a single extreme value dominate the estimate. $G_1$ is sensitive to supergaussian structure (heavy tails, sharp peaks), while $G_2$ is more sensitive to subgaussian structure (light tails, flat center). Together, these approximations combine the computational tractability of moment-based measures with the robustness of information-theoretic ones, making them the practical default in ICA.
 
 ### 7.4 Mutual Information and the Infomax Principle
 
@@ -680,7 +731,7 @@ Under whitening, the joint covariance is $\mathbf{I}$ for all $\mathbf{W}$, so $
 
 $$I = \sum_i \underbrace{\bigl[H(y_{i,\text{gauss}}) - H(y_i)\bigr]}_{J(y_i)} + J(\mathbf{y})$$
 
-Now, $J(\mathbf{y})$ is constant in $\mathbf{W}$: (a) $H(\mathbf{y}_\text{gauss})$ is fixed because whitening pins the joint covariance to $\mathbf{I}$, and (b) for orthogonal $\mathbf{W}$ (all that remains after whitening), the entropy change-of-variables formula gives $H(\mathbf{y}) = H(\mathbf{x}) + \log|\det\mathbf{W}| = H(\mathbf{x}) + 0$, so $H(\mathbf{y})$ is constant too. Setting $C = J(\mathbf{y})$:
+Now, $J(\mathbf{y})$ is constant in $\mathbf{W}$: (a) $H(\mathbf{y}_\text{gauss})$ is fixed because whitening pins the joint covariance to $\mathbf{I}$, and (b) for orthogonal $\mathbf{W}$ (all that remains after whitening), the entropy change-of-variables formula gives $H(\mathbf{y}) = H(\mathbf{x}) + \log|\det\mathbf{W}|$. Since $\mathbf{W}$ is orthogonal, $\mathbf{W}^T\mathbf{W} = \mathbf{I}$, so $|\det\mathbf{W}|^2 = \det(\mathbf{W}^T\mathbf{W}) = 1$, giving $|\det\mathbf{W}| = 1$ and $\log|\det\mathbf{W}| = 0$. Thus $H(\mathbf{y}) = H(\mathbf{x})$, which is constant across all orthogonal $\mathbf{W}$. Setting $C = J(\mathbf{y})$:
 
 $$\boxed{I(y_1, \ldots, y_n) = C - \sum_i J(y_i)}$$
 
@@ -692,11 +743,21 @@ $$p(\mathbf{x}) = |\det \mathbf{W}| \prod_{j=1}^n p_j(\mathbf{w}_j^T \mathbf{x})
 
 where $\mathbf{w}_j$ is the $j$th row of $\mathbf{W}$ and $p_j$ is the marginal density of source $j$. The $|\det\mathbf{W}|$ factor is the Jacobian of the transformation from $\mathbf{s}$ to $\mathbf{x}$; it accounts for the volume change. The log-likelihood over $N$ i.i.d. samples is then:
 
-$$\mathcal{L}(\mathbf{W}) = N\log|\det\mathbf{W}| + \sum_{n=1}^N \sum_{j=1}^n \log p_j(\mathbf{w}_j^T \mathbf{x}_n)$$
+$$\mathcal{L}(\mathbf{W}) = N\log|\det\mathbf{W}| + \sum_{i=1}^N \sum_{j=1}^n \log p_j(\mathbf{w}_j^T \mathbf{x}_i)$$
 
 The gradient with respect to $\mathbf{W}$ involves the *score functions* $-p_j'/p_j$ of the source densities. When the nonlinearities $g_j$ in FastICA are chosen to match these score functions — i.e., $g_j = -d\log p_j/du$ — gradient ascent on $\mathcal{L}$ is precisely the FastICA update. Under the whitening constraint, $\mathbf{W}$ is orthogonal so $|\det\mathbf{W}| = 1$ and the first term is constant, reducing ML to maximizing $\sum_j \mathbb{E}[\log p_j(\mathbf{w}_j^T\mathbf{x})]$ — which is the same objective as minimizing mutual information.
 
-**The Infomax Principle** (Bell and Sejnowski, 1995) derives ICA from a neural network perspective: maximize the output entropy of a neural network with sigmoid nonlinear outputs. With nonlinearities chosen as the CDFs of the source densities, the infomax gradient equals the ML gradient. So maximum likelihood, mutual information minimization, and infomax are three windows onto the same optimization: ML fits a factored density model; mutual information measures the gap from independence; infomax maximizes output entropy through the model nonlinearities. Each formulation suggests different algorithmic approaches and generalizations, but they converge on the same solution.
+**The Infomax Principle** (Bell and Sejnowski, 1995) derives ICA from a neural network perspective: maximize the output entropy of a neural network with sigmoid nonlinear outputs. With nonlinearities chosen as the CDFs of the source densities, the infomax gradient equals the ML gradient.
+
+**Result: three equivalent formulations of ICA.** Under whitening, the following three objectives yield the same optimal demixing matrix $\mathbf{W}$:
+
+| Formulation | Objective | Interpretation |
+|---|---|---|
+| **Maximum likelihood** | Maximize $\sum_j \mathbb{E}[\log p_j(\mathbf{w}_j^T\mathbf{x})]$ | Fit a factored density model to the data |
+| **Mutual information** | Minimize $I(y_1, \ldots, y_n)$ | Make outputs as statistically independent as possible |
+| **Infomax** | Maximize output entropy $H(\sigma(\mathbf{W}\mathbf{x}))$ | Maximize information throughput of a nonlinear network |
+
+Each formulation suggests different algorithmic approaches and generalizations — ML connects to score functions and natural gradient, MI to negentropy maximization, infomax to neural network learning rules — but they converge on the same solution.
 
 ### 7.5 Preprocessing: Centering and Whitening
 
@@ -723,7 +784,7 @@ To solve this via Newton's method, we need the Jacobian (w.r.t. $\mathbf{w}$) of
 
 $$\mathbf{J} = \frac{\partial}{\partial\mathbf{w}}\mathbb{E}\{\tilde{\mathbf{x}}\,g(\mathbf{w}^T\tilde{\mathbf{x}})\} = \mathbb{E}\{\tilde{\mathbf{x}}\tilde{\mathbf{x}}^T g'(\mathbf{w}^T\tilde{\mathbf{x}})\}$$
 
-**The whitening simplification.** Whitening ensures $\mathbb{E}[\tilde{\mathbf{x}}\tilde{\mathbf{x}}^T] = \mathbf{I}$. The scalar $g'(\mathbf{w}^T\tilde{\mathbf{x}})$ is approximately independent of the outer-product matrix $\tilde{\mathbf{x}}\tilde{\mathbf{x}}^T$ in expectation (heuristic justified by near-independence of whitened components), so the expectation factorizes:
+**The whitening simplification.** Whitening ensures $\mathbb{E}[\tilde{\mathbf{x}}\tilde{\mathbf{x}}^T] = \mathbf{I}$. The key approximation is that the scalar $g'(\mathbf{w}^T\tilde{\mathbf{x}})$ is treated as approximately independent of the outer-product matrix $\tilde{\mathbf{x}}\tilde{\mathbf{x}}^T$ in expectation, so the expectation factorizes. This approximation improves as the algorithm converges: when $\mathbf{w}$ points along a true source direction, $\mathbf{w}^T\tilde{\mathbf{x}}$ is a single independent component and is genuinely independent of the remaining directions in $\tilde{\mathbf{x}}\tilde{\mathbf{x}}^T$. Far from convergence the approximation is rougher, but the resulting iteration is still a valid descent direction:
 
 $$\mathbf{J} \approx \mathbb{E}\{g'(\mathbf{w}^T\tilde{\mathbf{x}})\} \cdot \underbrace{\mathbb{E}[\tilde{\mathbf{x}}\tilde{\mathbf{x}}^T]}_{=\,\mathbf{I}} = \mathbb{E}\{g'\}\,\mathbf{I}$$
 

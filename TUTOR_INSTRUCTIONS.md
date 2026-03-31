@@ -16,16 +16,32 @@ Principles 1 and 2 are per-section standards — every derivation and result sho
 
 ---
 
-### 1. Intuition is not optional — it is a core deliverable
+### 1. Intuition is the primary deliverable
 
-Intuition is not a bonus layer added after the math. Every derivation is incomplete until the reader understands what it means and why it makes sense. Rigor is in service of understanding, not a substitute for it.
+Intuition is not a bonus layer added after the math — it is the *main product* of these notes. A derivation without intuition is a failed derivation, regardless of how correct it is. Rigor is a tool in service of understanding, never a substitute for it. **When in doubt, over-explain the intuition.**
 
-- Always pair mathematical rigour with intuition — specifically, the *meaning* of the result. After deriving a result, explain what it is saying in plain terms — use analogies, concrete numerical examples, or "what would happen if..." reasoning to make the result stick. The goal is not just to prove things are true, but to make clear what they are actually saying.
-- Always motivate a technique before presenting it. Before introducing an algorithm, variable, or proof strategy, establish: what problem does this solve, why does the naïve approach fail, and where does this technique fall short? The math should feel like a solution to a clearly stated problem, not a result that appears from nowhere. This applies at the sub-section level too: when a section has multiple major parts (e.g. objective → algorithm → convergence → limitations), bridge each transition with one sentence stating where the reader is and what question the next part answers — do not simply drop a new heading without connecting it to what came before.
+#### Section-level framing
 
-- Keep cross-topic connections at section boundaries. Links to adjacent algorithms, probabilistic interpretations, or connections to later sections belong at the *end* of the current section's narrative as a forward pointer — not inserted mid-section before the section's own story is complete. A reader who has not yet seen the algorithm should not be asked to absorb its connection to EM before the algorithm itself has been introduced.
-- After every significant derivation or result, explicitly address the *significance* — answer "so what?" by explaining why the result matters, what it enables, and how it connects to the larger goal. This is distinct from explaining what a result means (bullet 1 above): meaning is about reading the expression; significance is about why we just derived it.
-- Pay special attention to three failure modes where the "so what?" is most often dropped: (a) a derivation that ends up back where it started (e.g. re-deriving a known quantity via a new route), (b) a new object introduced whose purpose won't be clear until later — this includes algebraic reformulations of a quantity already defined: when introducing an equivalent form, always state upfront what limitation the original form has and what the new form reveals, label both forms clearly (e.g. "operational form" vs. "geometric form"), and defer any interpretation until both forms are on the table, and (c) a sequence of steps that resolves cleanly but whose payoff is implicit rather than stated. In all three cases, add a brief bridging paragraph making the connection explicit before moving on.
+Every major section should be bookended by a roadmap and a wrap-up, with clear transitions between subsections:
+
+- **Roadmap.** Open each major section with a brief overview (3–5 sentences): what this section covers, why each part matters, and how the parts connect. The reader should always know the destination before being asked to follow the path.
+- **Transitions.** When a section has multiple major parts, bridge each transition with one sentence stating where the reader is and what question the next part answers. Do not simply drop a new heading without connecting it to what came before.
+- **Wrap-up.** Close each major section with a brief paragraph that ties the key results together, restates the main takeaway in plain language, and — where appropriate — previews what comes next and why. The wrap-up should be something the reader could re-read on its own as a self-contained summary of the section.
+
+#### Every result: meaning, then significance
+
+After every significant derivation or result, address two questions in sequence:
+
+1. **What does it say?** Explain the result in plain terms. Use analogies, concrete numerical examples (a single worked example with small numbers, e.g. $D = 3$, $M = 1$, often communicates more than a paragraph of abstract description), or "what would happen if..." reasoning to make it stick.
+2. **Why does it matter?** Answer "so what?" — why we derived it, what it enables, and how it connects to the larger goal. Watch for three failure modes where significance is most often dropped: (a) re-deriving a known quantity via a new route, (b) introducing a new object or algebraic reformulation whose purpose isn't yet clear — always state upfront what the new form reveals that the old one didn't, and (c) a clean derivation whose payoff is implicit. In all three cases, add a bridging paragraph before moving on.
+
+#### Motivation before presentation
+
+Before introducing an algorithm, variable, or proof strategy, establish: what problem does this solve, and why does the naïve approach fail? The math should feel like a solution to a clearly stated problem, not a result that appears from nowhere.
+
+#### Cross-topic connections at boundaries
+
+Links to adjacent algorithms or later sections belong at the *end* of the current section's narrative as a forward pointer — not inserted mid-section before the section's own story is complete.
 
 ---
 
