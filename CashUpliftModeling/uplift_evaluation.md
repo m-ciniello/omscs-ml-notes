@@ -360,7 +360,7 @@ def qini_auc(y_true, uplift_pred, treatment):
 
 - **Gutierrez, P. & Gérardy, J. Y.** (2017). "Causal Inference and Uplift Modelling: A Review of the Literature." *JMLR Workshop and Conference Proceedings*, 67, 1–13. — Defines the cumulative gain chart and provides a comprehensive survey of uplift evaluation methods.
 
-- **Athey, S. & Imbens, G. W.** (2015). "Machine Learning Methods for Estimating Heterogeneous Causal Effects." *stat*, 1050(5). — Introduces the transformed outcome approach.
+- **Athey, S. & Imbens, G. W.** (2015). "Machine Learning Methods for Estimating Heterogeneous Causal Effects." *arXiv preprint arXiv:1504.01132*. — Introduces the transformed outcome approach.
 
 - **Diemert, E., Betlei, A., Renaudin, C., & Amini, M. R.** (2021). "A Large Scale Benchmark for Uplift Modeling." *Proceedings of the KDD Workshop on Causal Discovery*. — Provides benchmarks and practical guidance for uplift evaluation.
 

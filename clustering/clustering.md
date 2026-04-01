@@ -736,9 +736,9 @@ Negative — the point is probably misassigned. Scanning for points with negativ
 
 **Information-theoretic model selection criteria** penalize model complexity. For mixture models, comparing different values of $k$ can be framed as a model selection problem. The **Bayesian Information Criterion (BIC)** is:
 
-$$\text{BIC}(k) = \ell(k) - \frac{p}{2} \log N$$
+$$\text{BIC}(k) = -2\,\ell(k) + p \log N$$
 
-where $\ell(k)$ is the maximized log-likelihood for $k$ components and $p$ is the number of free parameters (proportional to $k$). The two terms are in direct tension: larger $k$ increases $\ell(k)$ (more components always fit the data better), but the $-\frac{p}{2}\log N$ penalty grows with both complexity and sample size. Choose $k^* = \arg\max_k \text{BIC}(k)$. BIC is used by MCLUST and X-means.
+where $\ell(k)$ is the maximized log-likelihood for $k$ components and $p$ is the number of free parameters (proportional to $k$). The two terms are in direct tension: larger $k$ increases $\ell(k)$ (more components always fit the data better), but the $p\log N$ penalty grows with both complexity and sample size. Choose $k^* = \arg\min_k \text{BIC}(k)$. This is the convention used by scikit-learn; note that MCLUST uses a sign-flipped form $\ell(k) - \frac{p}{2}\log N$ and selects $\arg\max$ instead — the two are equivalent. BIC is used by MCLUST and X-means.
 
 **Theoretical basis.** BIC is not an ad-hoc penalty — it emerges from Bayesian model selection. The principled goal is to choose the model $M_k$ with the highest *marginal likelihood*, the probability of the data with parameters integrated out:
 
