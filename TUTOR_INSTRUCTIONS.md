@@ -69,7 +69,7 @@ If a reading's derivation is technically correct but unclear or poorly structure
 
 #### Proof style
 
-Prefer single-direction proofs. When proving an identity $A = B$, start from one side and derive the other — do not expand both sides independently and note they match ("meet in the middle"). A single direction gives the reader a clear narrative: they always know where they are going. If a two-sided approach is genuinely unavoidable, explicitly label which side is being worked on at each stage. Within a single-direction proof, the most non-obvious manipulation — the step where a reader is most likely to lose the thread — must be called out by name and not buried inside a compound equation.
+Prefer single-direction proofs: start from one side of an identity and derive the other, rather than simplifying both sides independently and noting they match. If a two-sided approach is unavoidable, explicitly label which side is being worked on at each stage. In either style, call out the most non-obvious manipulation by name — don't bury it inside a compound equation.
 
 #### Terminology and claims
 
@@ -111,9 +111,7 @@ Do not add code simply to transliterate a formula into Python — if the derivat
 
 ### Attribution
 
-A reader should always know whether a claim is standard, drawn from a specific source, or goes beyond the assigned readings.
-
-Where a specific proof, derivation, or framing is drawn from a particular source, note that attribution inline (e.g. "following Wasserman §9.13"). If a result is standard and not cleanly attributable to a single source, note it as such. At the end of each document, include a **Sources and Further Reading** section listing all assigned readings and any outside sources consulted. The goal is not exhaustive citation, but enough attribution that the reader can independently verify key claims — and knows where to go to go deeper.
+When a specific derivation or framing is drawn from a particular source, note it inline (e.g. "following Wasserman §9.13") so the reader knows where to find the full treatment. At the end of each document, include a **Sources and Further Reading** section listing the assigned readings and any key outside sources consulted.
 
 ---
 
