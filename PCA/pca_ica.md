@@ -6,42 +6,45 @@
 
 ## Table of Contents
 
-1. [Motivation: Low-Dimensional Structure in High-Dimensional Data](#1-motivation)
-2. [PCA: Maximum Variance Formulation](#2-max-variance)
-   - 2.1 The Setup
-   - 2.2 Deriving the First Principal Component
-   - 2.3 Additional Components by Induction
-3. [PCA: Minimum Reconstruction Error Formulation](#3-min-error)
-   - 3.1 The Setup
-   - 3.2 Optimizing the Projection Coordinates
-   - 3.3 Optimizing the Basis Directions
-   - 3.4 Why Both Formulations Agree
-4. [Applications of PCA](#4-applications)
-   - 4.1 Data Compression and Visualization
-   - 4.2 Whitening (Sphereing)
-5. [Probabilistic PCA](#5-ppca)
-   - 5.1 Motivation and the PPCA-to-VAE Arc
-   - 5.2 The Generative Model
-   - 5.3 The Marginal Distribution $p(\mathbf{x})$
-   - 5.4 Maximum Likelihood Solution
-   - 5.5 The Posterior $p(\mathbf{z} \mid \mathbf{x})$ and the Latent Projection
-   - 5.6 EM for PPCA (Pointer)
-   - 5.7 Factor Analysis: One Structural Difference
-6. [From PCA to ICA: Why Non-Gaussianity Matters](#6-pca-to-ica)
-   - 6.1 PCA's Fundamental Limitation: Rotational Ambiguity
-   - 6.2 The Cocktail Party Problem
-   - 6.3 The ICA Model
-   - 6.4 Ambiguities Inherent in ICA
-   - 6.5 Why Gaussian Latents Are Forbidden
-   - 6.6 Independence vs. Uncorrelatedness
-7. [ICA Estimation: Finding Independent Components](#7-ica-estimation)
-   - 7.1 The Core Idea: Non-Gaussianity as a Target
-   - 7.2 Kurtosis
-   - 7.3 Negentropy
-   - 7.4 Mutual Information and the Infomax Principle
-   - 7.5 Preprocessing: Centering and Whitening
-   - 7.6 The FastICA Algorithm
-8. [Sources and Further Reading](#8-sources)
+- [Principal Component Analysis and Independent Component Analysis](#principal-component-analysis-and-independent-component-analysis)
+    - [From Variance Maximization to Independent Sources](#from-variance-maximization-to-independent-sources)
+  - [Table of Contents](#table-of-contents)
+  - [1. Motivation: Low-Dimensional Structure in High-Dimensional Data](#1-motivation-low-dimensional-structure-in-high-dimensional-data)
+  - [2. PCA: Maximum Variance Formulation](#2-pca-maximum-variance-formulation)
+    - [2.1 The Setup](#21-the-setup)
+    - [2.2 Deriving the First Principal Component](#22-deriving-the-first-principal-component)
+    - [2.3 Additional Components by Induction](#23-additional-components-by-induction)
+  - [3. PCA: Minimum Reconstruction Error Formulation](#3-pca-minimum-reconstruction-error-formulation)
+    - [3.1 The Setup](#31-the-setup)
+    - [3.2 Optimizing the Projection Coordinates](#32-optimizing-the-projection-coordinates)
+    - [3.3 Optimizing the Basis Directions](#33-optimizing-the-basis-directions)
+    - [3.4 Why Both Formulations Agree](#34-why-both-formulations-agree)
+  - [4. Applications of PCA](#4-applications-of-pca)
+    - [4.1 Data Compression and Visualization](#41-data-compression-and-visualization)
+    - [4.2 Whitening (Sphereing)](#42-whitening-sphereing)
+  - [5. Probabilistic PCA](#5-probabilistic-pca)
+    - [5.1 Motivation and the PPCA-to-VAE Arc](#51-motivation-and-the-ppca-to-vae-arc)
+    - [5.2 The Generative Model](#52-the-generative-model)
+    - [5.3 The Marginal Distribution $p(\\mathbf{x})$](#53-the-marginal-distribution-pmathbfx)
+    - [5.4 Maximum Likelihood Solution](#54-maximum-likelihood-solution)
+    - [5.5 The Posterior $p(\\mathbf{z} \\mid \\mathbf{x})$ and the Latent Projection](#55-the-posterior-pmathbfz-mid-mathbfx-and-the-latent-projection)
+    - [5.6 EM for PPCA (Pointer)](#56-em-for-ppca-pointer)
+    - [5.7 Factor Analysis: One Structural Difference](#57-factor-analysis-one-structural-difference)
+  - [6. From PCA to ICA: Why Non-Gaussianity Matters](#6-from-pca-to-ica-why-non-gaussianity-matters)
+    - [6.1 PCA's Fundamental Limitation: Rotational Ambiguity](#61-pcas-fundamental-limitation-rotational-ambiguity)
+    - [6.2 The Cocktail Party Problem](#62-the-cocktail-party-problem)
+    - [6.3 The ICA Model](#63-the-ica-model)
+    - [6.4 Ambiguities Inherent in ICA](#64-ambiguities-inherent-in-ica)
+    - [6.5 Why Gaussian Latents Are Forbidden](#65-why-gaussian-latents-are-forbidden)
+    - [6.6 Independence vs. Uncorrelatedness](#66-independence-vs-uncorrelatedness)
+  - [7. ICA Estimation: Finding Independent Components](#7-ica-estimation-finding-independent-components)
+    - [7.1 The Core Idea: Non-Gaussianity as a Target](#71-the-core-idea-non-gaussianity-as-a-target)
+    - [7.2 Kurtosis](#72-kurtosis)
+    - [7.3 Negentropy](#73-negentropy)
+    - [7.4 Mutual Information and the Infomax Principle](#74-mutual-information-and-the-infomax-principle)
+    - [7.5 Preprocessing: Centering and Whitening](#75-preprocessing-centering-and-whitening)
+    - [7.6 The FastICA Algorithm](#76-the-fastica-algorithm)
+  - [8. Sources and Further Reading](#8-sources-and-further-reading)
 
 ---
 
@@ -621,11 +624,48 @@ Under $\mathbf{A}_1$: $\mathbf{x} = \mathbf{s}$, so data is uniform on a square 
 
 Now run the same experiment with Gaussian sources. The joint distribution of $s_1, s_2 \sim \mathcal{N}(0,1)$ is a circle of equal-probability contours. Under $\mathbf{A}_1$ you see a circle; under $\mathbf{A}_2$ you see the same circle rotated 45° — which is still a circle. Same covariance, same shape, same everything. The two mixing matrices produce identical distributions because Gaussians have *no* higher-order structure to distinguish them. This is the unidentifiability made geometric: *you can tell which way a square is oriented, but not a circle*.
 
+The following snippet generates all four cases — run it to see the square, diamond, and two identical circles side by side:
+
+```python
+import numpy as np
+import matplotlib.pyplot as plt
+
+rng = np.random.default_rng(0)
+N = 2000
+R45 = np.array([[1, -1], [1, 1]]) / np.sqrt(2)
+
+s_uniform = rng.uniform(-np.sqrt(3), np.sqrt(3), (2, N))
+s_gauss   = rng.standard_normal((2, N))
+
+fig, axes = plt.subplots(2, 2, figsize=(8, 8))
+cases = [
+    (s_uniform, np.eye(2), "Uniform, $A = I$ (square)"),
+    (s_uniform, R45,       "Uniform, $A = R_{45°}$ (diamond)"),
+    (s_gauss,   np.eye(2), "Gaussian, $A = I$ (circle)"),
+    (s_gauss,   R45,       "Gaussian, $A = R_{45°}$ (circle)"),
+]
+for ax, (s, A, title) in zip(axes.flat, cases):
+    x = A @ s
+    ax.scatter(x[0], x[1], s=1, alpha=0.3)
+    ax.set(xlim=(-4, 4), ylim=(-4, 4), aspect="equal", title=title)
+plt.tight_layout()
+plt.savefig("images/ica_identifiability_square_vs_circle.png", dpi=150)
+plt.show()
+```
+
+![*ICA identifiability: uniform sources (top) produce visibly different shapes under different mixing matrices, while Gaussian sources (bottom) look identical — the rotational symmetry of the Gaussian erases all information about A.*](images/ica_identifiability_square_vs_circle.png)
+
 **Intuition.** The distinction comes down to symmetry. A Gaussian distribution is spherically symmetric — its contours are circles, and every direction looks the same. Rotating the coordinate axes changes nothing visible, so $\mathbf{A}$ is hidden. Non-Gaussian sources break this symmetry: their joint distribution has preferred orientations (edges of the square, spikes of the Laplace, etc.) that are aligned with the independent component directions. Rotating $\mathbf{A}$ rotates these features to new positions, producing a visibly different distribution. ICA works by finding the rotation that aligns these features back to the coordinate axes — recovering the original sources.
 
-**Why Gaussians collapse algebraically.** The geometric intuition above has a precise algebraic counterpart. Since $\mathbf{x} = \mathbf{A}\mathbf{s}$, we can recover the sources as $\mathbf{s} = \mathbf{W}\mathbf{x}$ where $\mathbf{W} = \mathbf{A}^{-1}$. The multivariate change-of-variables formula then gives the density of $\mathbf{x}$ in terms of the source densities:
+**Why Gaussians collapse algebraically.** The geometric intuition above has a precise algebraic counterpart. Since $\mathbf{x} = \mathbf{A}\mathbf{s}$, we can recover the sources as $\mathbf{s} = \mathbf{W}\mathbf{x}$ where $\mathbf{W} = \mathbf{A}^{-1}$. To write down $p(\mathbf{x})$, we use the multivariate change-of-variables formula. In general, if $\mathbf{s} = \mathbf{g}(\mathbf{x})$, then:
 
-$$p(\mathbf{x}) = \underbrace{|\det\mathbf{W}|}_{\text{Jacobian (constant)}} \;\prod_j p_j(\mathbf{w}_j^T \mathbf{x})$$
+$$p(\mathbf{x}) = p_\mathbf{s}(\mathbf{g}(\mathbf{x})) \cdot \left|\det \frac{\partial \mathbf{g}}{\partial \mathbf{x}}\right|$$
+
+The second factor is the absolute determinant of the **Jacobian matrix** $\frac{\partial \mathbf{g}}{\partial \mathbf{x}}$ — the matrix of all partial derivatives $\frac{\partial g_i}{\partial x_j}$. It accounts for how the transformation stretches or compresses volume: if $\mathbf{g}$ maps a small region of $\mathbf{x}$-space to a larger region of $\mathbf{s}$-space, the density must decrease proportionally (probability mass is conserved). In our case $\mathbf{g}(\mathbf{x}) = \mathbf{W}\mathbf{x}$ is linear, so the Jacobian matrix is simply $\mathbf{W}$ itself (each $\frac{\partial g_i}{\partial x_j} = W_{ij}$), and its determinant is $\det\mathbf{W}$. Combining with the independence of the sources ($p_\mathbf{s}(\mathbf{s}) = \prod_j p_j(s_j)$):
+
+$$p(\mathbf{x}) = \underbrace{|\det\mathbf{W}|}_{\text{Jacobian (constant)}} \;\prod_j p_j(\underbrace{\mathbf{w}_j^T \mathbf{x}}_{= s_j})$$
+
+Note: $p_j(\mathbf{w}_j^T\mathbf{x})$ is just $p_j(s_j)$ — the $j$-th source density evaluated at the $j$-th recovered source. We write it in terms of $\mathbf{x}$ because this gives us the observation density as a function of the data, which is what the likelihood requires.
 
 The Jacobian $|\det\mathbf{W}|$ is a single scalar that accounts for how $\mathbf{A}$ stretches volumes — it depends on $\mathbf{A}$ as a whole but not on its individual columns, so it plays no role in the identifiability argument. The product term is what matters: each factor $p_j(\mathbf{w}_j^T\mathbf{x})$ evaluates the $j$-th source density along the $j$-th row of $\mathbf{W}$, so this product *does* depend on the individual directions in $\mathbf{A}$. When each source is Gaussian — $p_j(u) \propto \exp(-u^2/2)$ — this product telescopes:
 
@@ -639,13 +679,19 @@ The first equality moves the product inside the exponent (sum of logs). The seco
 
 A crucial and commonly confused distinction:
 
-**Uncorrelated**: $\mathbb{E}[s_i s_j] - \mathbb{E}[s_i]\mathbb{E}[s_j] = 0$ for $i \neq j$ (zero linear correlation). This is a *second-order* property — it constrains only pairwise covariances.
+**Uncorrelated**: $\text{Cov}(s_i, s_j) = \mathbb{E}[s_i s_j] - \mathbb{E}[s_i]\mathbb{E}[s_j] = 0$ for $i \neq j$. The covariance measures *linear* association between two variables — it captures how much knowing one variable helps you predict the other *via a linear relationship*. Zero covariance means no linear relationship, but says nothing about nonlinear dependencies. This is a *second-order* property (it involves only products of two variables), so it constrains only pairwise second moments.
 
 **Independent**: $p(s_i, s_j) = p(s_i)p(s_j)$ for all $i \neq j$. This constrains the entire joint distribution, not just second moments.
 
 **Independence implies uncorrelatedness, but the converse fails.** A clean discrete counterexample: draw $(y_1, y_2)$ uniformly from $\{(0,1),(0,-1),(1,0),(-1,0)\}$. These four points form a "plus" shape — the two variables take turns being nonzero, so they carry information about each other. Indeed $\mathbb{E}[y_1 y_2] = 0$ (uncorrelated), but knowing $y_1 = 1$ forces $y_2 = 0$ (dependent). The factorization condition is violated at higher moments: $\mathbb{E}[y_1^2 y_2^2] = 0 \neq \frac{1}{4} = \mathbb{E}[y_1^2]\mathbb{E}[y_2^2]$.
 
-**Relevance to PCA vs. ICA.** PCA finds an orthogonal rotation that *decorrelates* the data — after PCA, the principal components have zero covariance. But decorrelation is only a second-order condition. For non-Gaussian distributions, zero covariance does not imply statistical independence. ICA goes further: it finds the transformation that makes the components statistically independent — zero covariance *and* zero higher-order dependence. This is why ICA can find the original sources where PCA cannot: the sources are independent, not merely uncorrelated.
+**Relevance to PCA vs. ICA.** This distinction is exactly the gap between what PCA achieves and what ICA aims for.
+
+PCA finds an orthogonal rotation that *decorrelates* the data: after projecting onto the principal components, the covariance matrix is diagonal — each pair of components has zero covariance. But that's a second-order guarantee only. The components may still have nonlinear dependencies that covariance can't see. To use the "plus" counterexample above: PCA would look at those four points, compute $\text{Cov}(y_1, y_2) = 0$, and declare the two variables unrelated — even though knowing one completely determines the other.
+
+ICA goes further: it seeks a transformation where the components are *statistically independent* — the joint density fully factorizes as $p(s_1, \ldots, s_n) = \prod_j p_j(s_j)$. This is a much stronger condition. Independence means not just zero covariance, but zero dependence at *every* order: no nonlinear relationships, no conditional structure, nothing. Enforcing this requires looking beyond second moments, which is why ICA needs non-Gaussianity measures (kurtosis, negentropy, etc.) that capture higher-order structure.
+
+The practical upshot: PCA and ICA both produce uncorrelated components, but only ICA's are independent. For Gaussian data this distinction vanishes — uncorrelated Gaussians *are* independent (the joint Gaussian is fully determined by its mean and covariance, so zero covariance forces factorization). For non-Gaussian data the distinction is real, and it's precisely what allows ICA to recover the original sources where PCA cannot.
 
 This gap — between second-order statistics (PCA) and full statistical independence (ICA) — is what makes ICA both harder and more powerful. The practical question is: *how do we measure and enforce independence from data?* Since non-Gaussian sources are precisely those that break the rotational symmetry and make the problem solvable (Section 6.5), the answer turns on measuring *non-Gaussianity*. The next section develops three concrete measures — kurtosis, negentropy, and mutual information — and shows they all point to the same algorithmic strategy: find directions that are as non-Gaussian as possible.
 
@@ -655,67 +701,144 @@ This gap — between second-order statistics (PCA) and full statistical independ
 
 ### 7.1 The Core Idea: Non-Gaussianity as a Target
 
-The Central Limit Theorem tells us that a sum of *many* independent random variables tends toward a Gaussian as the number of terms grows. A related principle — grounded in information theory rather than the CLT — applies to a *fixed* number of sources: any non-trivial mixture of independent non-Gaussian sources is *strictly closer to Gaussian* (in the sense of higher entropy) than any single source. Intuitively, mixing destroys structure; only isolating one source leaves its non-Gaussian character intact.
+**The key idea in one sentence:** mixing makes things more Gaussian, so the least-Gaussian direction in the data points back at an original source.
 
-More precisely, a unit-variance linear combination $\sum_k z_k s_k$ (with $\sum_k z_k^2 = 1$) achieves **minimum entropy** — equivalently, **maximum negentropy** — when one weight is $\pm 1$ and the rest are zero. Here is why: the Gaussian has maximum entropy among all unit-variance distributions; any non-Gaussian source therefore has *lower* entropy than the Gaussian with the same variance. Combining multiple non-Gaussian sources in a non-trivial mix pulls the combination toward Gaussian (increasing entropy). The purest departure from Gaussian — minimum entropy, maximum negentropy — is therefore achieved at $z_k = \pm 1$, when the combination reduces to a single isolated source. (Note: this is a distinct claim from the standard CLT; see Hyvärinen and Oja (2000) §3 for the formal statement.)
+**Why mixing → more Gaussian.** Start with a familiar fact: the Central Limit Theorem says that the sum of many independent variables tends toward a Gaussian. A related but distinct principle applies even for a *fixed, small* number of sources: any non-trivial linear combination of independent non-Gaussian variables is *strictly more Gaussian* than any individual variable in the mix. Mixing destroys structure; only isolating a single source preserves its non-Gaussian character.
 
-Given this, a linear combination $y = \mathbf{w}^T\mathbf{x} = \mathbf{w}^T\mathbf{A}\mathbf{s} = \mathbf{z}^T\mathbf{s}$ (where $\mathbf{z} = \mathbf{A}^T\mathbf{w}$) is a weighted sum of independent non-Gaussian sources. Such a sum is *more Gaussian* than the individual sources unless $\mathbf{z}$ has only one nonzero component — in which case $y = z_k s_k$ is a single source scaled by a constant, which has the same (non-Gaussian) distribution as $s_k$.
+Here is a concrete way to see this. Suppose you have two independent sources — say $s_1 \sim \text{Laplace}$ (sharp peak, heavy tails) and $s_2 \sim \text{Uniform}$ (flat, bounded). Each has a distinctive, non-Gaussian shape. Now form a 50/50 mixture $y = \frac{1}{\sqrt{2}}(s_1 + s_2)$. The sharp peak of $s_1$ gets smeared by the flat spread of $s_2$; the hard edges of $s_2$ get softened by the tails of $s_1$. The result is smoother, more bell-shaped — closer to Gaussian. The individual "personalities" of the sources partially cancel out. The *only* way to avoid this cancellation is to put all the weight on one source: $y = s_1$ or $y = s_2$.
 
-**The consequence.** To recover one independent component, find the direction $\mathbf{w}$ that makes $\mathbf{w}^T\mathbf{x}$ *as non-Gaussian as possible*. The resulting $\mathbf{w}$ selects exactly one source.
+**Turning this into an algorithm.** Now connect this to the ICA setup. Each observed signal is $\mathbf{x} = \mathbf{A}\mathbf{s}$, so any linear projection $y = \mathbf{w}^T\mathbf{x} = \mathbf{w}^T\mathbf{A}\mathbf{s} = \mathbf{z}^T\mathbf{s}$ (where $\mathbf{z} = \mathbf{A}^T\mathbf{w}$) is a weighted combination of the original sources. By the principle above, this combination is *most non-Gaussian* when $\mathbf{z}$ has only one nonzero entry — meaning $y$ equals a single source (up to a scale factor). So to recover one independent component, find the direction $\mathbf{w}$ that makes $\mathbf{w}^T\mathbf{x}$ *as non-Gaussian as possible*. The resulting $\mathbf{w}$ selects exactly one source.
 
 To find all $n$ components, maximize non-Gaussianity repeatedly, constraining each new direction to be orthogonal (in the whitened space) to all previously found ones. This ensures the recovered components are uncorrelated — and, under the ICA model, genuinely independent.
 
-![Geometric comparison of PCA and ICA on a 2D dataset generated from two non-Gaussian independent sources. Left: the original sources occupy an irregular (non-Gaussian) joint distribution. Center: after mixing, the data becomes an oblique cloud. Right: PCA finds the axes of maximum variance (the long and short axes of the ellipse) — these are *not* the source directions. ICA finds the axes of maximum non-Gaussianity, which correctly align with the original source directions. [Source: scikit-learn, https://scikit-learn.org/stable/auto_examples/decomposition/plot_ica_vs_pca.html]](images/ica_vs_pca_scatter.png)
+![*PCA vs. ICA on two non-Gaussian independent sources. Source: scikit-learn.*](images/ica_vs_pca_scatter.png)
+
+The figure above walks through the full ICA pipeline and shows exactly where PCA fails:
+
+- **Top-left (True Independent Sources).** The two original sources are independent and clearly non-Gaussian — the joint distribution has a distinctive cross/star shape with sharp spikes along the axes. This is the ground truth we're trying to recover.
+
+- **Top-right (Observations).** After mixing by $\mathbf{A}$, the cross is rotated and skewed into an oblique shape. The arrows show the directions found by each method. The orange PCA arrows point along the axes of maximum variance — the "long" and "short" directions of the data cloud. The red ICA arrows point along the axes of maximum non-Gaussianity — the directions where the spiky, non-Gaussian structure is strongest. Notice that the two sets of arrows point in *different* directions: variance and non-Gaussianity are not the same thing.
+
+- **Bottom-left (PCA recovered signals).** Projecting onto the PCA directions decorrelates the data (the axes are orthogonal and the covariance is diagonal), but the recovered shape is *not* the original cross. PCA rotated to align with the variance ellipse, which doesn't correspond to the independent source directions. The components are uncorrelated but still mixed — each one is a blend of both original sources.
+
+- **Bottom-right (ICA recovered signals).** Projecting onto the ICA directions recovers the original cross shape — the spikes realign with the coordinate axes. ICA found the directions where $\mathbf{w}^T\mathbf{x}$ is most non-Gaussian, which, as Section 7.1 argued, correspond to the individual sources. The components are not just uncorrelated but *independent*.
+
+This is the decorrelation-vs-independence gap from Section 6.6 made visible: PCA achieves the first but not the second; ICA achieves both.
+
+**When to use which.** PCA and ICA answer different questions, so the choice depends on what you need:
+
+- **Use PCA** when the goal is *dimensionality reduction* — compressing high-dimensional data into fewer variables that capture the most variance. PCA is the right tool for visualization, denoising, and preprocessing (e.g. whitening before feeding data into another algorithm). It doesn't assume anything about the data beyond second-order statistics, works on Gaussian and non-Gaussian data alike, and scales easily to very high dimensions.
+
+- **Use ICA** when the goal is *source separation* — recovering the original, physically meaningful signals that were mixed together. The classic example is the Cocktail Party Problem (separating overlapping speakers from microphone recordings), but it applies broadly: separating neural signals in EEG/fMRI, isolating artifacts in financial data, or decomposing images into independent features. ICA requires that the underlying sources are non-Gaussian and independent — a stronger assumption than PCA needs, but one that buys you a stronger result.
+
+In short: PCA finds the directions of greatest *spread*; ICA finds the directions of greatest *structure*. If you just need a compact representation, PCA is simpler and sufficient. If the data is a mixture of distinct signals and you need to pull them apart, ICA is what you want.
 
 ### 7.2 Kurtosis
 
-The kurtosis of a zero-mean, unit-variance random variable $y$ is:
+Section 7.1 established that ICA recovers sources by finding directions of maximum non-Gaussianity. But "non-Gaussianity" is an abstract target — we need a concrete, computable measure to optimize. Kurtosis is the simplest such measure: it quantifies how much a distribution's shape departs from a Gaussian using only the fourth moment.
+
+**Quick refresher on moments.** The $k$-th moment of a random variable $y$ is $\mathbb{E}[y^k]$. The first moment ($k=1$) is the mean — where the distribution is centered. The second moment ($k=2$) is $\mathbb{E}[y^2]$, which equals the variance when the mean is zero (since $\text{Var}(y) = \mathbb{E}[y^2] - (\mathbb{E}[y])^2$) — how spread out the distribution is. ICA assumes centered data, so the two coincide throughout this section. The third moment ($k=3$) captures skewness — asymmetry between left and right tails. The fourth moment ($k=4$) captures *kurtosis* — how the distribution's mass is allocated between the center, the intermediate region, and the far tails relative to a Gaussian. Each higher moment adds finer detail about the distribution's shape. For ICA, the key insight is that *the Gaussian is fully determined by its first two moments* — so any departure from Gaussianity must show up in the third moment or higher. Kurtosis (the fourth moment) is the most commonly used because many distributions of interest are symmetric (zero skewness), making the fourth moment the first place non-Gaussianity appears.
+
+**Definition.** For a zero-mean, unit-variance random variable $y$:
 
 $$\text{kurt}(y) = \mathbb{E}[y^4] - 3$$
 
-**Why $-3$?** For a standard Gaussian, $\mathbb{E}[y^4] = 3$ — a consequence of the moment-generating function. Subtracting 3 normalizes kurtosis to zero for Gaussians and nonzero for most non-Gaussian distributions. For general (not necessarily unit-variance) zero-mean $y$, the definition is $\mathbb{E}[y^4] - 3(\mathbb{E}[y^2])^2$, which reduces to the formula above when $\mathbb{E}[y^2] = 1$.
+**Why $-3$?** For a standard Gaussian, $\mathbb{E}[y^4] = 3$. A quick way to see this is via the moment-generating function (MGF). For $y \sim \mathcal{N}(0,1)$, the MGF is $M(t) = \mathbb{E}[e^{ty}] = e^{t^2/2}$. The $k$-th moment is obtained by differentiating $k$ times and evaluating at $t=0$: $\mathbb{E}[y^k] = M^{(k)}(0)$. Expanding $e^{t^2/2} = 1 + \frac{t^2}{2} + \frac{t^4}{8} + \cdots$ and reading off coefficients:
 
-**Supergaussian vs. subgaussian.** Distributions with positive kurtosis are **supergaussian** (leptokurtic) — more peaked at zero with heavier tails than a Gaussian. The Laplace distribution is the canonical example. Distributions with negative kurtosis are **subgaussian** (platykurtic) — flatter near zero with lighter tails. The uniform distribution is the canonical example. Both are exploitable for ICA.
+$$\mathbb{E}[y^2] = M''(0) = 1, \qquad \mathbb{E}[y^4] = M^{(4)}(0) = 3$$
 
-**Useful linearity properties** (following Hyvärinen and Oja, 2000): for independent $x_1$ and $x_2$, and scalar $\alpha$:
+(The general pattern for a standard Gaussian is $\mathbb{E}[y^{2k}] = (2k-1)!! = 1 \cdot 3 \cdot 5 \cdots (2k-1)$, and all odd moments are zero by symmetry.)
+
+Subtracting 3 normalizes kurtosis to zero for Gaussians, so the measure directly reads "how far from Gaussian." For general (not necessarily unit-variance) zero-mean $y$, the definition is $\mathbb{E}[y^4] - 3(\mathbb{E}[y^2])^2$, which reduces to the formula above when $\mathbb{E}[y^2] = 1$.
+
+**What kurtosis really measures: tail weight.** The intuition behind $\mathbb{E}[y^4]$ is that raising $y$ to the fourth power disproportionately amplifies extreme values. If $y = 3$ contributes $81$ to $\mathbb{E}[y^4]$ while $y = 1$ contributes just $1$, then the fourth moment is overwhelmingly driven by how much probability mass lives far from the center. Kurtosis is therefore fundamentally a comparison of tail weight: does the distribution put more or less mass in the extremes than a Gaussian with the same variance?
+
+**Supergaussian vs. subgaussian.** The sign of kurtosis tells you the answer:
+
+- **Positive kurtosis → supergaussian** (leptokurtic): compared to a Gaussian with the same variance, more mass is concentrated at the center (sharper spike) and in the far tails (heavier extremes), with less mass in the intermediate region (~1–2 standard deviations out). The Laplace distribution is the canonical example — its tails decay like $e^{-|x|}$ instead of $e^{-x^2/2}$, so extreme values are much more likely.
+- **Negative kurtosis → subgaussian** (platykurtic): the opposite pattern — mass is spread more evenly, with a flatter center and lighter tails than a Gaussian. The uniform distribution is the canonical example — it's completely flat across its range with hard cutoffs and no tails at all.
+- **Zero kurtosis → Gaussian**: the reference point.
+
+Both supergaussian and subgaussian sources are exploitable for ICA — what matters is that kurtosis is *nonzero*, not its sign.
+
+**Why kurtosis extrema recover sources.** Here is the key result: if you search over all unit-norm directions $\mathbf{w}$ and find the one where $|\text{kurt}(\mathbf{w}^T\mathbf{x})|$ is largest, that direction aligns with an independent source. This is the connection to Section 7.1 made precise — "maximize non-Gaussianity" becomes "maximize $|\text{kurt}|$."
+
+The reason this works comes from two linearity properties of kurtosis (Hyvärinen and Oja, 2000). For independent $x_1, x_2$ and scalar $\alpha$:
+
 $$\text{kurt}(x_1 + x_2) = \text{kurt}(x_1) + \text{kurt}(x_2), \qquad \text{kurt}(\alpha x_1) = \alpha^4 \, \text{kurt}(x_1)$$
 
-These make the optimization landscape analyzable. For $y = z_1 s_1 + z_2 s_2$ with constraint $z_1^2 + z_2^2 = 1$, the kurtosis magnitude is $|z_1^4\,\text{kurt}(s_1) + z_2^4\,\text{kurt}(s_2)|$. On the unit circle, $z_1^4 + z_2^4 = (z_1^2 + z_2^2)^2 - 2z_1^2 z_2^2 = 1 - 2z_1^2 z_2^2$, which is maximized when $z_1 z_2 = 0$ — i.e., at the coordinate axes where one weight is zero and the other is $\pm 1$. That is precisely when $y$ equals a single source, confirming that kurtosis extrema coincide with isolated independent components.
+Now consider a linear combination of two sources: $y = z_1 s_1 + z_2 s_2$ with the unit-variance constraint $z_1^2 + z_2^2 = 1$. Applying the linearity properties:
 
-**Drawbacks.** Kurtosis is sensitive to outliers: because it depends on the fourth moment, a single extreme observation can dominate $\mathbb{E}[y^4]$ and distort the estimate. This is particularly problematic for heavy-tailed data (e.g. financial returns), where the sample kurtosis is unreliable. In practice, more robust measures are preferred.
+$$|\text{kurt}(y)| = |z_1^4\,\text{kurt}(s_1) + z_2^4\,\text{kurt}(s_2)|$$
+
+When is this maximized? On the unit circle, $z_1^4 + z_2^4 = (z_1^2 + z_2^2)^2 - 2z_1^2 z_2^2 = 1 - 2z_1^2 z_2^2$. The constraint $z_1^2 + z_2^2 = 1$ fixes the *variance* of $y$ (second moments), but the *fourth moments* still vary around the circle. A concrete example: suppose both sources have $\text{kurt}(s_1) = \text{kurt}(s_2) = 6$. Then $|\text{kurt}(y)| = 6(z_1^4 + z_2^4)$.
+
+- **Coordinate axis** ($z_1 = 1,\; z_2 = 0$): $\;z_1^4 + z_2^4 = 1$, so $|\text{kurt}(y)| = 6$ — single source, **maximum**.
+- **45° diagonal** ($z_1 = z_2 = 1/\sqrt{2}$): $\;z_1^4 + z_2^4 = 1/2$, so $|\text{kurt}(y)| = 3$ — equal mix, **minimum**.
+
+The kurtosis is *twice as large* at the axis as at the diagonal. Maximum kurtosis occurs when $z_1 z_2 = 0$ — one weight is $\pm 1$ and the other is zero — which is exactly when $y$ reduces to a single source. The equal mix *minimizes* kurtosis, consistent with the mixing-destroys-structure principle from 7.1.
+
+**Which axis do we pick?** In the two-source case, both coordinate axes give a valid source. We find whichever one the optimizer converges to first, call it $\hat{s}_1$, and then the orthogonality constraint forces the second direction to be perpendicular — which is the other axis, recovering $\hat{s}_2$. With $n > 2$ sources, the same idea applies iteratively: find the highest-kurtosis direction, lock it in, search for the next direction orthogonal to all previous ones, and repeat. The order doesn't matter — you recover the same set of sources regardless.
+
+**Drawbacks.** Kurtosis is simple and analytically tractable, but it has a serious practical weakness: sensitivity to outliers. Because it depends on $\mathbb{E}[y^4]$, a single extreme observation gets raised to the fourth power and can dominate the entire estimate. This is particularly problematic for heavy-tailed (supergaussian) data like financial returns, where the sample kurtosis is unreliable. In practice, more robust measures of non-Gaussianity are preferred — which brings us to negentropy.
 
 ### 7.3 Negentropy
+
+Kurtosis gives us a simple, closed-form measure of non-Gaussianity — but as Section 7.2 showed, its reliance on the fourth moment makes it fragile in practice. Negentropy is the information-theoretically principled alternative: it measures non-Gaussianity using the full shape of the distribution rather than a single moment, making it robust to outliers while retaining the same "most non-Gaussian direction = independent source" property.
 
 **Setup: Entropy and the Gaussian maximum.** The differential entropy of a continuous random vector $\mathbf{y}$ with density $f(\mathbf{y})$ is:
 $$H(\mathbf{y}) = -\int f(\mathbf{y}) \log f(\mathbf{y}) \, d\mathbf{y}$$
 
 A fundamental result of information theory (Cover and Thomas, 1991) states: *among all continuous random variables with the same covariance matrix, the Gaussian has the largest differential entropy*. The Gaussian is the "most spread out" or "most random" distribution given fixed second-order statistics.
 
-**Why does the Gaussian maximize entropy?** The intuition is a minimum-assumptions argument: the Gaussian is the distribution that encodes *only* the information contained in the covariance and nothing more. Any non-Gaussian distribution with the same variance must have some additional structure — sharper peaks, heavier tails, asymmetry — that concentrates probability mass relative to the Gaussian and thus reduces entropy. The formal proof applies Lagrange multipliers to the entropy functional $H[f] = -\int f \log f$ subject to the covariance constraint $\int f(\mathbf{y})\mathbf{y}\mathbf{y}^T d\mathbf{y} = \boldsymbol{\Sigma}$. Setting the functional derivative to zero yields the maximum-entropy density $f^*(\mathbf{y}) \propto \exp(-\mathbf{y}^T\mathbf{A}\mathbf{y})$ for some positive semidefinite $\mathbf{A}$ — which is exactly the Gaussian with covariance $\mathbf{A}^{-1}/2$ (Cover and Thomas 2006, Theorem 8.6.5). A one-line alternative: the KL divergence from any $f$ to $\mathcal{N}(\mathbf{0}, \boldsymbol{\Sigma})$ satisfies $\mathrm{KL}(f \| \mathcal{N}) \geq 0$, and expanding this immediately yields $H(f) \leq H(\mathcal{N})$ for any $f$ with the same covariance.
+**Why does the Gaussian maximize entropy?** The intuition is a minimum-assumptions argument: the Gaussian is the distribution that encodes *only* the information contained in the mean and covariance — nothing more. Any non-Gaussian distribution with the same variance must have some additional structure (sharper peaks, heavier tails, asymmetry) that concentrates probability mass in specific regions, reducing the "randomness" and thus the entropy. In other words, structure = predictability = lower entropy.
+
+A clean one-line proof: the KL divergence from any density $f$ to $\mathcal{N}(\mathbf{0}, \boldsymbol{\Sigma})$ satisfies $\mathrm{KL}(f \| \mathcal{N}) \geq 0$ (a fundamental property of KL divergence). Expanding this gives $H(f) \leq H(\mathcal{N})$ for any $f$ with the same covariance — the Gaussian wins. (See Cover and Thomas 2006, Theorem 8.6.5 for the full treatment.)
 
 **Negentropy.** To get a non-Gaussianity measure that is zero for Gaussians and positive otherwise, define:
 $$J(\mathbf{y}) = H(\mathbf{y}_{\text{gauss}}) - H(\mathbf{y})$$
 
 where $\mathbf{y}_{\text{gauss}}$ is a Gaussian with the same covariance as $\mathbf{y}$. Since the Gaussian maximizes entropy, $J(\mathbf{y}) \geq 0$ always, with equality if and only if $\mathbf{y}$ is Gaussian. This is the *entropy gap* between the best-case (Gaussian) and the actual distribution.
 
-Negentropy is theoretically optimal — it is the information-theoretically natural measure of non-Gaussianity — and invariant to invertible linear transformations. The problem is computational: computing it requires estimating $f(\mathbf{y})$, which is expensive.
+**Negentropy is the theoretically ideal measure of non-Gaussianity.** It has two key properties that kurtosis lacks:
 
-**Practical approximations** (Hyvärinen, 1998). Based on the maximum-entropy principle, negentropy can be approximated by:
+1. **It uses the full distribution, not just one moment.** Kurtosis looks at $\mathbb{E}[y^4]$ only — a single number. Negentropy compares the entire density $f(y)$ to the Gaussian reference, so it captures *any* form of non-Gaussianity (heavy tails, sharp peaks, asymmetry, multimodality, etc.), not just the kind that shows up in the fourth moment.
+2. **It is invariant to invertible linear transformations.** If $\mathbf{y}' = \mathbf{B}\mathbf{y}$ for some invertible matrix $\mathbf{B}$, then $J(\mathbf{y}') = J(\mathbf{y})$. Why? Because a linear transformation changes both $H(\mathbf{y})$ and $H(\mathbf{y}_\text{gauss})$ by the same amount ($\log|\det\mathbf{B}|$, the Jacobian term), so the *gap* between them — the negentropy — is unchanged. This means negentropy measures a property of the distribution's *shape* that is unaffected by scaling, rotation, or any other linear remapping — exactly what we want for ICA, where the goal is to undo an unknown linear mixing.
+
+The catch is computational: computing $J(y)$ exactly requires knowing the full density $f(y)$, which is expensive to estimate from data. This motivates the practical approximations below.
+
+**From negentropy to KL divergence.** Negentropy is actually a familiar quantity in disguise — it equals the KL divergence from $f$ to the Gaussian reference $\phi$ with the same variance:
+
+$$J(y) = H(y_\text{gauss}) - H(y) = \text{KL}(f \| \phi)$$
+
+Why? Start from $\text{KL}(f\|\phi) = \mathbb{E}_f[\log f(y)] - \mathbb{E}_f[\log \phi(y)]$. The second term involves $\log\phi(y) = -\frac{1}{2}\log(2\pi\sigma^2) - \frac{y^2}{2\sigma^2}$, where the only $y$-dependent piece is $y^2$. Since $f$ and $\phi$ have the same variance, $\mathbb{E}_f[y^2] = \mathbb{E}_\phi[y^2]$, so $\mathbb{E}_f[\log\phi(y)] = \mathbb{E}_\phi[\log\phi(y)] = -H(\phi)$. Substituting back: $\text{KL}(f\|\phi) = -H(f) + H(\phi) = H(y_\text{gauss}) - H(y) = J(y)$.
+
+**The cumulant approximation (connecting kurtosis to negentropy).** Since $J(y) = \text{KL}(f\|\phi)$, we can Taylor-expand the log-density ratio when $f$ is close to Gaussian. The leading terms are the third and fourth cumulants:
+
+$$J(y) \approx \frac{1}{12}\text{skew}(y)^2 + \frac{1}{48}\text{kurt}(y)^2$$
+
+This is revealing: **kurtosis is literally a crude approximation to negentropy**. Maximizing $|\text{kurt}|$ (Section 7.2) is an approximation to maximizing $J$ — it captures the fourth-moment contribution but ignores everything else. For symmetric distributions ($\text{skew} = 0$), the kurtosis term is all that remains at this order.
+
+**Practical approximations** (Hyvärinen, 1998). The cumulant expansion above relies on polynomial moments ($y^3$, $y^4$), which inherit kurtosis's outlier sensitivity. Hyvärinen's key idea is to replace these polynomials with *bounded* nonlinear functions $G$, while keeping the same structure: compute $\mathbb{E}\{G(y)\}$, compare to what a Gaussian would give, and measure the gap. If $y$ is Gaussian, the two expectations match and the approximation returns zero; the bigger the gap, the more non-Gaussian $y$ is. Formally:
 
 $$J(y) \approx \sum_i k_i \left[\mathbb{E}\{G_i(y)\} - \mathbb{E}\{G_i(\nu)\}\right]^2$$
 
-where $\nu \sim \mathcal{N}(0,1)$, the $k_i$ are positive constants, and $G_i$ are nonquadratic functions chosen for robustness. Two particularly effective choices are:
+where $\nu \sim \mathcal{N}(0,1)$ is the Gaussian reference, the $k_i$ are positive constants, and the $G_i$ are nonquadratic functions chosen for robustness. Two particularly effective choices are:
 
 $$G_1(u) = \frac{1}{a_1} \log \cosh(a_1 u) \quad (a_1 \approx 1), \qquad G_2(u) = -\exp\!\left(-\frac{u^2}{2}\right)$$
 
 **Why these specific functions?** The key is that they measure non-Gaussianity through *bounded* nonlinearities rather than polynomial moments. Kurtosis uses $u^4$, which is unbounded and amplifies outliers. By contrast, $G_1$ grows like $|u|$ for large $u$ (since $\log\cosh(u) \approx |u| - \log 2$ for large $|u|$) and $G_2$ saturates to a constant — neither lets a single extreme value dominate the estimate. $G_1$ is sensitive to supergaussian structure (heavy tails, sharp peaks), while $G_2$ is more sensitive to subgaussian structure (light tails, flat center). Together, these approximations combine the computational tractability of moment-based measures with the robustness of information-theoretic ones, making them the practical default in ICA.
 
+So far we have two concrete measures — kurtosis (simple but fragile) and negentropy (robust but requires approximation) — both designed to find *one* independent component at a time by maximizing non-Gaussianity. The next section takes a step back and asks: is there a single objective that finds *all* components simultaneously? The answer is mutual information, and it turns out to unify everything we've seen so far.
+
 ### 7.4 Mutual Information and the Infomax Principle
+
+Kurtosis and negentropy both find *one* independent component at a time — you maximize non-Gaussianity along a single direction, lock it in, then search for the next orthogonal direction. Mutual information provides a different perspective: a single objective function over *all* components simultaneously, and it turns out to unify everything we've seen so far.
 
 **Mutual information** between $n$ scalar variables $y_1, \ldots, y_n$ is:
 $$I(y_1, \ldots, y_n) = \sum_{i=1}^n H(y_i) - H(\mathbf{y})$$
 
-This equals the Kullback-Leibler divergence between the joint density $f(\mathbf{y})$ and the product of marginals $\prod_i f_i(y_i)$ — a natural measure of how much the joint distribution differs from independence. It is always $\geq 0$, with equality if and only if the $y_i$ are statistically independent.
+The intuition: $\sum_i H(y_i)$ is the total entropy you'd compute if you *assumed* the variables were independent — just summing up each marginal's entropy separately, ignoring any relationships between them. $H(\mathbf{y})$ is the actual joint entropy, which accounts for dependencies. If the variables truly are independent, these are equal. To see why: independence means $f(\mathbf{y}) = \prod_i f_i(y_i)$, so $H(\mathbf{y}) = -\mathbb{E}[\log \prod_i f_i(y_i)] = -\sum_i \mathbb{E}[\log f_i(y_i)] = \sum_i H(y_i)$, and the gap is zero. If they're dependent, the joint entropy is *lower* — knowing one variable reduces your uncertainty about the others — so the gap $I > 0$ measures exactly how much dependence exists. Formally, $I = \text{KL}(f(\mathbf{y}) \| \prod_i f_i(y_i)) \geq 0$, with equality if and only if the $y_i$ are statistically independent.
 
 **ICA as mutual information minimization.** Define the ICA transformation as $\mathbf{y} = \mathbf{W}\mathbf{x}$. Minimizing $I(y_1, \ldots, y_n)$ over $\mathbf{W}$ finds the transformation that makes the outputs as independent as possible.
 
@@ -727,27 +850,38 @@ where $C$ is a constant independent of $\mathbf{W}$. Here is the derivation. Sta
 
 $$I = \sum_i H(y_i) - H(\mathbf{y}) = \underbrace{\sum_i H(y_i) - H(\mathbf{y}_\text{gauss})}_{\text{rearranged below}} + \underbrace{\bigl[H(\mathbf{y}_\text{gauss}) - H(\mathbf{y})\bigr]}_{J(\mathbf{y})}$$
 
-Under whitening, the joint covariance is $\mathbf{I}$ for all $\mathbf{W}$, so $\mathbf{y}_\text{gauss} = \mathcal{N}(\mathbf{0},\mathbf{I})$, which factorizes: $H(\mathbf{y}_\text{gauss}) = \sum_i H(y_{i,\text{gauss}})$. Adding and subtracting this:
+Under whitening, the joint covariance is $\mathbf{I}$ for all $\mathbf{W}$, so $\mathbf{y}_\text{gauss} = \mathcal{N}(\mathbf{0},\mathbf{I})$, which factorizes: $H(\mathbf{y}_\text{gauss}) = \sum_i H(y_{i,\text{gauss}})$. Substituting this into the first term:
 
-$$I = \sum_i \underbrace{\bigl[H(y_{i,\text{gauss}}) - H(y_i)\bigr]}_{J(y_i)} + J(\mathbf{y})$$
+$$\sum_i H(y_i) - H(\mathbf{y}_\text{gauss}) = \sum_i H(y_i) - \sum_i H(y_{i,\text{gauss}}) = -\sum_i \underbrace{\bigl[H(y_{i,\text{gauss}}) - H(y_i)\bigr]}_{J(y_i)}$$
 
-Now, $J(\mathbf{y})$ is constant in $\mathbf{W}$: (a) $H(\mathbf{y}_\text{gauss})$ is fixed because whitening pins the joint covariance to $\mathbf{I}$, and (b) for orthogonal $\mathbf{W}$ (all that remains after whitening), the entropy change-of-variables formula gives $H(\mathbf{y}) = H(\mathbf{x}) + \log|\det\mathbf{W}|$. Since $\mathbf{W}$ is orthogonal, $\mathbf{W}^T\mathbf{W} = \mathbf{I}$, so $|\det\mathbf{W}|^2 = \det(\mathbf{W}^T\mathbf{W}) = 1$, giving $|\det\mathbf{W}| = 1$ and $\log|\det\mathbf{W}| = 0$. Thus $H(\mathbf{y}) = H(\mathbf{x})$, which is constant across all orthogonal $\mathbf{W}$. Setting $C = J(\mathbf{y})$:
+so:
+
+$$I = -\sum_i J(y_i) + J(\mathbf{y})$$
+
+**Why $J(\mathbf{y})$ is constant across all valid $\mathbf{W}$.** Recall $J(\mathbf{y}) = H(\mathbf{y}_\text{gauss}) - H(\mathbf{y})$. We need to show that *neither* term changes as we vary $\mathbf{W}$:
+
+- $H(\mathbf{y}_\text{gauss})$ **is fixed** because whitening pins the joint covariance to $\mathbf{I}$ regardless of which orthogonal $\mathbf{W}$ we choose. The Gaussian with covariance $\mathbf{I}$ always has the same entropy.
+- $H(\mathbf{y})$ **is also fixed.** The entropy change-of-variables formula says $H(\mathbf{y}) = H(\mathbf{x}) + \log|\det\mathbf{W}|$. After whitening, $\mathbf{W}$ is constrained to be orthogonal ($\mathbf{W}^T\mathbf{W} = \mathbf{I}$), so $|\det\mathbf{W}|^2 = \det(\mathbf{W}^T\mathbf{W}) = \det(\mathbf{I}) = 1$, giving $|\det\mathbf{W}| = 1$. The Jacobian term vanishes: $H(\mathbf{y}) = H(\mathbf{x}) + 0 = H(\mathbf{x})$, which doesn't depend on $\mathbf{W}$.
+
+Since both terms are constant, $J(\mathbf{y})$ is constant. Setting $C = J(\mathbf{y})$:
 
 $$\boxed{I(y_1, \ldots, y_n) = C - \sum_i J(y_i)}$$
 
 Therefore *minimizing mutual information is equivalent to maximizing the sum of negentropies* — the components' individual non-Gaussianities. This gives rigorous justification for the heuristic idea of finding "maximally non-Gaussian" directions.
 
-**Maximum likelihood formulation.** In the ICA model $\mathbf{x} = \mathbf{A}\mathbf{s}$ with $\mathbf{s} = \mathbf{W}\mathbf{x}$, the change-of-variables formula gives the density of a single observation. Since $\mathbf{s} = \mathbf{W}\mathbf{x}$ and the sources are independent:
+**Maximum likelihood formulation.** There is a third route to the same solution, starting from classical statistical estimation. In the ICA model $\mathbf{x} = \mathbf{A}\mathbf{s}$ with $\mathbf{s} = \mathbf{W}\mathbf{x}$, the change-of-variables formula (the same one we used in Section 6.5) gives the observation density:
 
 $$p(\mathbf{x}) = |\det \mathbf{W}| \prod_{j=1}^n p_j(\mathbf{w}_j^T \mathbf{x})$$
 
-where $\mathbf{w}_j$ is the $j$th row of $\mathbf{W}$ and $p_j$ is the marginal density of source $j$. The $|\det\mathbf{W}|$ factor is the Jacobian of the transformation from $\mathbf{s}$ to $\mathbf{x}$; it accounts for the volume change. The log-likelihood over $N$ i.i.d. samples is then:
+where $\mathbf{w}_j$ is the $j$th row of $\mathbf{W}$ and $p_j$ is the marginal density of source $j$. The log-likelihood over $N$ i.i.d. samples is:
 
 $$\mathcal{L}(\mathbf{W}) = N\log|\det\mathbf{W}| + \sum_{i=1}^N \sum_{j=1}^n \log p_j(\mathbf{w}_j^T \mathbf{x}_i)$$
 
-The gradient with respect to $\mathbf{W}$ involves the *score functions* $-p_j'/p_j$ of the source densities. When the nonlinearities $g_j$ in FastICA are chosen to match these score functions — i.e., $g_j = -d\log p_j/du$ — gradient ascent on $\mathcal{L}$ is precisely the FastICA update. Under the whitening constraint, $\mathbf{W}$ is orthogonal so $|\det\mathbf{W}| = 1$ and the first term is constant, reducing ML to maximizing $\sum_j \mathbb{E}[\log p_j(\mathbf{w}_j^T\mathbf{x})]$ — which is the same objective as minimizing mutual information.
+**Under whitening, ML reduces to MI minimization.** When $\mathbf{W}$ is constrained to be orthogonal (all that remains after whitening), $|\det\mathbf{W}| = 1$, so the Jacobian term $N\log|\det\mathbf{W}| = 0$ drops out. The ML objective reduces to maximizing $\sum_j \mathbb{E}[\log p_j(\mathbf{w}_j^T\mathbf{x})]$ — which is exactly the same as minimizing mutual information. The three roads lead to the same place.
 
-**The Infomax Principle** (Bell and Sejnowski, 1995) derives ICA from a neural network perspective: maximize the output entropy of a neural network with sigmoid nonlinear outputs. With nonlinearities chosen as the CDFs of the source densities, the infomax gradient equals the ML gradient.
+**Connection to FastICA.** The gradient of $\mathcal{L}$ with respect to $\mathbf{W}$ involves the *score functions* $g_j(u) = -\frac{d}{du}\log p_j(u) = -p_j'(u)/p_j(u)$ of the source densities. When the nonlinearities in FastICA are chosen to match these score functions, gradient ascent on $\mathcal{L}$ is precisely the FastICA fixed-point update. This is why the choice of $G$ function in FastICA (Section 7.3) matters: it implicitly assumes a source density.
+
+**The Infomax Principle** (Bell and Sejnowski, 1995) arrives at the same objective from a neural network perspective. The idea: pass the observations through a single-layer network $\mathbf{y} = \sigma(\mathbf{W}\mathbf{x})$, where $\sigma$ is an elementwise nonlinear activation (e.g. a sigmoid), and maximize the output entropy $H(\mathbf{y})$. Maximizing output entropy forces the network to spread its outputs as uniformly as possible, which requires undoing the mixing — the network has to learn $\mathbf{W} = \mathbf{A}^{-1}$ to make the outputs independent. When the nonlinearities are chosen as the CDFs of the source densities, the infomax gradient is identical to the ML gradient. This is a historical note — infomax was one of the first practical ICA algorithms and helped popularize the technique, but it is mathematically equivalent to the ML formulation above.
 
 **Result: three equivalent formulations of ICA.** Under whitening, the following three objectives yield the same optimal demixing matrix $\mathbf{W}$:
 
@@ -808,13 +942,14 @@ import matplotlib.pyplot as plt
 
 rng = np.random.default_rng(42)
 N = 2000
+t = np.linspace(0, 20, N)
 
-# Two independent non-Gaussian sources
-s1 = rng.uniform(-1, 1, N)          # uniform (sub-Gaussian)
-s2 = np.sign(rng.standard_normal(N)) * rng.exponential(1, N)  # super-Gaussian
+# Two visually distinct non-Gaussian sources
+s1 = np.sin(5 * t)                   # sine wave
+s2 = 2 * ((3 * t) % 1) - 1          # sawtooth wave (different frequency)
 
-S = np.vstack([s1, s2])             # 2 x N source matrix
-S -= S.mean(axis=1, keepdims=True)  # center
+S = np.vstack([s1, s2])
+S -= S.mean(axis=1, keepdims=True)
 
 A = np.array([[0.6, 0.4], [0.3, 0.7]])  # mixing matrix
 X = A @ S                               # 2 x N observed mixtures
@@ -825,40 +960,41 @@ eigenvalues, V = np.linalg.eigh(C)
 W_white = np.diag(eigenvalues**-0.5) @ V.T
 X_tilde = W_white @ X  # whitened data (covariance = I)
 
-# ── FastICA (single component, g = tanh) ────────────────────
-def fastica_one(X_tilde, max_iter=500, tol=1e-8):
-    w = rng.standard_normal(X_tilde.shape[0])
-    w /= np.linalg.norm(w)
-    for _ in range(max_iter):
-        y = w @ X_tilde                     # projections
-        w_new = (X_tilde * np.tanh(y)).mean(axis=1) \
-                - (1 - np.tanh(y)**2).mean() * w  # fixed-point update
-        w_new /= np.linalg.norm(w_new)
-        if abs(abs(w_new @ w) - 1) < tol:
-            return w_new
-        w = w_new
-    return w
+# ── Symmetric FastICA (g = tanh, both components at once) ──
+n_comp = 2
+W = rng.standard_normal((n_comp, n_comp))
+for iteration in range(200):
+    W_new = np.zeros_like(W)
+    for i in range(n_comp):
+        w = W[i]
+        y = w @ X_tilde
+        W_new[i] = (X_tilde * np.tanh(y)).mean(axis=1) \
+                    - (1 - np.tanh(y)**2).mean() * w
+    # Symmetric orthogonalization: W <- (WW^T)^{-1/2} W
+    D, P = np.linalg.eigh(W_new @ W_new.T)
+    W_new = P @ np.diag(D**-0.5) @ P.T @ W_new
+    if np.max(np.abs(np.abs(np.diag(W_new @ W.T)) - 1)) < 1e-8:
+        W = W_new
+        break
+    W = W_new
 
-w1 = fastica_one(X_tilde)
-# Deflate, then find second component
-X_deflated = X_tilde - np.outer(w1, w1 @ X_tilde)
-w2 = fastica_one(X_deflated)
-
-recovered = np.vstack([w1 @ X_tilde, w2 @ X_tilde])
+recovered = W @ X_tilde
 
 fig, axes = plt.subplots(3, 2, figsize=(10, 7))
-labels = [("Source 1 (uniform)", "Source 2 (super-Gauss)"),
+labels = [("Source 1 (sine)", "Source 2 (sawtooth)"),
           ("Mixture 1", "Mixture 2"),
           ("Recovered 1", "Recovered 2")]
 for row, (data, (l1, l2)) in enumerate(zip([S, X, recovered], labels)):
     for col, (signal, label) in enumerate(zip(data, [l1, l2])):
-        axes[row, col].plot(signal[:300], lw=0.8)
+        axes[row, col].plot(signal[:500], lw=0.8)
         axes[row, col].set_title(label)
         axes[row, col].set_yticks([])
 plt.tight_layout()
-plt.savefig("fastica_cocktail_party.png", dpi=150)
+plt.savefig("images/fastica_cocktail_party.png", dpi=150)
 plt.show()
 ```
+
+![*FastICA demo: top row shows two visually distinct sources (sine wave and sawtooth wave), middle row shows the observed mixtures after linear mixing by $\mathbf{A}$ (both mixtures look like muddled blends of the two), bottom row shows the sources recovered by FastICA — each recovered signal clearly matches one of the originals, up to scaling and permutation.*](images/fastica_cocktail_party.png)
 
 **Finding multiple components.** To find $p$ components, run the single-component algorithm $p$ times, deflating after each one by projecting out the already-found directions (Gram-Schmidt). Alternatively, use *symmetric decorrelation*: update all $p$ weight vectors simultaneously, then orthogonalize the full matrix via $\mathbf{W} \leftarrow (\mathbf{W}\mathbf{W}^T)^{-1/2}\mathbf{W}$, so no component is privileged over others.
 
