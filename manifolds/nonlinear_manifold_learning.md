@@ -66,9 +66,27 @@ Now apply the **delta method** — a first-order approximation stating that if $
 
 $$\mathrm{SD}[\|x-y\|] \approx \frac{\sqrt{8p}}{2\sqrt{2p}} = 1$$
 
-The absolute spread in pairwise distances stays constant at $\approx 1$ regardless of $p$, while the mean grows as $\sqrt{2p}$. The **coefficient of variation** (SD divided by mean) $= 1/\sqrt{2p} \to 0$ — distances concentrate ever more tightly around a single value. In other words, the *relative spread* of distances shrinks to zero — all points become roughly equidistant.
+The absolute spread in pairwise distances stays constant at $\approx 1$ regardless of $p$, while the mean grows as $\sqrt{2p}$. The **coefficient of variation** (SD divided by mean) $= 1/\sqrt{2p} \to 0$ — **distances concentrate ever more tightly around a single value.** In other words, the *relative spread* of distances shrinks to zero — all points become roughly equidistant.
 
-Concretely: in 2D, a nearest neighbor at distance 1 and a farthest neighbor at distance 10 are clearly distinguishable. In 1000D, you might find your nearest neighbor at distance 44.7 and your farthest neighbor at distance 45.1 — essentially impossible to tell apart. Distance-based methods (k-NN classifiers, clustering) become useless.
+Concretely: in 2D, a nearest neighbor at distance 1 and a farthest neighbor at distance 10 are clearly distinguishable. In 1000D, you might find your nearest neighbor at distance 44.7 and your farthest neighbor at distance 45.1 — essentially impossible to tell apart. **Distance-based methods (k-NN classifiers, clustering) become useless.**
+
+The following snippet makes this concrete — watch the coefficient of variation collapse as $p$ grows:
+
+```python
+import numpy as np
+rng = np.random.default_rng(42)
+for p in [2, 10, 100, 1000]:
+    X = rng.standard_normal((500, p))
+    dists = np.linalg.norm(X[0] - X[1:], axis=1)
+    print(f"p={p:>4d}  nearest={dists.min():.2f}  farthest={dists.max():.2f}  "
+          f"mean={dists.mean():.2f}  CV={dists.std()/dists.mean():.3f}")
+# p=   2  nearest=0.04  farthest=4.30  mean=1.58  CV=0.474
+# p=  10  nearest=1.53  farthest=6.08  mean=3.48  CV=0.220
+# p= 100  nearest=12.68 farthest=17.64 mean=14.45 CV=0.059
+# p=1000  nearest=42.38 farthest=47.44 mean=44.90 CV=0.019
+```
+
+By $p = 1000$, the nearest and farthest neighbors differ by barely 10% — the notion of "closest point" is nearly meaningless.
 
 **Effect 2: Data becomes sparse.** For points from $\mathcal{N}(0, I_p)$, the fraction of data lying within a fixed-radius ball around any given point decreases exponentially in $p$.
 
@@ -144,6 +162,8 @@ The algorithms in this document are distinguished by their choices in Steps 2, 3
 - **Isomap** (§7) modifies Step 2: it builds a neighborhood graph and computes *geodesic* distances (shortest paths), then feeds those into classical MDS. This is the first method that respects the manifold's curved geometry.
 - **Laplacian Eigenmaps** (§8) reimagines Step 2 entirely: instead of distances, it works with the *graph Laplacian* — a matrix encoding local connectivity — and finds the embedding via an eigendecomposition that minimizes a smoothness objective.
 - **t-SNE** (§9) and **UMAP** (§10) reimagine Steps 2–4: they convert distances to *probability distributions* over neighborhoods and minimize a divergence between high- and low-dimensional distributions. This is a fundamentally different paradigm from distance preservation.
+
+Another important method in this family is **Locally Linear Embedding** (LLE; Roweis and Saul, 2000), which reconstructs each point as a linear combination of its neighbors and then finds low-dimensional coordinates preserving those reconstruction weights. LLE falls outside the assigned readings for this topic and is not covered here; see the Further Reading section for the reference.
 
 ---
 
@@ -234,9 +254,28 @@ where $\delta^*_{ij}$ is the high-dimensional pairwise distance and $d_{ij}$ is 
 
 **Why does this help?** Consider the contribution of a single pair. In MDS, the contribution is $(d_{ij} - \delta^*_{ij})^2$ — the same regardless of how close the points are. In Sammon Mapping, it's $(d_{ij} - \delta^*_{ij})^2 / \delta^*_{ij}$.
 
-For a pair at $\delta^*_{ij} = 0.1$, an absolute error of 0.05 contributes $0.05^2 / 0.1 = 0.025$. For a pair at $\delta^*_{ij} = 10$, the same absolute error contributes $0.05^2 / 10 = 0.00025$ — a factor of 100 smaller. The optimization places much more weight on getting small distances right, which is precisely what matters for preserving local manifold structure.
+For a pair at $\delta^*_{ij} = 0.1$, an absolute error of 0.05 contributes $0.05^2 / 0.1 = 0.025$. For a pair at $\delta^*_{ij} = 10$, the same absolute error contributes $0.05^2 / 10 = 0.00025$ — a factor of 100 smaller.
 
-### 6.2 So What?
+A side-by-side comparison makes the weighting concrete:
+
+| | Nearby pair ($\delta^* = 0.1$) | Distant pair ($\delta^* = 10$) |
+|---|---|---|
+| Absolute error | 0.05 | 0.05 |
+| **MDS** contribution | $0.05^2 = 0.0025$ | $0.05^2 = 0.0025$ | 
+| **Sammon** contribution | $0.05^2/0.1 = 0.025$ | $0.05^2/10 = 0.00025$ |
+| **Sammon / MDS ratio** | $\times 10$ (amplified) | $\times 0.1$ (suppressed) |
+
+The same absolute error on the nearby pair is weighted 100× more heavily in Sammon Mapping than the distant pair. The optimization places much more weight on getting small distances right, which is precisely what matters for preserving local manifold structure.
+
+### 6.2 Optimization
+
+The Sammon stress is minimized by gradient descent. Sammon (1969) derived the gradient in closed form. The partial derivative with respect to the $a$-th coordinate of the $i$-th map point is:
+
+$$\frac{\partial E}{\partial y_{ia}} = \frac{-2}{C}\sum_{j \neq i} \frac{(\delta^*_{ij} - d_{ij})}{\delta^*_{ij} \cdot d_{ij}}(y_{ia} - y_{ja})$$
+
+where $C = \sum_{i<j}\delta^*_{ij}$ is the normalizing constant. Each term in the sum is a force along the $(y_i - y_j)$ direction, scaled by the mismatch $(\delta^*_{ij} - d_{ij})$ and weighted by $1/(\delta^*_{ij} \cdot d_{ij})$ — the same inverse-distance weighting that appears in the cost. This objective is non-convex: the gradient can drive the optimization into local minima where nearby pairs are correctly placed but the global arrangement is distorted. In practice, initialization (e.g., from PCA) matters significantly.
+
+### 6.3 So What?
 
 Sammon Mapping genuinely improves on MDS for locally structured data. By up-weighting errors on nearby pairs, it better preserves the neighborhood structure that characterizes the manifold's local geometry.
 
@@ -244,7 +283,7 @@ But it is not a complete solution. The method still uses Euclidean distances $\d
 
 **Limitations:**
 - Still uses ambient Euclidean distance — fails on strongly curved manifolds.
-- No convex optimization guarantee; prone to local minima.
+- Non-convex optimization; prone to local minima (sensitive to initialization).
 - $O(n^2)$ pairwise distances; scales poorly.
 
 ---
@@ -268,6 +307,8 @@ We cannot directly compute geodesic distances on an *unknown* manifold. But we c
 *(Following Tenenbaum et al. (2000) Table 1, reproduced in Whitfield slides.)*
 
 **Input:** Distances $d_X(i,j)$ between all $n$ data points; neighborhood parameter $K$ (or $\varepsilon$); target dimension $d$.
+
+*Notation:* From here on, $d$ denotes the target embedding dimension (matching the convention in the algorithm papers). Earlier sections used $k$ for intrinsic manifold dimension; for a well-chosen embedding, $d = k$.
 
 ---
 
@@ -310,6 +351,31 @@ Apply classical MDS to the geodesic distance matrix $D_G$:
 
 ![Swiss roll comparison: original 3D data (left), PCA projection showing colors scrambled by crowding (center), Isomap embedding cleanly unrolling the manifold (right). [UBC CPSC-340]](images/isomap_vs_pca_swiss_roll.png)
 
+The following snippet reproduces this comparison — PCA scrambles the color gradient (different layers of the roll collapse), while Isomap cleanly unrolls the manifold:
+
+```python
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.datasets import make_swiss_roll
+from sklearn.decomposition import PCA
+from sklearn.manifold import Isomap
+
+X, color = make_swiss_roll(n_samples=1500, noise=0.3, random_state=0)
+
+fig, axes = plt.subplots(1, 3, figsize=(15, 4))
+axes[0].scatter(X[:, 0], X[:, 2], c=color, cmap="Spectral", s=5)
+axes[0].set_title("Swiss roll (top-down view)")
+
+X_pca = PCA(n_components=2).fit_transform(X)
+axes[1].scatter(X_pca[:, 0], X_pca[:, 1], c=color, cmap="Spectral", s=5)
+axes[1].set_title("PCA — colors scrambled")
+
+X_iso = Isomap(n_neighbors=12, n_components=2).fit_transform(X)
+axes[2].scatter(X_iso[:, 0], X_iso[:, 1], c=color, cmap="Spectral", s=5)
+axes[2].set_title("Isomap — manifold unrolled")
+plt.tight_layout(); plt.show()
+```
+
 ### 7.3 So What? — The Payoff
 
 By substituting geodesic distances for Euclidean distances, Isomap correctly "unfolds" curved manifolds. Two points on opposite sides of the Swiss roll, which Euclidean MDS would map as neighbors, are now correctly placed far apart. The resulting embedding respects the intrinsic geometry of the data.
@@ -329,6 +395,8 @@ A useful diagnostic: the **residual variance**, defined as $1 - R^2$ where $R$ i
 For the Swiss roll, Isomap's residual variance drops to near zero at $d = 2$, correctly identifying it as a 2-dimensional manifold. PCA's residual variance doesn't reach zero until $d = 3$, because it needs an extra dimension to approximate the curved surface with a flat hyperplane.
 
 ![Fig. 6: Residual variance vs. target dimension for the Swiss roll. Isomap (filled circles) reaches near-zero at d=2; PCA (triangles) requires d=3. The elbow in the Isomap curve correctly identifies the intrinsic dimension.](images/fig06_isomap_residual_variance.png)
+
+Residual variance is not the only way to estimate intrinsic dimensionality. Other widely used approaches include the **Levina-Bickel maximum likelihood estimator**, which estimates $k$ from the rate at which nearest-neighbor ball volumes grow with radius, and **correlation dimension** methods, which measure how pairwise distances scale at small radii. These methods can be applied without running a full embedding and are useful as standalone diagnostics when the intrinsic dimension is unknown.
 
 ### 7.5 Limitations
 
@@ -365,7 +433,11 @@ The matrix structure encoding this objective is the **graph Laplacian**.
 $$f^\top L f = \frac{1}{2} \sum_{i,j} W_{ij}(f_i - f_j)^2$$
 
 *Proof.* Expand the right side:
-$$\frac{1}{2}\sum_{i,j} W_{ij}(f_i^2 - 2f_if_j + f_j^2) = \frac{1}{2}\left(2\sum_i f_i^2 \sum_j W_{ij} - 2\sum_{i,j} W_{ij}f_if_j\right) = f^\top D f - f^\top W f = f^\top(D-W)f = f^\top L f$$
+$$\frac{1}{2}\sum_{i,j} W_{ij}(f_i^2 - 2f_if_j + f_j^2) = \frac{1}{2}\left(\sum_{i,j} W_{ij}f_i^2 + \sum_{i,j} W_{ij}f_j^2 - 2\sum_{i,j} W_{ij}f_if_j\right)$$
+
+In the first sum, $f_i^2$ does not depend on $j$, so $\sum_{i,j} W_{ij}f_i^2 = \sum_i f_i^2 \sum_j W_{ij} = \sum_i f_i^2 D_{ii} = f^\top D f$. The second sum is identical: relabeling dummy indices $i \leftrightarrow j$ and using symmetry $W_{ij} = W_{ji}$ gives $\sum_{i,j} W_{ij}f_j^2 = \sum_i f_i^2 D_{ii} = f^\top D f$. The cross term is $\sum_{i,j}W_{ij}f_if_j = f^\top W f$. Combining:
+
+$$= \frac{1}{2}(2f^\top Df - 2f^\top Wf) = f^\top(D-W)f = f^\top L f$$
 
 This identity is fundamental: it shows that $f^\top L f$ is exactly the weighted sum of squared differences we want to minimize. So minimizing our embedding objective is equivalent to minimizing $f^\top L f$.
 
@@ -396,6 +468,8 @@ $$\mathcal{L}(f, \lambda) = f^\top Lf - \lambda(f^\top Df - 1)$$
 
 Setting $\partial \mathcal{L}/\partial f = 0$ gives $2Lf - 2\lambda Df = 0$, i.e., $Lf = \lambda Df$. The solutions are the generalized eigenvectors of $(L, D)$, and the corresponding eigenvalue $\lambda = f^\top Lf$ is the value of the objective at that solution — so the eigenvector with the *smallest* $\lambda$ solves the minimization. The normalization $f^\top Df = 1$ accounts for node degree: a node with many high-weight neighbors contributes more to the graph, so it is normalized more heavily than an isolated node.
 
+**Equivalence to the normalized Laplacian.** The generalized eigenproblem $Lf = \lambda Df$ is equivalent to a standard eigenproblem on the **symmetric normalized Laplacian** $L_{\text{sym}} = D^{-1/2}LD^{-1/2}$. Substituting $f = D^{-1/2}f'$ into $Lf = \lambda Df$ and left-multiplying by $D^{-1/2}$ gives $L_{\text{sym}}f' = \lambda f'$. Both forms appear in the literature (and sklearn's `SpectralEmbedding` uses the normalized Laplacian by default); they yield the same eigenvalues and related eigenvectors via $f = D^{-1/2}f'$.
+
 **Step 4 — Form the embedding.** Let $f_0, f_1, \ldots, f_{n-1}$ be the eigenvectors sorted by increasing eigenvalue $\lambda_0 \leq \lambda_1 \leq \cdots$. Discard $f_0$ (the constant vector with $\lambda_0 = 0$ — it carries no information about relative positions). The $d$-dimensional embedding of $x_i$ is:
 
 $$y_i = (f_1(i),\ f_2(i),\ \ldots,\ f_d(i))$$
@@ -405,6 +479,27 @@ $$y_i = (f_1(i),\ f_2(i),\ \ldots,\ f_d(i))$$
 **Intuition:** Think of the eigenvectors as the "natural vibration modes" of the graph. Low-frequency modes (small eigenvalues) are like long, gentle waves across the graph — slowly varying, so similar points get similar values. High-frequency modes are like rapid oscillations — nearby nodes get very different values. The Laplacian Eigenmap embedding uses only the low-frequency modes.
 
 ![Laplacian Eigenmaps toy example: 4 points connected as a star graph (left). W, D, and L = D − W computed explicitly. Solving Lf = λDf gives eigenvector f₁ = (0,−3,1,2), embedding the points on the real line in order of their graph position. [PyData Berlin 2018]](images/laplacian_eigenmaps_4_nodes.png)
+
+The following snippet compares Laplacian Eigenmaps (via sklearn's `SpectralEmbedding`) against Isomap on the same Swiss roll — Laplacian Eigenmaps preserves local neighborhoods but does not attempt to recover global geodesic structure, so the unrolling looks different:
+
+```python
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.datasets import make_swiss_roll
+from sklearn.manifold import Isomap, SpectralEmbedding
+
+X, color = make_swiss_roll(n_samples=1500, noise=0.3, random_state=0)
+
+fig, axes = plt.subplots(1, 2, figsize=(12, 4))
+X_iso = Isomap(n_neighbors=12, n_components=2).fit_transform(X)
+axes[0].scatter(X_iso[:, 0], X_iso[:, 1], c=color, cmap="Spectral", s=5)
+axes[0].set_title("Isomap — global geodesic preservation")
+
+X_lap = SpectralEmbedding(n_neighbors=12, n_components=2).fit_transform(X)
+axes[1].scatter(X_lap[:, 0], X_lap[:, 1], c=color, cmap="Spectral", s=5)
+axes[1].set_title("Laplacian Eigenmaps — local smoothness only")
+plt.tight_layout(); plt.show()
+```
 
 ### 8.4 So What? — The Spectral Payoff
 
@@ -472,7 +567,11 @@ The cost becomes $C = \mathrm{KL}(P\|Q) = \sum_{i \neq j} p_{ij} \log \frac{p_{i
 
 $$\frac{\partial C}{\partial y_i} = 4\sum_j (p_{ij} - q_{ij})(y_i - y_j)$$
 
-*Brief derivation.* Write $C = \text{const} + \sum_{i\neq j} p_{ij}\|y_i-y_j\|^2 + \log Z_G$ where $Z_G = \sum_{k\neq l}\exp(-\|y_k-y_l\|^2)$ (using $\log q_{ij} = -\|y_i-y_j\|^2 - \log Z_G$). Differentiating the first sum with respect to $y_i$, both the $(i,j)$ and $(j,i)$ ordered pairs contribute, giving $4\sum_j p_{ij}(y_i-y_j)$. For $\log Z_G$: since $\partial\exp(-d_{ij}^2)/\partial y_i = -2(y_i-y_j)\exp(-d_{ij}^2)$, the same $k=i$ and $l=i$ symmetry as in §9.5 gives $\partial\log Z_G/\partial y_i = -4\sum_j q_{ij}(y_i-y_j)$. Combining: $4\sum_j(p_{ij}-q_{ij})(y_i-y_j)$.
+*Derivation sketch.* Since $q_{ij} = \exp(-\|y_i-y_j\|^2)/Z_G$ where $Z_G = \sum_{k\neq l}\exp(-\|y_k-y_l\|^2)$, we have $\log q_{ij} = -\|y_i-y_j\|^2 - \log Z_G$. Substituting into $C = \sum_{i\neq j}p_{ij}\log(p_{ij}/q_{ij})$ and dropping terms constant in $y$:
+
+$$C = \text{const} + \sum_{i\neq j} p_{ij}\|y_i-y_j\|^2 + \log Z_G$$
+
+where the second term uses $\sum_{i\neq j}p_{ij} = 1$. Differentiating $\sum_{i\neq j}p_{ij}\|y_i-y_j\|^2$ with respect to $y_i$: both ordered pairs $(i,j)$ and $(j,i)$ contain $y_i$, each contributing $2p_{ij}(y_i-y_j)$ (using $p_{ij}=p_{ji}$), for a total of $4\sum_j p_{ij}(y_i-y_j)$. For $\log Z_G$: the same counting argument (pairs with $k=i$ and $l=i$ both contribute, as detailed in §9.5 for the Cauchy case) gives $\partial\log Z_G/\partial y_i = -4\sum_j q_{ij}(y_i-y_j)$. Combining: $4\sum_j(p_{ij}-q_{ij})(y_i-y_j)$.
 
 **Physical interpretation.** Think of springs connecting every pair of map points. The spring between $y_i$ and $y_j$ has stiffness $(p_{ij} - q_{ij})$: attractive when $p_{ij} > q_{ij}$ (points too far apart in map), repulsive when $p_{ij} < q_{ij}$ (too close). The gradient is simply the total spring force on $y_i$.
 
@@ -486,7 +585,7 @@ Even symmetric SNE with Gaussians in both spaces has a fundamental failure mode 
 
 Suppose data lies on a 10-dimensional manifold. The volume of a $d$-dimensional sphere of radius $r$ scales as $r^d$. So in 10 dimensions, doubling the radius multiplies volume by $2^{10} \approx 1000$. In 2 dimensions, doubling the radius multiplies area by only $2^2 = 4$.
 
-Now consider a reference point and all data points at a moderate distance from it in 10D. When we try to map them to 2D while keeping *nearby* pairs close (which the cost function demands), there simply isn't enough area available. In 10D you can have 11 mutually equidistant points; in 2D you can have at most 3. The optimizer can't faithfully represent 10D geometry in 2D.
+Now consider a reference point and all data points at a moderate distance from it in 10D. When we try to map them to 2D while keeping *nearby* pairs close (which the cost function demands), there simply isn't enough area available. In 10D you can have 11 mutually equidistant points (at the vertices of a regular 10-simplex, each pair at distance $\sqrt{2}$); in 2D you can have at most 3 (the vertices of an equilateral triangle). The remaining 8 points have no faithful placement — any 2D arrangement must distort at least some of the pairwise distances. The optimizer can't faithfully represent 10D geometry in 2D.
 
 The consequence: to accurately model the small distances (nearby pairs), most of the moderately-distant points get pushed very far from the center in 2D. The resulting map has a tight cluster near the center, surrounded by a diffuse cloud — all global structure is lost.
 
@@ -596,6 +695,25 @@ Setting perplexity = 30 means: "Fit a Gaussian $\sigma_i$ around $x_i$ such that
 - **Too high (~100):** Large $\sigma_i$, many neighbors considered. Local structure blurs; distant points begin influencing each other.
 - **Recommended range:** 5 to 50 (van der Maaten and Hinton report t-SNE is "fairly robust" to changes in this range). Always keep perplexity $< n$.
 
+The effect is easy to see on synthetic data — three Gaussian blobs that are well-separated in 50D:
+
+```python
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.manifold import TSNE
+from sklearn.datasets import make_blobs
+
+X, y = make_blobs(n_samples=300, n_features=50, centers=3, random_state=0)
+fig, axes = plt.subplots(1, 3, figsize=(15, 4))
+for ax, perp in zip(axes, [5, 30, 100]):
+    emb = TSNE(n_components=2, perplexity=perp, random_state=0).fit_transform(X)
+    ax.scatter(emb[:, 0], emb[:, 1], c=y, cmap="tab10", s=10)
+    ax.set_title(f"perplexity = {perp}")
+plt.tight_layout(); plt.show()
+```
+
+At perplexity 5 each blob fractures into sub-clusters; at 30 the three blobs are cleanly separated; at 100 the boundaries begin to blur. Always try several values.
+
 ### 9.7 The Full Algorithm
 
 *(Following van der Maaten and Hinton, Algorithm 1)*
@@ -606,7 +724,9 @@ Setting perplexity = 30 means: "Fit a Gaussian $\sigma_i$ around $x_i$ such that
 4. For $t = 1$ to $T$:
    - Compute low-dimensional affinities $q_{ij}$ using the Cauchy kernel (Eq. 9.2).
    - Compute gradient $\partial C / \partial Y$ using Eq. (9.4).
-   - Update: $Y^{(t)} = Y^{(t-1)} + \eta\,\frac{\partial C}{\partial Y} + \alpha(t)\bigl(Y^{(t-1)} - Y^{(t-2)}\bigr)$
+   - Update: $Y^{(t)} = Y^{(t-1)} - \eta\,\frac{\partial C}{\partial Y} + \alpha(t)\bigl(Y^{(t-1)} - Y^{(t-2)}\bigr)$
+
+*Note on sign convention:* Van der Maaten and Hinton's Algorithm 1 writes this with a "$+$" sign, which is a known source of confusion. The standard gradient descent update subtracts the gradient of the loss. The "$-$" above is correct: when $p_{ij} > q_{ij}$ the gradient (Eq. 9.4) points *away* from $y_j$, so subtracting it pulls $y_i$ toward $y_j$ — the desired attractive behavior.
 
 The momentum term $\alpha(t)(Y^{(t-1)} - Y^{(t-2)})$ smooths the optimization trajectory. In practice, **early exaggeration** (multiplying all $p_{ij}$ by 4 for the first ~50 iterations) is also used: with exaggerated $p_{ij}$, the optimizer aggressively forms tight, well-separated clusters early on, creating space in the map that later iterations can exploit to find good global organization.
 
@@ -665,7 +785,7 @@ $$q_{ij} = \left(1 + a\,\|y_i - y_j\|^{2b}\right)^{-1}$$
 
 where $a$ and $b$ are hyperparameters fit to the `min_dist` setting. For the default `min_dist`, this closely approximates the Cauchy kernel, but the free parameters make $q_{ij}$ adjustable.
 
-**Theoretical grounding.** UMAP is not purely heuristic: it has a formal derivation in the language of topological data analysis (TDA) and Riemannian geometry. Each fuzzy similarity $v_{j|i}$ can be interpreted as the probability that an edge exists in a weighted **simplicial complex** (a generalization of a graph that includes triangles, tetrahedra, and their higher-dimensional analogs — here used to represent the topology of the manifold) approximating the data manifold under an assumption of locally uniform sampling. The optimization then finds a low-dimensional simplicial complex whose topology best matches the high-dimensional one — minimizing the cross-entropy between the two fuzzy topological structures. This grounding via TDA (Carlsson 2009, McInnes et al. 2018) is what distinguishes UMAP from pure neighbor-embedding heuristics, though the practical algorithm reduces to the gradient steps described in §10.3.
+**Theoretical grounding.** UMAP is not purely heuristic: it has a formal derivation in the language of topological data analysis (TDA) and Riemannian geometry. Each fuzzy similarity $v_{j|i}$ can be interpreted as the probability that an edge exists in a weighted **simplicial complex** (a generalization of a graph that includes triangles, tetrahedra, and their higher-dimensional analogs — here used to represent the topology of the manifold) approximating the data manifold under an assumption of locally uniform sampling. The optimization then finds a low-dimensional simplicial complex whose topology best matches the high-dimensional one — minimizing the cross-entropy between the two fuzzy topological structures. This grounding via TDA (Carlsson 2009, McInnes et al. 2018) is what distinguishes UMAP from pure neighbor-embedding heuristics. A full development of the categorical and TDA framework is out of scope here — it requires machinery from algebraic topology (nerve theorems, fuzzy simplicial categories) that goes well beyond the manifold learning context; see McInnes et al. (2018) §2–3 for the complete treatment. In practice, the algorithm reduces to the gradient steps described in §10.3.
 
 ### 10.3 The Cross-Entropy Cost Function
 
@@ -726,7 +846,28 @@ The cross-entropy interpretation: treat each pair $(i,j)$ as a binary event — 
 | PCA pre-processing | Usually needed | Usually not needed |
 | Hyperparameter sensitivity | Perplexity | n_neighbors, min_dist |
 
-**Wrap-up.** UMAP addresses t-SNE's two biggest practical weaknesses — poor global structure and quadratic scaling — by making two targeted changes to the same neighbor-embedding paradigm. First, replacing KL divergence with a binary cross-entropy cost function adds a repulsive term for distant pairs placed too close, giving cluster positions genuine meaning. Second, using approximate nearest-neighbor search and spectral initialization yields faster, more reproducible embeddings. The theoretical grounding in fuzzy simplicial sets and Riemannian geometry is elegant but largely invisible in practice: UMAP's practical behavior is best understood as "t-SNE with global structure preservation and better defaults." For 2D visualization, either t-SNE or UMAP works well; for larger-scale data, higher target dimensions, or when global arrangement matters, UMAP is the stronger choice.
+The following snippet compares t-SNE and UMAP side-by-side on the sklearn digits dataset (8×8 grayscale images of digits 0–9, 1797 samples in $\mathbb{R}^{64}$). UMAP produces more reproducible global arrangement and runs noticeably faster:
+
+```python
+import matplotlib.pyplot as plt
+from sklearn.datasets import load_digits
+from sklearn.manifold import TSNE
+import umap
+
+X, y = load_digits(return_X_y=True)
+fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+X_tsne = TSNE(n_components=2, perplexity=30, random_state=0).fit_transform(X)
+axes[0].scatter(X_tsne[:, 0], X_tsne[:, 1], c=y, cmap="tab10", s=5, alpha=0.7)
+axes[0].set_title("t-SNE (perplexity=30)")
+
+X_umap = umap.UMAP(n_neighbors=15, min_dist=0.1, random_state=0).fit_transform(X)
+axes[1].scatter(X_umap[:, 0], X_umap[:, 1], c=y, cmap="tab10", s=5, alpha=0.7)
+axes[1].set_title("UMAP (n_neighbors=15, min_dist=0.1)")
+plt.tight_layout(); plt.show()
+```
+
+UMAP addresses t-SNE's two biggest practical weaknesses — poor global structure and quadratic scaling — by making two targeted changes to the same neighbor-embedding paradigm. First, replacing KL divergence with a binary cross-entropy cost function adds a repulsive term for distant pairs placed too close, giving cluster positions genuine meaning. Second, using approximate nearest-neighbor search and spectral initialization yields faster, more reproducible embeddings. The theoretical grounding in fuzzy simplicial sets and Riemannian geometry is elegant but largely invisible in practice: UMAP's practical behavior is best understood as "t-SNE with global structure preservation and better defaults." For 2D visualization, either t-SNE or UMAP works well; for larger-scale data, higher target dimensions, or when global arrangement matters, UMAP is the stronger choice.
 
 ---
 

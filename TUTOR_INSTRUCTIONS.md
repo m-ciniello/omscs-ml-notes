@@ -20,11 +20,7 @@ Organize each topic as: **motivation → derivation → interpretation**. The ou
 
 #### Section framing
 
-Every major section should be bookended by a roadmap and a wrap-up, with clear transitions between subsections:
-
-- **Roadmap.** Open each major section with a brief overview (3–5 sentences): what this section covers, why each part matters, and how the parts connect. The reader should always know the destination before being asked to follow the path.
-- **Transitions.** When a section has multiple major parts, bridge each transition with one sentence stating where the reader is and what question the next part answers. Do not simply drop a new heading without connecting it to what came before.
-- **Wrap-up.** Close each major section with a brief paragraph that ties the key results together, restates the main takeaway in plain language, and — where appropriate — previews what comes next and why. The wrap-up should be something the reader could re-read on its own as a self-contained summary of the section.
+Each major section should follow a natural arc: open with a brief orienting overview (what this section covers, why it matters, and how its parts connect), use clear transitions between subsections so the reader always knows where they are and what question comes next, and close with a short wrap-up that ties the key results together and previews what follows. These are structural principles, not labels — do not insert literal "Roadmap" or "Wrap-up" headings. The flow should feel like a well-structured lecture, not a fill-in-the-blank template.
 
 #### Formatting
 
@@ -36,7 +32,7 @@ Links to adjacent algorithms or later sections belong at the *end* of the curren
 
 #### Extensions beyond the reading
 
-Where natural extensions exist — modern applications, connections to adjacent ML topics, results that meaningfully deepen understanding — include them. Mark these with a bold aside (**Beyond the reading:**) at the start of the relevant paragraph, so the reader always knows what was assigned vs. what was added.
+Where natural extensions exist — modern applications, connections to adjacent ML topics, results that meaningfully deepen understanding — include them. The goal is comprehensive topic coverage; there is no need to distinguish between material that originated in the assigned readings and material added to fill gaps or deepen understanding.
 
 ---
 
@@ -117,11 +113,11 @@ When a specific derivation or framing is drawn from a particular source, note it
 
 ## Session Workflow
 
-#### Reviews
+### Reviews
 
 After adding substantive content, do a targeted review of the surrounding context: check for contradictions, undefined terms, and missing "so what" moments. Reserve full document reviews for when explicitly requested. Do not perform unsolicited broad reviews after minor edits.
 
-#### Figure resolution
+### Figure resolution
 
 Do not resolve figure tags until the student explicitly asks (e.g. "let's resolve figures"). When asked, resolve all unresolved tags in one batch:
 

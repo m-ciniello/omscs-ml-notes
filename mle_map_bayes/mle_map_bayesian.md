@@ -12,7 +12,7 @@ A parameterized ML model has some weight vector **w**. Given data $\mathcal{D}$,
 | MAP | Point estimate — maximize posterior | Used to regularize, then discarded |
 | Full Bayesian | Distribution $p(\mathbf{w} \mid \mathcal{D})$ | Explicitly maintained throughout |
 
-These notes build each approach carefully, connect them algebraically and conceptually, and run all three on the same concrete regression problem so the differences are tangible rather than abstract. We start with MLE and show how its failure modes motivate MAP; MAP's residual limitation then motivates the full Bayesian treatment. The Bayesian derivation culminates in a result that neither MLE nor MAP can produce: a predictive distribution whose uncertainty grows honestly with extrapolation distance.
+What follows builds each approach carefully, connects them algebraically and conceptually, and runs all three on the same concrete regression problem so the differences are tangible rather than abstract. We start with MLE and show how its failure modes motivate MAP; MAP's residual limitation then motivates the full Bayesian treatment. The Bayesian derivation culminates in a result that neither MLE nor MAP can produce: a predictive distribution whose uncertainty grows honestly with extrapolation distance.
 
 ---
 
@@ -36,7 +36,7 @@ $$\boldsymbol{\Phi} = \begin{bmatrix} 1 & -1 \\ 1 & 0 \\ 1 & 1 \end{bmatrix}, \q
 
 ## 2. Maximum Likelihood Estimation (MLE)
 
-**Roadmap.** This section introduces MLE, derives its solution for linear regression, and shows that the familiar least-squares formula is not a heuristic but a direct consequence of assuming Gaussian noise. We close by identifying MLE's structural failure mode — overfitting in small-data settings — that motivates MAP.
+MLE is the starting point: a direct answer to "what parameters best explain the data?" We derive its solution for linear regression, showing that the familiar least-squares formula is not a heuristic but a consequence of assuming Gaussian noise — and then identify the structural failure mode that motivates MAP.
 
 ### 2.1 The Principle
 
@@ -60,9 +60,13 @@ The first term is a constant in **w**. Maximizing over **w** is therefore equiva
 
 $$\hat{\mathbf{w}}_{\text{MLE}} = \arg\min_{\mathbf{w}} \sum_{i=1}^N (y_i - \mathbf{w}^T \boldsymbol{\phi}_i)^2 = \arg\min_{\mathbf{w}} \|\mathbf{y} - \boldsymbol{\Phi}\mathbf{w}\|^2$$
 
-**This is exactly ordinary least squares.** OLS is not a heuristic — it is MLE under a Gaussian noise model. The noise assumption implies the objective. Setting the gradient to zero:
+**This is exactly ordinary least squares.** OLS is not a heuristic — it is MLE under a Gaussian noise model. The noise assumption implies the objective. To find the minimizer, expand the squared norm and differentiate term by term:
 
-$$\nabla_{\mathbf{w}} \|\mathbf{y} - \boldsymbol{\Phi}\mathbf{w}\|^2 = -2\boldsymbol{\Phi}^T(\mathbf{y} - \boldsymbol{\Phi}\mathbf{w}) = 0 \implies \boldsymbol{\Phi}^T\boldsymbol{\Phi}\,\hat{\mathbf{w}} = \boldsymbol{\Phi}^T \mathbf{y}$$
+$$\|\mathbf{y} - \boldsymbol{\Phi}\mathbf{w}\|^2 = \mathbf{y}^T\mathbf{y} - 2\mathbf{w}^T\boldsymbol{\Phi}^T\mathbf{y} + \mathbf{w}^T\boldsymbol{\Phi}^T\boldsymbol{\Phi}\mathbf{w}$$
+
+The first term is constant in **w**. For the second, the matrix identity $\nabla_{\mathbf{w}}(\mathbf{a}^T\mathbf{w}) = \mathbf{a}$ gives $-2\boldsymbol{\Phi}^T\mathbf{y}$. For the third, $\nabla_{\mathbf{w}}(\mathbf{w}^T A\mathbf{w}) = 2A\mathbf{w}$ (when $A$ is symmetric) gives $2\boldsymbol{\Phi}^T\boldsymbol{\Phi}\mathbf{w}$. Setting the gradient to zero:
+
+$$\nabla_{\mathbf{w}} \|\mathbf{y} - \boldsymbol{\Phi}\mathbf{w}\|^2 = -2\boldsymbol{\Phi}^T\mathbf{y} + 2\boldsymbol{\Phi}^T\boldsymbol{\Phi}\mathbf{w} = 0 \implies \boldsymbol{\Phi}^T\boldsymbol{\Phi}\,\hat{\mathbf{w}} = \boldsymbol{\Phi}^T \mathbf{y}$$
 
 $$\boxed{\hat{\mathbf{w}}_{\text{MLE}} = (\boldsymbol{\Phi}^T \boldsymbol{\Phi})^{-1} \boldsymbol{\Phi}^T \mathbf{y}}$$
 
@@ -80,43 +84,49 @@ The fitted line is $\hat{y} = 1.167 + 0.650\, x$. Prediction at $x_* = 2$: $\hat
 
 ### 2.4 The Failure Mode: MLE Overfits in Small-Sample Settings
 
-MLE's only signal is the data in front of it. It has no mechanism to flag when an estimate looks extreme. The failure mode is clearest when the model has enough parameters to fit the noise exactly.
+MLE's only signal is the data in front of it. It has no mechanism to flag when an estimate looks extreme. The failure mode is clearest when the model has enough parameters to fit the noise rather than the signal.
 
-The snippet below demonstrates: fitting polynomials of increasing degree to just 3 points. Degree 2 achieves perfect residuals — but the resulting curve wildly misrepresents any plausible true function.
+The snippet below demonstrates: we generate $N = 8$ points from a true linear function with Gaussian noise, then fit polynomials of degree 1, 4, and 7. The degree-1 fit recovers the trend. The degree-4 fit begins to chase noise, bending to accommodate individual points. The degree-7 fit (7 coefficients + intercept = 8 parameters for 8 data points) interpolates every observation exactly — achieving RSS $= 0$ — but the resulting curve oscillates wildly between and beyond the data, producing a function that would generalize catastrophically.
 
 ```python
 import numpy as np
 import matplotlib.pyplot as plt
 
-x = np.array([-1, 0, 1], dtype=float)
-t = np.array([0.5, 1.2, 1.8])
-x_grid = np.linspace(-1.5, 1.5, 200)
+rng = np.random.default_rng(42)
+N = 8
+x = np.linspace(-1, 1, N)
+y_true = 0.5 + 0.8 * x
+y = y_true + rng.normal(0, 0.25, N)
+x_grid = np.linspace(-1.3, 1.3, 300)
 
-fig, axes = plt.subplots(1, 3, figsize=(12, 4), sharey=True)
-for ax, deg in zip(axes, [1, 2, 3]):
-    coeffs = np.polyfit(x, t, deg)       # MLE under Gaussian noise = least squares
-    ax.scatter(x, t, zorder=5, color='black', label='data')
-    ax.plot(x_grid, np.polyval(coeffs, x_grid), color='steelblue')
-    residuals = t - np.polyval(coeffs, x)
+fig, axes = plt.subplots(1, 3, figsize=(13, 4), sharey=True)
+for ax, deg in zip(axes, [1, 4, 7]):
+    coeffs = np.polyfit(x, y, deg)
+    ax.scatter(x, y, zorder=5, color='black', label='data')
+    ax.plot(x_grid, np.polyval(coeffs, x_grid), color='steelblue', lw=2)
+    ax.plot(x_grid, 0.5 + 0.8 * x_grid, 'k--', lw=1, alpha=0.4, label='true function')
+    residuals = y - np.polyval(coeffs, x)
     ax.set_title(f'Degree {deg}  |  RSS = {(residuals**2).sum():.4f}')
-    ax.set_ylim(-1, 4)
+    ax.set_ylim(-1.5, 3)
+    ax.legend(fontsize=8)
 
-plt.suptitle('MLE (OLS) for polynomials of increasing degree on N=3 points', y=1.02)
+plt.suptitle(f'MLE (OLS) polynomial fits to N={N} noisy samples from a linear truth', y=1.02)
 plt.tight_layout()
 plt.savefig('mle_overfit.png', dpi=120, bbox_inches='tight')
 ```
 
-[FIG:ORIGINAL — polynomial MLE overfitting: three side-by-side panels showing degree-1, degree-2, and degree-3 polynomial fits to 3 data points, where degree-2 achieves perfect interpolation (RSS=0) and degree-3 has a free parameter that can be anything. Illustrates why MLE without a prior has no mechanism to prefer simpler fits.]
+![MLE polynomial overfitting](images/mle_polynomial_overfitting.png)
+*Polynomial MLE (OLS) fits to 8 noisy samples from a linear truth. Degree 1 recovers the trend; degree 4 begins chasing noise; degree 7 interpolates exactly (RSS = 0) but oscillates wildly — MLE has no mechanism to prefer simpler fits.*
 
 **The failure is structural:** MLE treats the particular sample it saw as the true distribution. With large $N$, sample statistics converge to population statistics and this is fine. With small $N$ or many parameters relative to data, MLE overfits to noise.
 
-**Section wrap-up.** MLE gives us ordinary least squares and is optimal when data is plentiful. Its derivation (Gaussian noise → minimize squared residuals) reveals that the loss function is not arbitrary — it encodes a distributional assumption. But MLE has no brakes: given enough parameters, it will fit the noise perfectly. The fix is to introduce a prior over **w** that penalizes implausible estimates — which is exactly what MAP does.
+MLE gives us ordinary least squares and is optimal when data is plentiful. Its derivation (Gaussian noise → minimize squared residuals) reveals that the loss function is not arbitrary — it encodes a distributional assumption. But MLE has no brakes: given enough parameters, it will fit the noise perfectly. The fix is to introduce a prior over **w** that penalizes implausible estimates — which is exactly what MAP does.
 
 ---
 
 ## 3. Maximum A Posteriori (MAP) Estimation
 
-**Roadmap.** MAP extends MLE by incorporating a prior belief about **w**. We derive the posterior objective, show that the Gaussian prior recovers ridge regression and the Laplace prior recovers LASSO, and work through the running example numerically. The section closes by identifying MAP's own limitation — it is still a point estimate — which motivates the full Bayesian treatment.
+MAP extends MLE by incorporating a prior belief about **w**. The central result is that the Gaussian prior recovers ridge regression and the Laplace prior recovers LASSO — every standard regularizer is a prior in disguise. After working through the running example numerically, we identify MAP's own limitation — it is still a point estimate — which motivates the full Bayesian treatment.
 
 ### 3.1 The Principle
 
@@ -130,7 +140,9 @@ $$\hat{\mathbf{w}}_{\text{MAP}} = \arg\max_{\mathbf{w}} \left[\log p(\mathcal{D}
 
 MAP is MLE with one additional term. The prior $p(\mathbf{w})$ penalizes parameter values that are implausible before seeing data, pulling estimates away from extremes.
 
-There is a clean frequentist interpretation of this move. MLE is an *unbiased* estimator — on average over repeated samples, it hits the true parameter — but in small-sample settings it has high *variance*: any particular sample may produce a wildly different estimate. The prior introduces *bias* (it systematically pulls estimates toward zero, even if the true parameter is nonzero) in exchange for reduced variance. When the variance reduction outweighs the added bias, the MAP estimate has lower mean squared error than MLE. This is the **bias-variance tradeoff** viewed through the lens of estimation, and it explains why regularization helps most when $N$ is small relative to the number of parameters.
+There is a clean frequentist interpretation of this move. For linear regression coefficients, MLE is an *unbiased* estimator — on average over repeated samples, it hits the true parameter. But in small-sample settings it has high *variance*: any particular sample may produce a wildly different estimate. The prior introduces *bias* (it systematically pulls estimates toward zero, even if the true parameter is nonzero) in exchange for reduced variance. When the variance reduction outweighs the added bias, the MAP estimate has lower mean squared error than MLE. This is the **bias-variance tradeoff** viewed through the lens of estimation, and it explains why regularization helps most when $N$ is small relative to the number of parameters.
+
+(A side note: MLE is not unbiased in general. The classic counterexample is the Gaussian variance MLE, $\hat{\sigma}^2 = \frac{1}{N}\sum(x_i - \bar{x})^2$, which systematically underestimates the true variance by a factor of $(N{-}1)/N$. The unbiased estimator divides by $N{-}1$ instead.)
 
 ### 3.2 Prior Choice = Regularizer Choice
 
@@ -154,9 +166,24 @@ $$\hat{\mathbf{w}}_{\text{MAP}} = (\boldsymbol{\Phi}^T\boldsymbol{\Phi} + \lambd
 
 The $\lambda I$ term added to $\boldsymbol{\Phi}^T\boldsymbol{\Phi}$ guarantees invertibility even when $\boldsymbol{\Phi}^T\boldsymbol{\Phi}$ is rank-deficient — a key practical advantage of ridge over plain OLS.
 
-**Laplace prior → LASSO.** If instead $p(w_j) \propto \exp(-|w_j|/b)$, the log-prior contributes $-\frac{1}{b}\|\mathbf{w}\|_1$, and MAP becomes LASSO. The $\ell_1$ penalty induces sparsity because the Laplace distribution has a sharp peak at zero with heavy tails — it strongly favors exactly-zero weights, unlike the Gaussian prior which merely discourages large weights.
+**Laplace prior → LASSO.** Place independent Laplace priors on each weight: $p(w_j) = \frac{1}{2b}\exp(-|w_j|/b)$, where $b > 0$ is the scale parameter. The joint log-prior is:
 
-This geometric difference is worth seeing directly:
+$$\log p(\mathbf{w}) = \sum_j \log \frac{1}{2b} - \frac{|w_j|}{b} = -\frac{1}{b}\sum_j |w_j| + \text{const} = -\frac{1}{b}\|\mathbf{w}\|_1 + \text{const}$$
+
+Substituting the log-likelihood from Section 2.2 and the log-prior, the MAP objective (negated, since we minimize) is:
+
+$$\hat{\mathbf{w}}_{\text{MAP}} = \arg\min_{\mathbf{w}}\; \frac{1}{2\sigma^2}\|\mathbf{y} - \boldsymbol{\Phi}\mathbf{w}\|^2 + \frac{1}{b}\|\mathbf{w}\|_1$$
+
+Multiplying through by $2\sigma^2$ (preserves argmin, exactly as we did for ridge):
+
+$$= \arg\min_{\mathbf{w}}\; \|\mathbf{y} - \boldsymbol{\Phi}\mathbf{w}\|^2 + \frac{2\sigma^2}{b}\|\mathbf{w}\|_1$$
+
+This is **LASSO** with $\lambda = 2\sigma^2/b$. The $\ell_1$ penalty induces sparsity because the Laplace distribution has a sharp peak at zero with heavy tails — it concentrates prior mass directly at $w_j = 0$ and assigns non-negligible probability to large values, unlike the Gaussian which smoothly penalizes all deviations from zero. Geometrically, the $\ell_1$ constraint set (a diamond) has corners on the coordinate axes; the likelihood contour will typically first touch a corner, setting one or more weights to exactly zero.
+
+![L1 vs L2 constraint geometry](images/l1_vs_l2_constraint_geometry.png)
+*Why $\ell_1$ induces sparsity. Left: the elliptical likelihood contours first touch the diamond ($\ell_1$ ball) at a corner, setting $w_2 = 0$. Right: the same contours touch the circle ($\ell_2$ ball) at a generic off-axis point, shrinking both weights but zeroing neither. Generated for these notes.*
+
+This geometric difference is also worth seeing in one dimension — the prior densities themselves reveal the mechanism:
 
 ```python
 import numpy as np
@@ -183,7 +210,8 @@ plt.tight_layout()
 plt.savefig('prior_shapes.png', dpi=120, bbox_inches='tight')
 ```
 
-[FIG:ORIGINAL — side-by-side density plot of Gaussian prior vs Laplace prior over a single weight $w_j$, showing the Laplace prior's sharp cusp at zero and heavier tails compared to the smooth Gaussian. Illustrates geometrically why MAP with a Laplace prior drives weights to exactly zero (sparsity) while MAP with a Gaussian prior only shrinks them.]
+![Gaussian vs Laplace prior](images/gaussian_vs_laplace_prior.png)
+*Gaussian prior (smooth bell, $\ell_2$ / ridge) vs. Laplace prior (sharp cusp at zero, heavy tails, $\ell_1$ / LASSO). The Laplace prior concentrates mass at exactly zero, driving weights to sparsity; the Gaussian prior smoothly penalizes all deviations without favouring exact zeros. Generated for these notes.*
 
 **Summary table:**
 
@@ -211,13 +239,13 @@ Prediction at $x_* = 2$: $\hat{y} = 1.129 + 0.619 \times 2 = 2.367$ (vs. MLE's $
 
 MAP is still a **point estimate**. It picks the mode of the posterior and discards everything else about its shape. With only 3 data points, the posterior over **w** is broad — many weight settings are nearly as plausible as the MAP solution — but MAP gives no way to express this. Predictions carry no uncertainty about **w**: we predict as if **w** is known exactly once we have the MAP estimate.
 
-**Section wrap-up.** MAP = MLE + log-prior, and every standard regularizer is a prior in disguise. This gives regularization a probabilistic interpretation: you are encoding a belief about the scale and sparsity of the weights before seeing data. But MAP still produces a single point estimate — the mode of the posterior — and throws away everything else. The posterior is a distribution, not a point, and discarding it loses information that becomes important in low-data settings. The Bayesian approach keeps it.
+MAP = MLE + log-prior, and every standard regularizer is a prior in disguise. This gives regularization a probabilistic interpretation: you are encoding a belief about the scale and sparsity of the weights before seeing data. But MAP still produces a single point estimate — the mode of the posterior — and throws away everything else. The posterior is a distribution, not a point, and discarding it loses information that becomes important in low-data settings. The Bayesian approach keeps it.
 
 ---
 
 ## 4. The Bayesian Approach: Maintaining the Full Posterior
 
-**Roadmap.** This section develops the Bayesian framework in full generality before we specialize to linear regression. We introduce the posterior and marginal likelihood, define conjugate priors and explain why they matter computationally, derive the predictive distribution and explain the two sources of uncertainty it captures, flag a subtle but important point about marginal independence, and close with the general Bayesian regression formulation showing all conditioning explicitly. The concrete closed-form derivation follows in Section 5.
+Where MLE and MAP each commit to a single **w**, the Bayesian approach maintains the complete distribution over **w** given the data. This section develops the framework in full generality before we specialize to linear regression: the posterior and marginal likelihood, conjugate priors and why they matter computationally, the predictive distribution and the two sources of uncertainty it captures, a subtle but important point about marginal independence, and the general Bayesian regression formulation with all conditioning explicit. The concrete closed-form derivation follows in Section 5.
 
 ### 4.1 The Posterior Distribution
 
@@ -229,7 +257,7 @@ The **marginal likelihood** (also called **model evidence**) is:
 
 $$p(\mathcal{D}) = \int p(\mathcal{D} \mid \mathbf{w})\, p(\mathbf{w})\, d\mathbf{w}$$
 
-It normalizes the posterior so it integrates to one. For parameter inference, it is a constant in **w** and can be ignored. But it plays a separate important role in **model comparison**: two models with different priors or structures can be ranked by their marginal likelihood — the one that assigns higher probability to the observed data (after averaging over all parameter values) is preferred. A high $p(\mathcal{D})$ means the model's prior was well-matched to the data. In principle this is the Bayesian answer to hyperparameter selection; in practice the integral is usually intractable.
+It normalizes the posterior so it integrates to one. For parameter inference, it is a constant in **w** and can be ignored. But it plays a separate important role in **model comparison**: two models with different priors or structures can be ranked by their marginal likelihood — the one that assigns higher probability to the observed data (after averaging over all parameter values) is preferred. The intuition is sometimes called **Bayesian Occam's razor**: a model whose prior concentrates probability mass on parameter regions consistent with the observed data will score higher than a model that spreads its prior mass over a vast space of parameter settings the data doesn't support. Overly complex models waste prior probability on configurations that could explain many datasets but don't specifically explain *this* one, so their marginal likelihood is diluted. In principle this is the Bayesian answer to hyperparameter and model selection; in practice the integral is usually intractable.
 
 ### 4.2 Conjugate Priors
 
@@ -239,13 +267,17 @@ For most models, the posterior $p(\mathbf{w} \mid \mathcal{D})$ has no closed fo
 
 **The key conjugate pair for regression:** A Gaussian prior on **w** is conjugate to a Gaussian likelihood (Gaussian noise model). The posterior is also Gaussian, with a closed-form mean and covariance derivable by completing the square — which is exactly what Section 5 does.
 
-**A concrete illustration.** Suppose we have a single weight $w$ with prior $w \sim \mathcal{N}(0, \alpha^{-1})$ and observe one data point $y = w + \epsilon$, $\epsilon \sim \mathcal{N}(0, \beta^{-1})$. The posterior mean is:
+**A concrete illustration (scalar completing the square).** Suppose we have a single weight $w$ with prior $w \sim \mathcal{N}(0, \alpha^{-1})$ and observe one data point $y = w + \epsilon$, $\epsilon \sim \mathcal{N}(0, \beta^{-1})$. The posterior is proportional to:
 
-$$\mathbb{E}[w \mid y] = \frac{\beta}{\alpha + \beta} y$$
+$$p(w \mid y) \propto \exp\!\left(-\frac{\beta}{2}(y - w)^2\right)\exp\!\left(-\frac{\alpha}{2}w^2\right) = \exp\!\left(-\frac{1}{2}\left[(\alpha + \beta)w^2 - 2\beta y\, w + \beta y^2\right]\right)$$
 
-This is a weighted average between the prior mean (0) and the observation ($y$), with weights proportional to their precisions. When the prior is strong ($\alpha \gg \beta$, high prior precision), the posterior mean is pulled toward 0. When the data is informative ($\beta \gg \alpha$), the posterior mean approaches $y$. The generalization to $N$ observations is immediate: $N$ i.i.d. observations each contribute precision $\beta$, so the effective data precision is $N\beta$ and the posterior mean becomes $\frac{N\beta}{\alpha + N\beta}\bar{y}$. As $N \to \infty$, this approaches $\bar{y}$ regardless of the prior — data overwhelms any finite prior belief.
+Completing the square in $w$: the exponent is $-\frac{(\alpha + \beta)}{2}\left(w - \frac{\beta y}{\alpha + \beta}\right)^2$ plus a constant. Reading off the Gaussian form:
 
-**Beyond Gaussian-Gaussian:** Other standard conjugate pairs include Beta-Binomial (coin flipping), Dirichlet-Categorical (multinomial data), and Gamma-Poisson (count data). Conjugacy is the exception in modern ML — for neural networks and other nonlinear models, the posterior is intractable and must be approximated via the Laplace approximation, variational inference, or MCMC.
+$$p(w \mid y) = \mathcal{N}\!\left(\frac{\beta}{\alpha + \beta}y,\; \frac{1}{\alpha + \beta}\right)$$
+
+The posterior mean $\frac{\beta}{\alpha + \beta}y$ is a weighted average between the prior mean (0) and the observation ($y$), with weights proportional to their precisions. The posterior precision is $\alpha + \beta$ — prior and data precisions add. When the prior is strong ($\alpha \gg \beta$, high prior precision), the posterior mean is pulled toward 0. When the data is informative ($\beta \gg \alpha$), the posterior mean approaches $y$. The generalization to $N$ observations is immediate: $N$ i.i.d. observations each contribute precision $\beta$, so the effective data precision is $N\beta$ and the posterior mean becomes $\frac{N\beta}{\alpha + N\beta}\bar{y}$. As $N \to \infty$, this approaches $\bar{y}$ regardless of the prior — data overwhelms any finite prior belief.
+
+**Beyond Gaussian-Gaussian:** Other standard conjugate pairs follow the same pattern. The most intuitive is **Beta-Binomial**: suppose you flip a coin with unknown bias $\theta$ and place a prior $\theta \sim \text{Beta}(a, b)$. After observing $h$ heads in $n$ flips, the posterior is $\theta \mid \text{data} \sim \text{Beta}(a + h,\; b + n - h)$ — same family, with the prior pseudo-counts $a, b$ simply augmented by the observed counts. Starting with a uniform prior $\text{Beta}(1,1)$ and observing 7 heads in 10 flips gives $\text{Beta}(8, 4)$, a distribution peaked near $0.67$ but with meaningful spread reflecting the small sample. Other conjugate pairs include Dirichlet-Categorical (multinomial data) and Gamma-Poisson (count data). Conjugacy is the exception in modern ML, however — for neural networks and other nonlinear models, the posterior is intractable and must be approximated via the Laplace approximation, variational inference, or MCMC.
 
 ### 4.3 The Predictive Distribution
 
@@ -293,13 +325,13 @@ $$p(y_* \mid \mathbf{x}_*, \mathbf{x}, \mathbf{y}) = \int p(y_* \mid \mathbf{x}_
 1. $p(y_* \mid \mathbf{x}_*, \mathbf{x}, \mathbf{y}, \mathbf{w}) = p(y_* \mid \mathbf{x}_*, \mathbf{w})$: given **w**, the prediction for $y_*$ depends only on $\mathbf{x}_*$ — training data carry no additional information once **w** is known.
 2. $p(\mathbf{w} \mid \mathbf{x}_*, \mathbf{x}, \mathbf{y}) = p(\mathbf{w} \mid \mathbf{x}, \mathbf{y})$: the test input $\mathbf{x}_*$ alone (without its label $y_*$) carries no information about **w**.
 
-**Section wrap-up.** The Bayesian framework replaces a point estimate with a full posterior distribution over **w**, propagates that uncertainty through to predictions, and produces honest uncertainty estimates that depend on how much information the data provides at each test location. The marginal likelihood provides a principled basis for model comparison. The key computational challenge — intractability of the posterior integral — is solvable in closed form only for conjugate pairs. Gaussian-Gaussian is the main tractable case, which we now derive explicitly.
+The Bayesian framework replaces a point estimate with a full posterior distribution over **w**, propagates that uncertainty through to predictions, and produces honest uncertainty estimates that depend on how much information the data provides at each test location. The marginal likelihood provides a principled basis for model comparison. The key computational challenge — intractability of the posterior integral — is solvable in closed form only for conjugate pairs. Gaussian-Gaussian is the main tractable case, which we now derive explicitly.
 
 ---
 
 ## 5. Bayesian Linear Regression: Full Derivation
 
-**Roadmap.** This section derives the closed-form posterior and predictive distribution for the running example. The derivation has three parts: (1) completing the square to identify the Gaussian posterior, (2) reading off the posterior mean and covariance and connecting them back to MAP, and (3) marginalizing the posterior to get the predictive distribution, including the closed-form result for the integral of a product of two Gaussians. The key payoff is a predictive variance that is smallest near training data and grows with extrapolation distance.
+With the general framework in place, we now derive the closed-form posterior and predictive distribution for the running example. The derivation has three parts: completing the square to identify the Gaussian posterior, reading off the posterior mean and covariance and connecting them back to MAP, and marginalizing the posterior to get the predictive distribution. The key payoff is a predictive variance that is smallest near training data and grows with extrapolation distance.
 
 ### 5.1 Setup
 
@@ -333,7 +365,11 @@ $$\boxed{\mathbf{S}_N^{-1} = \alpha I + \beta \boldsymbol{\Phi}^T\boldsymbol{\Ph
 
 **Two key observations:**
 
-**1. The posterior mean equals the MAP estimate.** Recall from Section 3 that MAP under a Gaussian prior gives $\hat{\mathbf{w}}_{\text{MAP}} = (\boldsymbol{\Phi}^T\boldsymbol{\Phi} + \lambda I)^{-1}\boldsymbol{\Phi}^T\mathbf{y}$ with $\lambda = \sigma^2/\tau^2 = \alpha/\beta$. Substituting $\mathbf{S}_N^{-1} = \alpha I + \beta\boldsymbol{\Phi}^T\boldsymbol{\Phi}$ and $\mathbf{m}_N = \beta\mathbf{S}_N\boldsymbol{\Phi}^T\mathbf{y}$, these are identical up to rescaling by $\beta$. For a Gaussian distribution, the mode and mean coincide — so **MAP is Bayesian inference that keeps only the mean and discards the covariance $\mathbf{S}_N$**.
+**1. The posterior mean equals the MAP estimate — exactly.** Recall from Section 3 that MAP under a Gaussian prior gives $\hat{\mathbf{w}}_{\text{MAP}} = (\boldsymbol{\Phi}^T\boldsymbol{\Phi} + \lambda I)^{-1}\boldsymbol{\Phi}^T\mathbf{y}$ with $\lambda = \alpha/\beta$. The posterior mean is $\mathbf{m}_N = \beta\,\mathbf{S}_N\,\boldsymbol{\Phi}^T\mathbf{y} = \beta\,(\alpha I + \beta\boldsymbol{\Phi}^T\boldsymbol{\Phi})^{-1}\boldsymbol{\Phi}^T\mathbf{y}$. Factor $\beta$ out of the inverse (since $\alpha I + \beta\boldsymbol{\Phi}^T\boldsymbol{\Phi} = \beta(\frac{\alpha}{\beta}I + \boldsymbol{\Phi}^T\boldsymbol{\Phi})$):
+
+$$\mathbf{m}_N = \beta \cdot \frac{1}{\beta}\left(\frac{\alpha}{\beta}I + \boldsymbol{\Phi}^T\boldsymbol{\Phi}\right)^{-1}\boldsymbol{\Phi}^T\mathbf{y} = \left(\boldsymbol{\Phi}^T\boldsymbol{\Phi} + \lambda I\right)^{-1}\boldsymbol{\Phi}^T\mathbf{y} = \hat{\mathbf{w}}_{\text{MAP}}$$
+
+The $\beta$ in the numerator cancels with the $\beta$ pulled from the inverse — the two expressions are identical, not merely proportional. For a Gaussian, the mode and mean coincide, so this is guaranteed. The upshot: **MAP is Bayesian inference that keeps only the posterior mean and discards the covariance $\mathbf{S}_N$**.
 
 **2. The posterior covariance $\mathbf{S}_N$ encodes parameter uncertainty.** Its inverse, $\mathbf{S}_N^{-1} = \alpha I + \beta\boldsymbol{\Phi}^T\boldsymbol{\Phi}$, has two additive contributions: $\alpha I$ from the prior and $\beta\boldsymbol{\Phi}^T\boldsymbol{\Phi}$ from the data. Each new observation adds to $\boldsymbol{\Phi}^T\boldsymbol{\Phi}$, increasing $\mathbf{S}_N^{-1}$ and shrinking $\mathbf{S}_N$. As $N \to \infty$, the posterior concentrates tightly around the true **w** and parameter uncertainty vanishes.
 
@@ -348,6 +384,52 @@ $$\mathbf{m}_N = 10 \cdot \mathbf{S}_N \cdot \begin{bmatrix}3.5 \\ 1.3\end{bmatr
 As expected, $\mathbf{m}_N = \hat{\mathbf{w}}_{\text{MAP}}$. But now we also have posterior variances: $\text{Var}(w_0) = 1/31 \approx 0.032$ and $\text{Var}(w_1) = 1/21 \approx 0.048$. The slope is more uncertain than the intercept, which makes intuitive sense: slope is estimated from variation across inputs, and we only have 3 points.
 
 **Beyond the reading: sequential (online) Bayesian updating.** One of the most elegant consequences of conjugacy is that Bayesian inference is naturally *online*. After observing a first batch of data, the posterior $p(\mathbf{w} \mid \mathcal{D}_1) = \mathcal{N}(\mathbf{m}_1, \mathbf{S}_1)$ can serve as the prior for a second batch $\mathcal{D}_2$. Because the Gaussian family is closed under this update, applying Bayes' rule again produces $\mathcal{N}(\mathbf{m}_2, \mathbf{S}_2)$ — exactly the same posterior we would obtain from processing $\mathcal{D}_1 \cup \mathcal{D}_2$ jointly. In our running example, we could process the three data points one at a time: starting from the prior $\mathcal{N}(\mathbf{0}, I)$, each observation would tighten $\mathbf{S}_N$ and shift $\mathbf{m}_N$, converging to the same $\mathbf{m}_3 = [1.129,\; 0.619]^T$ we computed above. This property — sometimes called *Bayesian updating* — means that streaming data does not require reprocessing the full dataset; the sufficient statistics ($\mathbf{S}_N^{-1}$ and $\boldsymbol{\Phi}^T \mathbf{y}$) accumulate additively.
+
+The effect is best seen visually. The code below processes our three data points one at a time and plots the posterior over $(w_0, w_1)$ at each stage — the broad prior ellipse collapses to a tight concentration as evidence accumulates:
+
+```python
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.patches import Ellipse
+
+x_train = np.array([-1., 0., 1.])
+y_train = np.array([0.5, 1.2, 1.8])
+alpha, beta = 1.0, 10.0
+
+def plot_ellipse(ax, mean, cov, n_std=2, **kwargs):
+    vals, vecs = np.linalg.eigh(cov)
+    angle = np.degrees(np.arctan2(vecs[1, 1], vecs[0, 1]))
+    w, h = 2 * n_std * np.sqrt(vals)
+    ax.add_patch(Ellipse(mean, w, h, angle=angle, **kwargs))
+
+S_inv = alpha * np.eye(2)
+PhiT_y = np.zeros(2)
+
+fig, axes = plt.subplots(1, 4, figsize=(16, 4), sharex=True, sharey=True)
+titles = ['Prior', 'After $(x_1, y_1)$', 'After $(x_1, y_1),(x_2, y_2)$', 'After all 3']
+
+for i, ax in enumerate(axes):
+    S = np.linalg.inv(S_inv)
+    m = beta * S @ PhiT_y
+    plot_ellipse(ax, m, S, n_std=1, fill=False, ec='steelblue', lw=2)
+    plot_ellipse(ax, m, S, n_std=2, fill=True, fc='steelblue', alpha=0.12,
+                 ec='steelblue', lw=1, ls='--')
+    ax.plot(*m, 'ko', ms=5)
+    ax.set_xlim(-1.5, 2.5); ax.set_ylim(-2, 2)
+    ax.set_xlabel('$w_0$'); ax.set_title(titles[i]); ax.set_aspect('equal')
+    if i == 0: ax.set_ylabel('$w_1$')
+    if i < 3:
+        phi_i = np.array([1.0, x_train[i]])
+        S_inv += beta * np.outer(phi_i, phi_i)
+        PhiT_y += phi_i * y_train[i]
+
+plt.suptitle('Sequential Bayesian updating: posterior tightens as data arrives', y=1.03)
+plt.tight_layout()
+plt.savefig('sequential_updating.png', dpi=120, bbox_inches='tight')
+```
+
+![Sequential Bayesian updating](images/sequential_bayesian_updating.png)
+*Sequential Bayesian updating on the running example. The prior (left) is a broad circle centred at the origin. Each observed data point tightens the posterior ellipse and shifts its centre, converging to the final posterior $\mathcal{N}(\mathbf{m}_3, \mathbf{S}_3)$ (right) — identical to the batch result computed above. Generated for these notes.*
 
 ### 5.4 Predictive Distribution: Marginalizing Out w
 
@@ -427,19 +509,20 @@ plt.tight_layout()
 plt.savefig('bayesian_uncertainty_bands.png', dpi=120, bbox_inches='tight')
 ```
 
-[FIG:ORIGINAL — Bayesian linear regression predictive uncertainty: fitted line with two uncertainty bands overlaid — a narrow constant band (MLE/MAP, noise only) and a wider fan-shaped band (Bayesian, noise + parameter uncertainty) that is narrow within the training range x ∈ [-1,1] and widens substantially for extrapolation to x > 2. Training data shown as scatter points. Demonstrates the key advantage of the Bayesian predictive distribution over point-estimate approaches.]
+![Bayesian predictive uncertainty](images/bayesian_predictive_uncertainty.png)
+*Bayesian predictive uncertainty fans out with extrapolation. The constant orange band shows MLE/MAP uncertainty (noise only); the wider blue band adds parameter uncertainty from the Bayesian posterior. Within the training range the two nearly coincide; beyond it, the Bayesian band grows substantially — honest uncertainty that point estimates cannot provide. Generated for these notes.*
 
 **Why does variance grow?** The slope $w_1$ has posterior standard deviation $\sqrt{1/21} \approx 0.22$. When predicting at $x_* = 4$, a $\pm 0.22$ uncertainty in the slope translates to a $\pm 0.88$ uncertainty in the prediction — just from the slope alone. This is the extrapolation risk that linear regression practitioners intuitively fear, now made quantitative.
 
-**Beyond the reading:** The predictive variance decomposition — $\sigma^2_{\text{pred}} = \underbrace{\beta^{-1}}_{\text{aleatoric}} + \underbrace{\boldsymbol{\phi}_*^T \mathbf{S}_N \boldsymbol{\phi}_*}_{\text{epistemic}}$ — is the closed-form, tractable instance of a much more general idea. *Aleatoric uncertainty* is irreducible noise inherent to the target itself (e.g., a user segment with genuinely variable spend, regardless of how much data you have). *Epistemic uncertainty* is reducible uncertainty from not having seen enough data to pin down the model parameters (e.g., a rarely-observed user type for which the model's weights are poorly constrained). In Bayesian linear regression, both fall out analytically. For neural networks — where the posterior over weights is intractable — recovering this same decomposition requires approximate methods: MC Dropout, Deep Ensembles, or heteroscedastic output heads for the aleatoric component. The conceptual split is identical; only the machinery changes.
+**Beyond the reading:** The predictive variance decomposition — $\sigma^2_{\text{pred}} = \underbrace{\beta^{-1}}_{\text{aleatoric}} + \underbrace{\boldsymbol{\phi}_*^T \mathbf{S}_N \boldsymbol{\phi}_*}_{\text{epistemic}}$ — is the closed-form, tractable instance of a much more general idea. *Aleatoric uncertainty* is irreducible noise inherent to the target itself (e.g., a user segment with genuinely variable spend, regardless of how much data you have). *Epistemic uncertainty* is reducible uncertainty from not having seen enough data to pin down the model parameters (e.g., a rarely-observed user type for which the model's weights are poorly constrained). In Bayesian linear regression, both fall out analytically. For neural networks — where the posterior over weights is intractable — recovering this same decomposition requires approximate methods: MC Dropout, Deep Ensembles, or heteroscedastic output heads for the aleatoric component. The conceptual split is identical; only the machinery changes. See the *Uncertainty Estimation for Neural Networks* notes for the full treatment.
 
-**Section wrap-up.** The Bayesian posterior over **w** is a Gaussian with mean equal to the MAP estimate and covariance $\mathbf{S}_N$ that shrinks as more data arrives. MAP discards $\mathbf{S}_N$; the Bayesian approach carries it through to predictions. The payoff is a predictive variance that honestly reflects both irreducible noise and parameter uncertainty — growing where the model genuinely doesn't know, and tight where data is dense. This is the core advantage of the Bayesian approach over point estimates.
+The Bayesian posterior over **w** is a Gaussian with mean equal to the MAP estimate and covariance $\mathbf{S}_N$ that shrinks as more data arrives. MAP discards $\mathbf{S}_N$; the Bayesian approach carries it through to predictions. The payoff is a predictive variance that honestly reflects both irreducible noise and parameter uncertainty — growing where the model genuinely doesn't know, and tight where data is dense. This is the core advantage of the Bayesian approach over point estimates.
 
 ---
 
 ## 6. Advantages, Limitations, and When to Use Each Approach
 
-**Roadmap.** With all three approaches now derived and compared numerically, this section steps back to assess them as engineering choices. We first summarize the Bayesian approach's strengths and weaknesses, then give practical guidelines for when each approach is appropriate, and close with the key cost-benefit tradeoff.
+With all three approaches now derived and compared numerically, it is worth stepping back to assess them as engineering choices — what each approach buys, what it costs, and when the tradeoff favours one over the others.
 
 ### 6.1 Advantages of the Bayesian Approach
 
@@ -456,22 +539,22 @@ plt.savefig('bayesian_uncertainty_bands.png', dpi=120, bbox_inches='tight')
 ### 6.3 When to Use Each Approach
 
 **Prefer MLE when:**
-- $N$ is large relative to model complexity — the likelihood overwhelms any reasonable prior, and MAP $\to$ MLE asymptotically anyway.
+- $N$ is large relative to model complexity — the likelihood overwhelms any reasonable prior, and MAP $\to$ MLE asymptotically anyway. Example: fitting a 10-parameter linear model to $N = 100{,}000$ transaction records. The prior's effect on the estimate is negligible, and the added complexity is not worth it.
 - You genuinely have no prior knowledge and don't want to risk encoding a wrong prior.
 - You want the simplest, most interpretable pipeline with no additional hyperparameters.
 
 **Prefer MAP when:**
-- Data is limited relative to model complexity (small $N$, large parameter count).
+- Data is limited relative to model complexity (small $N$, large parameter count). Example: a clinical trial with $N = 30$ patients and $p = 200$ biomarkers will overfit badly under MLE; a sparsity-inducing Laplace prior (LASSO) encodes the domain knowledge that most biomarkers are irrelevant.
 - You have genuine prior knowledge, or principled reasons to prefer regularization (e.g., you expect sparse weights → Laplace prior / LASSO).
 - You are seeing overfitting symptoms and want regularization with a probabilistic interpretation for the choice of $\lambda$.
 
 **Prefer the full Bayesian approach when:**
-- You need calibrated uncertainty estimates — not just point predictions but honest error bars, especially in extrapolation regions.
+- You need calibrated uncertainty estimates — not just point predictions but honest error bars, especially in extrapolation regions. Example: a drug dosage model where predicting "100 mg $\pm$ 5" versus "100 mg $\pm$ 40" changes the clinical decision entirely — the Bayesian predictive interval reflects whether the model has seen patients like this one before.
 - The model will be used for decision-making under uncertainty, where overconfidence has real costs.
 - You are doing model comparison (e.g., selecting polynomial degree) and want a principled criterion beyond cross-validation — the marginal likelihood provides this.
 - The model is conjugate (e.g., Bayesian linear regression, Gaussian processes) so the posterior is tractable.
 
-**Section wrap-up.** MLE is fast and requires no prior design; MAP adds one hyperparameter ($\lambda$, or equivalently $\tau^2$) but still runs as fast; full Bayesian inference may require expensive approximations and requires careful prior design. The gains — calibrated uncertainty and honest extrapolation behavior — are most pronounced in small-$N$, high-complexity settings. The three approaches form a spectrum from simplicity to expressiveness: MLE ignores parameter uncertainty entirely, MAP uses it to regularize but then discards it, and the Bayesian approach carries it through to every prediction.
+In short, MLE is fast and requires no prior design; MAP adds one hyperparameter ($\lambda$, or equivalently $\tau^2$) but still runs as fast; full Bayesian inference may require expensive approximations and requires careful prior design. The gains — calibrated uncertainty and honest extrapolation behavior — are most pronounced in small-$N$, high-complexity settings. The three approaches form a spectrum from simplicity to expressiveness: MLE ignores parameter uncertainty entirely, MAP uses it to regularize but then discards it, and the Bayesian approach carries it through to every prediction.
 
 ---
 
@@ -491,7 +574,7 @@ For the running example at $x_* = 2$ (mild extrapolation):
 
 MLE and MAP give identical, constant uncertainty regardless of where we predict. Bayesian inference produces larger, more honest uncertainty at this extrapolation point — and smaller uncertainty near the training center. As $N \to \infty$, the posterior concentrates, $\boldsymbol{\phi}_*^T \mathbf{S}_N \boldsymbol{\phi}_* \to 0$, and all three approaches converge. The Bayesian approach earns its cost in the small-$N$, high-complexity regime where uncertainty about **w** is the dominant source of prediction error.
 
-**Document wrap-up.** The three approaches — MLE, MAP, and full Bayesian inference — are not competing philosophies but points on a single continuum. MLE maximizes the likelihood alone; MAP adds a prior term to that objective; the Bayesian approach keeps the entire posterior that MAP collapses to a point. The algebraic thread connecting them is clean: MLE = OLS, MAP = ridge (or LASSO), and the Bayesian posterior mean equals the MAP estimate with the posterior covariance as a bonus. The practical thread is equally clear: when data is plentiful, all three converge and MLE's simplicity wins; when data is scarce, the prior matters and honest uncertainty quantification — the Bayesian approach's defining advantage — becomes the difference between a prediction you can trust and one you cannot.
+The three approaches — MLE, MAP, and full Bayesian inference — are not competing philosophies but points on a single continuum. MLE maximizes the likelihood alone; MAP adds a prior term to that objective; the Bayesian approach keeps the entire posterior that MAP collapses to a point. The algebraic thread connecting them is clean: MLE = OLS, MAP = ridge (or LASSO), and the Bayesian posterior mean equals the MAP estimate with the posterior covariance as a bonus. The practical thread is equally clear: when data is plentiful, all three converge and MLE's simplicity wins; when data is scarce, the prior matters and honest uncertainty quantification — the Bayesian approach's defining advantage — becomes the difference between a prediction you can trust and one you cannot.
 
 ---
 
