@@ -125,4 +125,12 @@ Do not resolve figure tags until the student explicitly asks (e.g. "let's resolv
 2. **Compile remaining tags.** Present the student with a single list of all unresolved figures — all `[FIG:READING]` tags (which require screenshots from the source) and any `[FIG:ORIGINAL]` that couldn't be found — and ask the student to save them into the `images/` folder.
 3. **Finalize.** Once the student confirms the files are in `images/`, rename each to a descriptive `snake_case` filename, replace its placeholder tag with a markdown image, and add a caption.
 
-**File conventions.** Each topic folder has an `images/` subfolder. All figures are embedded using relative paths (`![caption](images/filename.png)`) and must have a one-sentence italic caption stating what the figure shows and attributing its source.
+**File conventions.** Each topic folder has an `images/` subfolder. All figures use HTML `<img>` tags at a uniform width for visual consistency, followed by a numbered italic caption on the next line:
+
+```html
+<img src="images/descriptive_snake_case_name.png" width="680">
+
+*Fig. N: One-sentence description of what the figure shows. [Source attribution]*
+```
+
+Use `width="680"` as the default for all figures. Number figures sequentially within each document (Fig. 1, Fig. 2, …). The caption must state what the figure shows and attribute its source. Do not use the Markdown `![alt](path)` syntax for figures — the HTML tag ensures consistent sizing across all images in the document.
