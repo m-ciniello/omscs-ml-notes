@@ -506,11 +506,13 @@ Laplacian Eigenmaps (Belkin and Niyogi, 2003) takes a different approach. Instea
 
 ### 8.1 The Core Objective
 
-**What do we want from an embedding?** At minimum: if $x_i$ and $x_j$ are close in the original space, their embeddings $y_i$ and $y_j$ should also be close. We can formalize this as the objective:
+**What do we want from an embedding?** At minimum: if $x_i$ and $x_j$ are close in the original space, their embeddings should also be close. Start with the 1D case: assign each data point a single real number $f_i \in \mathbb{R}$. Given a weight matrix $W$ where $W_{ij}$ is large when $x_i$ and $x_j$ are close (and zero when they are far), we want to find the assignment that minimizes:
 
-$$\min_{f: \{x_i\} \to \mathbb{R}} \sum_{i,j} W_{ij}(f_i - f_j)^2$$
+$$\min_{f \in \mathbb{R}^n} \sum_{i,j} W_{ij}(f_i - f_j)^2$$
 
-where $W_{ij}$ is the weight between points $i$ and $j$ — large if they are close, small or zero if they are far. This penalizes placing nearby points far apart in the embedding. We want to minimize this over all (non-trivial) embedding functions $f$.
+The sum ranges over all ordered pairs $i, j = 1, \ldots, n$ (equivalently $\sum_i \sum_j$). Here $f = (f_1, f_2, \ldots, f_n)$ is just a vector of $n$ real numbers — one per data point — and we are searching for the best placement of all $n$ points on a number line. The objective penalizes placing nearby points (high $W_{ij}$) far apart: a large weight amplifies the cost of a large $(f_i - f_j)^2$.
+
+For a $k$-dimensional embedding, we solve this $k$ times to get $k$ coordinates per point. Each solution gives one column of the embedding matrix $Y \in \mathbb{R}^{n \times k}$, where row $i$ is the embedding $y_i$ of point $x_i$.
 
 The matrix structure encoding this objective is the **graph Laplacian**.
 
@@ -520,6 +522,12 @@ The matrix structure encoding this objective is the **graph Laplacian**.
 
 - **Degree matrix** $D$: a diagonal matrix with $D_{ii} = \sum_j W_{ij}$ (the sum of all edge weights incident to node $i$).
 - **Graph Laplacian** $L = D - W$.
+
+**Intuition: what does $L$ do to a vector?** Multiply $L$ by any vector $f$ and look at the $i$-th entry:
+
+$$(Lf)_i = D_{ii}f_i - \sum_j W_{ij}f_j = \sum_j W_{ij}(f_i - f_j)$$
+
+This is a weighted sum of how much point $i$'s value differs from each of its neighbors. If $f_i$ equals the weighted average of its neighbors, $(Lf)_i = 0$; if it deviates significantly, $(Lf)_i$ is large. In other words, $L$ is a **smoothness detector** — it measures how much a function varies across the graph. This is a discrete analogue of the Laplacian operator $\nabla^2$ from calculus, which is why it shares the name.
 
 **Key identity.** For any vector $f \in \mathbb{R}^n$:
 
