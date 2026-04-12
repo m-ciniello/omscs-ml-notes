@@ -24,7 +24,35 @@ Before worrying about what can go wrong with a trained model, we need to underst
 
 We assume data is drawn from some joint distribution $p(\mathbf{x}, t)$. For a given input $\mathbf{x}$, the target $t$ is not deterministic: it is drawn from the conditional $p(t \mid \mathbf{x})$. In the classic example, the true relationship might be $t = \sin(2\pi x) + \varepsilon$ where $\varepsilon \sim \mathcal{N}(0, \beta^{-1})$ — the target is the underlying signal plus irreducible noise.
 
-[FIG:ORIGINAL — Joint distribution p(x,t) for the sinusoidal regression example, showing the conditional p(t|x) as a Gaussian slice at a fixed x, the underlying true function sin(2πx), the model prediction y(x), and the residual between y(x) and the conditional mean E[t|x]. Similar to Bishop Figure 1.28.]
+```python
+import numpy as np, matplotlib.pyplot as plt
+from scipy.stats import norm
+
+x = np.linspace(0, 1, 300)
+truth = np.sin(2 * np.pi * x)
+y_model = 0.8 * np.sin(2 * np.pi * x) + 0.15 * np.cos(4 * np.pi * x) - 0.1
+
+fig, ax = plt.subplots(figsize=(9, 5))
+ax.plot(x, truth, 'k-', lw=2, label=r'$\mathbb{E}[t \mid x] = \sin(2\pi x)$')
+ax.plot(x, y_model, 'b--', lw=1.5, label=r'model $y(x)$')
+for x0 in [0.25, 0.5, 0.75]:
+    mu = np.sin(2 * np.pi * x0)
+    t_vals = np.linspace(mu - 0.8, mu + 0.8, 100)
+    density = norm.pdf(t_vals, mu, 0.25)
+    ax.fill_betweenx(t_vals, x0, x0 + density * 0.08, alpha=0.35, color='orange')
+    ax.plot(x0 + density * 0.08, t_vals, color='orange', lw=1)
+    y0 = 0.8 * np.sin(2 * np.pi * x0) + 0.15 * np.cos(4 * np.pi * x0) - 0.1
+    ax.annotate('', xy=(x0, y0), xytext=(x0, mu),
+                arrowprops=dict(arrowstyle='<->', color='red', lw=1.5))
+    ax.text(x0 + 0.015, (mu + y0) / 2, r'$y - \mathbb{E}[t|x]$', fontsize=8, color='red')
+ax.set(xlabel='$x$', ylabel='$t$', title=r'Regression under squared loss: $p(t \mid x)$ and model residuals')
+ax.legend(loc='upper right'); plt.tight_layout()
+plt.savefig('images/conditional_distribution_slices.png', dpi=150, bbox_inches='tight')
+```
+
+<img src="images/conditional_distribution_slices.png" width="680">
+
+*Fig. 1: The sinusoidal regression setup. The black curve is the true regression function $\mathbb{E}[t \mid x] = \sin(2\pi x)$. At three input locations, the orange shaded bells show the conditional distribution $p(t \mid x) = \mathcal{N}(\sin(2\pi x), \sigma^2)$. The blue dashed curve is a hypothetical model prediction $y(x)$, and the red arrows mark the residual $y(x) - \mathbb{E}[t \mid x]$ that the model could, in principle, eliminate. The spread of each bell — the irreducible noise — cannot be reduced by any model.*
 
 The **regression loss function** for a prediction $y(\mathbf{x})$ at a given point $(\mathbf{x}, t)$ is:
 
@@ -74,25 +102,25 @@ With the optimal predictor $y^*(\mathbf{x}) = \mathbb{E}[t \mid \mathbf{x}]$ in 
 
 The key move is to insert and subtract the optimal predictor inside the squared loss. Starting from the expected loss:
 
-$$\mathbb{E}[L] = \iint (y(\mathbf{x}) - t)^2\, p(\mathbf{x}, t)\, d\mathbf{x}\, dt$$
+$$\mathbb{E}[L] = \iint (t - y(\mathbf{x}))^2\, p(\mathbf{x}, t)\, d\mathbf{x}\, dt$$
 
 We add and subtract $\mathbb{E}[t \mid \mathbf{x}]$ inside the square:
 
-$$= \iint \big(y(\mathbf{x}) - \mathbb{E}[t \mid \mathbf{x}] + \mathbb{E}[t \mid \mathbf{x}] - t\big)^2\, p(\mathbf{x}, t)\, d\mathbf{x}\, dt$$
+$$= \iint \big(t - \mathbb{E}[t \mid \mathbf{x}] + \mathbb{E}[t \mid \mathbf{x}] - y(\mathbf{x})\big)^2\, p(\mathbf{x}, t)\, d\mathbf{x}\, dt$$
 
-Let $A = y(\mathbf{x}) - \mathbb{E}[t \mid \mathbf{x}]$ and $B = \mathbb{E}[t \mid \mathbf{x}] - t$. Expanding $(A + B)^2 = A^2 + 2AB + B^2$:
+Let $A = t - \mathbb{E}[t \mid \mathbf{x}]$ and $B = \mathbb{E}[t \mid \mathbf{x}] - y(\mathbf{x})$. Expanding $(A + B)^2 = A^2 + 2AB + B^2$:
 
 $$= \iint A^2\, p(\mathbf{x}, t)\, d\mathbf{x}\, dt + 2\iint AB\, p(\mathbf{x}, t)\, d\mathbf{x}\, dt + \iint B^2\, p(\mathbf{x}, t)\, d\mathbf{x}\, dt$$
 
 ### 3.2 The Cross-Term Vanishes
 
-The cross-term is $2\iint (y(\mathbf{x}) - \mathbb{E}[t \mid \mathbf{x}])(\mathbb{E}[t \mid \mathbf{x}] - t)\, p(\mathbf{x}, t)\, d\mathbf{x}\, dt$. Consider the inner integral over $t$ at a fixed $\mathbf{x}$. The factor $(y(\mathbf{x}) - \mathbb{E}[t \mid \mathbf{x}])$ does not depend on $t$ (both $y(\mathbf{x})$ and $\mathbb{E}[t \mid \mathbf{x}]$ are functions of $\mathbf{x}$ alone), so it pulls out:
+The cross-term is $2\iint (t - \mathbb{E}[t \mid \mathbf{x}])(\mathbb{E}[t \mid \mathbf{x}] - y(\mathbf{x}))\, p(\mathbf{x}, t)\, d\mathbf{x}\, dt$. Consider the inner integral over $t$ at a fixed $\mathbf{x}$. The factor $(\mathbb{E}[t \mid \mathbf{x}] - y(\mathbf{x}))$ does not depend on $t$ (both $y(\mathbf{x})$ and $\mathbb{E}[t \mid \mathbf{x}]$ are functions of $\mathbf{x}$ alone), so it pulls out:
 
-$$(y(\mathbf{x}) - \mathbb{E}[t \mid \mathbf{x}]) \int (\mathbb{E}[t \mid \mathbf{x}] - t)\, p(t \mid \mathbf{x})\, dt$$
+$$(\mathbb{E}[t \mid \mathbf{x}] - y(\mathbf{x})) \int (t - \mathbb{E}[t \mid \mathbf{x}])\, p(t \mid \mathbf{x})\, dt$$
 
 The remaining integral is:
 
-$$\int \mathbb{E}[t \mid \mathbf{x}]\, p(t \mid \mathbf{x})\, dt - \int t\, p(t \mid \mathbf{x})\, dt = \mathbb{E}[t \mid \mathbf{x}] \cdot 1 - \mathbb{E}[t \mid \mathbf{x}] = 0$$
+$$\int t\, p(t \mid \mathbf{x})\, dt - \int \mathbb{E}[t \mid \mathbf{x}]\, p(t \mid \mathbf{x})\, dt = \mathbb{E}[t \mid \mathbf{x}] - \mathbb{E}[t \mid \mathbf{x}] \cdot 1 = 0$$
 
 The cross-term vanishes because $\mathbb{E}[t \mid \mathbf{x}]$ is, by definition, the mean of $t$ under $p(t \mid \mathbf{x})$ — so $t - \mathbb{E}[t \mid \mathbf{x}]$ has zero expected value. This is a Pythagorean-theorem-style orthogonality: the deviation of our predictor from the optimal one is "perpendicular" (in the $L^2$ sense) to the noise.
 
@@ -100,21 +128,21 @@ The cross-term vanishes because $\mathbb{E}[t \mid \mathbf{x}]$ is, by definitio
 
 With the cross-term gone, we are left with the $A^2$ and $B^2$ integrals. Each simplifies by integrating out $t$.
 
-**The $A^2$ term.** Since $A = y(\mathbf{x}) - \mathbb{E}[t \mid \mathbf{x}]$ does not depend on $t$:
+**The $A^2$ term (noise).** Here $A = t - \mathbb{E}[t \mid \mathbf{x}]$ *does* depend on $t$, so the inner integral does not collapse trivially:
 
-$$\iint A^2\, p(\mathbf{x}, t)\, d\mathbf{x}\, dt = \int \big(y(\mathbf{x}) - \mathbb{E}[t \mid \mathbf{x}]\big)^2 \underbrace{\left[\int p(t \mid \mathbf{x})\, dt\right]}_{= 1}\, p(\mathbf{x})\, d\mathbf{x} = \int \big(y(\mathbf{x}) - \mathbb{E}[t \mid \mathbf{x}]\big)^2\, p(\mathbf{x})\, d\mathbf{x}$$
+$$\iint A^2\, p(\mathbf{x}, t)\, d\mathbf{x}\, dt = \int \left[\int \big(t - \mathbb{E}[t \mid \mathbf{x}]\big)^2\, p(t \mid \mathbf{x})\, dt\right] p(\mathbf{x})\, d\mathbf{x}$$
 
-We factored $p(\mathbf{x}, t) = p(t \mid \mathbf{x})\, p(\mathbf{x})$, then used the fact that $A^2$ is constant in $t$ to collapse the inner integral to 1.
+The bracketed inner integral is exactly the definition of the conditional variance $\text{var}[t \mid \mathbf{x}] = \mathbb{E}_t\big[(t - \mathbb{E}[t \mid \mathbf{x}])^2 \mid \mathbf{x}\big]$. So the $A^2$ term becomes $\int \text{var}[t \mid \mathbf{x}]\, p(\mathbf{x})\, d\mathbf{x}$.
 
-**The $B^2$ term.** Here $B = \mathbb{E}[t \mid \mathbf{x}] - t$ *does* depend on $t$, so the inner integral does not collapse trivially:
+**The $B^2$ term (model error).** Since $B = \mathbb{E}[t \mid \mathbf{x}] - y(\mathbf{x})$ does not depend on $t$:
 
-$$\iint B^2\, p(\mathbf{x}, t)\, d\mathbf{x}\, dt = \int \left[\int \big(\mathbb{E}[t \mid \mathbf{x}] - t\big)^2\, p(t \mid \mathbf{x})\, dt\right] p(\mathbf{x})\, d\mathbf{x}$$
+$$\iint B^2\, p(\mathbf{x}, t)\, d\mathbf{x}\, dt = \int \big(y(\mathbf{x}) - \mathbb{E}[t \mid \mathbf{x}]\big)^2 \underbrace{\left[\int p(t \mid \mathbf{x})\, dt\right]}_{= 1}\, p(\mathbf{x})\, d\mathbf{x} = \int \big(y(\mathbf{x}) - \mathbb{E}[t \mid \mathbf{x}]\big)^2\, p(\mathbf{x})\, d\mathbf{x}$$
 
-The bracketed inner integral is exactly the definition of the conditional variance $\text{var}[t \mid \mathbf{x}] = \mathbb{E}_t\big[(t - \mathbb{E}[t \mid \mathbf{x}])^2 \mid \mathbf{x}\big]$. So the $B^2$ term becomes $\int \text{var}[t \mid \mathbf{x}]\, p(\mathbf{x})\, d\mathbf{x}$.
+We factored $p(\mathbf{x}, t) = p(t \mid \mathbf{x})\, p(\mathbf{x})$, then used the fact that $B^2$ is constant in $t$ to collapse the inner integral to 1.
 
 Combining:
 
-$$\boxed{\mathbb{E}[L] = \int \big(y(\mathbf{x}) - \mathbb{E}[t \mid \mathbf{x}]\big)^2 p(\mathbf{x})\, d\mathbf{x} \;+\; \int \text{var}[t \mid \mathbf{x}]\, p(\mathbf{x})\, d\mathbf{x}}$$
+$$\boxed{\mathbb{E}[L] = \underbrace{\int \big(y(\mathbf{x}) - \mathbb{E}[t \mid \mathbf{x}]\big)^2 p(\mathbf{x})\, d\mathbf{x}}_{\text{model error}} \;+\; \underbrace{\int \text{var}[t \mid \mathbf{x}]\, p(\mathbf{x})\, d\mathbf{x}}_{\text{intrinsic noise}}}$$
 
 Each term deserves careful interpretation:
 
@@ -200,9 +228,9 @@ The second term (noise) does not depend on the predictor or the training data �
 
 $$\mathbb{E}_{\mathcal{D}}[\mathbb{E}[L]] = \int \underbrace{\mathbb{E}_{\mathcal{D}}\big[(y_{\mathcal{D}}(\mathbf{x}) - \mathbb{E}[t \mid \mathbf{x}])^2\big]}_{= \text{variance}(\mathbf{x}) + (\text{bias}(\mathbf{x}))^2}\, p(\mathbf{x})\, d\mathbf{x} + \int \text{var}[t \mid \mathbf{x}]\, p(\mathbf{x})\, d\mathbf{x}$$
 
-The model error at each $\mathbf{x}$ splits into bias$^2$ + variance (Section 5.1). Distributing the integral gives the expected loss of a learning algorithm, averaged over both test data and training data:
+The model error at each $\mathbf{x}$ splits into bias$^2$ + variance (Section 5.1). Distributing the integral gives the expected loss of a learning algorithm, averaged over both test data and training data (the two expectations commute by Fubini's theorem):
 
-$$\boxed{\mathbb{E}\big[\mathbb{E}_{\mathcal{D}}[L]\big] = \underbrace{\int \big(\bar{y}(\mathbf{x}) - \mathbb{E}[t \mid \mathbf{x}]\big)^2 p(\mathbf{x})\, d\mathbf{x}}_{\text{(bias)}^2} + \underbrace{\int \mathbb{E}_{\mathcal{D}}\big[(y_{\mathcal{D}}(\mathbf{x}) - \bar{y}(\mathbf{x}))^2\big]\, p(\mathbf{x})\, d\mathbf{x}}_{\text{variance}} + \underbrace{\int \text{var}[t \mid \mathbf{x}]\, p(\mathbf{x})\, d\mathbf{x}}_{\text{noise}}}$$
+$$\boxed{\mathbb{E}_{\mathcal{D}}[\mathbb{E}[L]] = \underbrace{\int \big(\bar{y}(\mathbf{x}) - \mathbb{E}[t \mid \mathbf{x}]\big)^2 p(\mathbf{x})\, d\mathbf{x}}_{\text{(bias)}^2} + \underbrace{\int \mathbb{E}_{\mathcal{D}}\big[(y_{\mathcal{D}}(\mathbf{x}) - \bar{y}(\mathbf{x}))^2\big]\, p(\mathbf{x})\, d\mathbf{x}}_{\text{variance}} + \underbrace{\int \text{var}[t \mid \mathbf{x}]\, p(\mathbf{x})\, d\mathbf{x}}_{\text{noise}}}$$
 
 ### 5.3 What Each Term Means
 
@@ -221,6 +249,8 @@ The intuition is best summarized as a table of the two extremes:
 
 The optimal model complexity sits between these extremes, at the point where the sum bias$^2$ + variance is minimized.
 
+**A caveat on loss function.** The clean additive decomposition $(\text{bias})^2 + \text{variance} + \text{noise}$ is specific to squared loss. Under 0-1 classification loss, bias and variance still matter conceptually, but they interact *multiplicatively* rather than additively — high bias can actually *mask* variance, and the decomposition does not yield a simple sum (Friedman, 1997). The intuition that overly simple models underfit and overly complex models overfit still holds, but the precise bookkeeping is messier. Throughout these notes, all results assume squared loss.
+
 ### 5.4 Why Bias and Variance Trade Off
 
 The tradeoff is not a mathematical inevitability — it is an empirical regularity with a clear mechanistic explanation. When you increase model complexity (e.g., use more basis functions, reduce regularization):
@@ -232,17 +262,19 @@ Conversely, reducing complexity (e.g., using fewer basis functions, increasing r
 
 There are rare cases where both bias and variance can be reduced simultaneously (e.g., ensemble methods like bagging reduce variance without increasing bias, and boosting reduces bias without increasing variance much). But within a single model class parameterized by a complexity parameter, the tradeoff holds.
 
+**The double descent caveat.** The classical U-shaped curve assumes that test error increases monotonically once model complexity exceeds the "sweet spot." Recent work (Belkin et al., 2019) shows that this picture is incomplete in the **overparameterized regime** — when the number of parameters $P$ greatly exceeds the number of training points $N$. In this regime, test error can *decrease again* after an initial peak near the interpolation threshold ($P \approx N$), producing a "double descent" curve rather than a simple U. The mechanism, viewed through the bias-variance lens, is that the variance term spikes sharply at the interpolation threshold (where the model has just enough capacity to fit the training data exactly, making it maximally sensitive to noise) but then falls off as $P/N$ grows further — the model finds increasingly smooth interpolants among the many that fit the data perfectly. This phenomenon is well-documented in deep neural networks, random forests, and even linear models, and it explains why modern overparameterized models can perform well despite having far more parameters than classical theory would recommend.
+
 ### 5.5 A Tiny Numerical Example
 
-To make the decomposition tangible, consider the simplest possible case. We have a true regression function $h(x) = 2x$ with noise variance $\sigma^2 = 1$. We train a constant model $y_{\mathcal{D}} = c$ (the sample mean of the targets) on datasets of size $N = 1$, and evaluate at a single point $x = 3$.
+To make the decomposition tangible, consider the simplest possible case. The regression function is $\mathbb{E}[t \mid x] = 2x$ with noise variance $\sigma^2 = 1$. We train on datasets of size $N = 1$ and evaluate at a single point $x = 3$.
 
-With $N = 1$, each "dataset" is a single observation $t = 2x_{\text{train}} + \varepsilon$, and our constant model just outputs $y_{\mathcal{D}} = t$. To keep things concrete, suppose the training input is always $x_{\text{train}} = 1$ (so we are studying the algorithm's behaviour at a fixed training location). Then $y_{\mathcal{D}} = 2 + \varepsilon$ where $\varepsilon \sim \mathcal{N}(0, 1)$.
+Our learning algorithm is the simplest imaginable: predict the single observed target value for all inputs (a constant predictor equal to the training output), ignoring the test input entirely. With $N = 1$, each "dataset" is a single observation $t = 2x_{\text{train}} + \varepsilon$, and our predictor outputs $y_{\mathcal{D}} = t$. To keep things concrete, suppose the training input is always $x_{\text{train}} = 1$ (so we are studying the algorithm's behaviour at a fixed training location). Then $y_{\mathcal{D}} = 2 + \varepsilon$ where $\varepsilon \sim \mathcal{N}(0, 1)$.
 
-At the test point $x = 3$, the true regression value is $h(3) = 6$.
+At the test point $x = 3$, the true regression value is $\mathbb{E}[t \mid x=3] = 6$.
 
 **Average predictor:** $\bar{y} = \mathbb{E}_{\mathcal{D}}[y_{\mathcal{D}}] = \mathbb{E}[2 + \varepsilon] = 2$.
 
-**Bias:** $\bar{y} - h(3) = 2 - 6 = -4$, so $(\text{bias})^2 = 16$. The constant model trained at $x=1$ is systematically wrong at $x=3$.
+**Bias:** $\bar{y} - \mathbb{E}[t \mid x=3] = 2 - 6 = -4$, so $(\text{bias})^2 = 16$. The constant predictor trained at $x=1$ is systematically wrong at $x=3$ — it has no way to account for the different input location.
 
 **Variance:** $\mathbb{E}_{\mathcal{D}}[(y_{\mathcal{D}} - \bar{y})^2] = \mathbb{E}[\varepsilon^2] = \sigma^2 = 1$. Different training datasets cause the prediction to scatter by $\pm 1$ around the mean.
 
@@ -262,7 +294,7 @@ The bias-variance tradeoff is abstract without a concrete demonstration. This se
 
 **True data-generating process:**
 
-$$t = \sin(2\pi x) + \varepsilon, \qquad x \sim U(0, 1), \quad \varepsilon \sim \mathcal{N}(0, \alpha^{-1})$$
+$$t = \sin(2\pi x) + \varepsilon, \qquad x \sim U(0, 1), \quad \varepsilon \sim \mathcal{N}(0, \beta^{-1})$$
 
 The regression function is $\mathbb{E}[t \mid x] = \sin(2\pi x)$.
 
@@ -295,33 +327,68 @@ With little penalty, the model is nearly free to use all 24 basis functions to c
 
 The regularizer is strong enough to suppress noise-driven oscillations but weak enough to let the model capture the sine wave. The individual fits $y^{(\ell)}(x)$ show moderate spread around an average that tracks the truth well. **Both bias and variance are moderate**, and their sum is minimized.
 
-[FIG:READING — Figure 3.5 from Bishop: grid of plots showing L individual predictors (red curves) on the left and the average predictor $\bar{y}(x)$ (green) vs. truth (dark) on the right, for three values of $\ln\lambda$. Top row: $\ln\lambda = 2.6$ (underfitting); middle: $\ln\lambda = -0.31$ (balanced); bottom: $\ln\lambda = -2.4$ (overfitting).]
+```python
+import numpy as np, matplotlib.pyplot as plt
+
+rng = np.random.default_rng(42)
+L, N, M, noise_std = 100, 25, 24, 0.3
+x_eval, centres = np.linspace(0, 1, 200), np.linspace(0, 1, M)
+truth = np.sin(2 * np.pi * x_eval)
+basis = lambda x: np.exp(-0.5 * ((x[:, None] - centres) / (1.0 / M)) ** 2)
+Phi_eval = basis(x_eval)
+ln_lams = [2.6, -0.31, -2.4]
+labels = [r'$\ln\lambda=2.6$ (underfit)', r'$\ln\lambda=-0.31$ (balanced)', r'$\ln\lambda=-2.4$ (overfit)']
+
+fig, axes = plt.subplots(3, 2, figsize=(11, 10), sharex=True, sharey=True)
+for row, (ln_l, lab) in enumerate(zip(ln_lams, labels)):
+    lam, preds = np.exp(ln_l), np.zeros((L, 200))
+    for ell in range(L):
+        x_tr = rng.uniform(0, 1, N)
+        t_tr = np.sin(2 * np.pi * x_tr) + rng.normal(0, noise_std, N)
+        P = basis(x_tr)
+        preds[ell] = Phi_eval @ np.linalg.solve(P.T @ P + lam * np.eye(M), P.T @ t_tr)
+    y_bar = preds.mean(axis=0)
+    for ell in range(20):
+        axes[row, 0].plot(x_eval, preds[ell], 'r-', alpha=0.25, lw=0.7)
+    axes[row, 0].plot(x_eval, truth, 'k-', lw=1.5)
+    axes[row, 0].set_ylabel(lab)
+    axes[row, 1].plot(x_eval, truth, 'k-', lw=1.5, label='truth')
+    axes[row, 1].plot(x_eval, y_bar, 'g-', lw=2, label=r'$\bar{y}(x)$')
+    axes[row, 1].legend(loc='upper right', fontsize=8)
+axes[0, 0].set_title('20 individual fits'); axes[0, 1].set_title('Average predictor')
+for ax in axes[2]: ax.set_xlabel('$x$')
+for ax in axes.flat: ax.set_ylim(-1.5, 1.5)
+plt.tight_layout()
+plt.savefig('images/individual_predictors_three_regimes.png', dpi=150, bbox_inches='tight')
+```
+
+<img src="images/individual_predictors_three_regimes.png" width="680">
+
+*Fig. 2: Regularized basis function regression across three regimes (reproducing Bishop Figure 3.5). Left column: 20 individual fits (red) from independent datasets, overlaid on the truth (black). Right column: the average predictor $\bar{y}(x)$ (green) vs. truth (black). Top: heavy regularization ($\ln\lambda = 2.6$) — low variance, high bias. Middle: balanced ($\ln\lambda = -0.31$). Bottom: light regularization ($\ln\lambda = -2.4$) — low bias, high variance.*
 
 ### 6.3 Estimating Bias and Variance Empirically
 
-Given $L$ datasets, $N$ evaluation points $\{x_1, \ldots, x_N\}$ (drawn from $p(x)$), and $L$ fitted predictors $y^{(1)}, \ldots, y^{(L)}$, we can estimate the bias and variance terms numerically.
+Given $L$ datasets, $K$ evaluation points $\{x_1, \ldots, x_K\}$ (drawn from $p(x)$), and $L$ fitted predictors $y^{(1)}, \ldots, y^{(L)}$, we can estimate the bias and variance terms numerically.
 
 **Average predictor at each evaluation point:**
 
-$$\bar{y}(x_n) = \frac{1}{L}\sum_{\ell=1}^{L} y^{(\ell)}(x_n)$$
+$$\bar{y}(x_k) = \frac{1}{L}\sum_{\ell=1}^{L} y^{(\ell)}(x_k)$$
 
 **Bias squared** (approximating the integral $\int (\bar{y}(x) - \mathbb{E}[t \mid x])^2\, p(x)\, dx$ by a sample average):
 
-$$(\text{bias})^2 \approx \frac{1}{N}\sum_{n=1}^{N}\big(\bar{y}(x_n) - \mathbb{E}[t \mid x_n]\big)^2$$
+$$(\text{bias})^2 \approx \frac{1}{K}\sum_{k=1}^{K}\big(\bar{y}(x_k) - \mathbb{E}[t \mid x_k]\big)^2$$
 
-In our example, $\mathbb{E}[t \mid x_n] = \sin(2\pi x_n)$ is known, so this can be computed exactly.
+In our example, $\mathbb{E}[t \mid x_k] = \sin(2\pi x_k)$ is known, so this can be computed exactly.
 
 **Variance** (approximating $\int \mathbb{E}_{\mathcal{D}}[(y_{\mathcal{D}}(x) - \bar{y}(x))^2]\, p(x)\, dx$):
 
-$$\text{variance} \approx \frac{1}{N}\sum_{n=1}^{N} \frac{1}{L}\sum_{\ell=1}^{L}\big(y^{(\ell)}(x_n) - \bar{y}(x_n)\big)^2$$
+$$\text{variance} \approx \frac{1}{K}\sum_{k=1}^{K} \frac{1}{L}\sum_{\ell=1}^{L}\big(y^{(\ell)}(x_k) - \bar{y}(x_k)\big)^2$$
 
 The outer average is over evaluation points (approximating the integral over $p(x)$); the inner average is over datasets (approximating $\mathbb{E}_{\mathcal{D}}$).
 
 ### 6.4 The Tradeoff Curve
 
-Plotting bias$^2$, variance, and their sum as functions of $\ln\lambda$ reveals the classic U-shaped tradeoff:
-
-[FIG:READING — Figure 3.6 from Bishop: bias-variance decomposition plot showing (bias)² (blue), variance (red), (bias)² + variance (magenta), and test error (black) as functions of $\ln\lambda$. The test error has a U-shape with minimum at an intermediate $\lambda$.]
+Plotting bias$^2$, variance, and their sum as functions of $\ln\lambda$ reveals the classic U-shaped tradeoff. The code in Section 6.5 generates this plot; the result is shown below it.
 
 Reading the plot from left to right ($\ln\lambda$ increasing, i.e., regularization getting stronger):
 
@@ -336,68 +403,44 @@ The gap between the test error curve and the (bias)$^2$ + variance curve is exac
 The following code runs the full experiment: generates $L$ datasets from the sinusoidal truth, fits regularized basis function models for a range of $\lambda$ values, and plots the bias-variance decomposition.
 
 ```python
-import numpy as np
-import matplotlib.pyplot as plt
+import numpy as np, matplotlib.pyplot as plt
 
 rng = np.random.default_rng(0)
-L, N, M = 200, 25, 24
-noise_std = 0.3
-x_eval = np.linspace(0, 1, 200)
+L, N, M, noise_std = 200, 25, 24, 0.3
+x_eval, centres = np.linspace(0, 1, 200), np.linspace(0, 1, M)
 truth = np.sin(2 * np.pi * x_eval)
-
-# Gaussian basis functions, evenly spaced
-centres = np.linspace(0, 1, M)
-scale = 1.0 / M
-
-def basis(x):
-    return np.exp(-0.5 * ((x[:, None] - centres[None, :]) / scale) ** 2)
-
+basis = lambda x: np.exp(-0.5 * ((x[:, None] - centres) / (1.0 / M)) ** 2)
 Phi_eval = basis(x_eval)
-ln_lambdas = np.linspace(-3, 2, 60)
+ln_lams = np.linspace(-3, 2, 60)
+bias_sq, var, mse = np.zeros(60), np.zeros(60), np.zeros(60)
 
-bias_sq_all, var_all, mse_all = [], [], []
-
-for ln_lam in ln_lambdas:
-    lam = np.exp(ln_lam)
-    preds = np.zeros((L, len(x_eval)))
-
+for i, ln_l in enumerate(ln_lams):
+    lam, preds = np.exp(ln_l), np.zeros((L, 200))
     for ell in range(L):
-        x_train = rng.uniform(0, 1, N)
-        t_train = np.sin(2 * np.pi * x_train) + rng.normal(0, noise_std, N)
-        Phi_train = basis(x_train)
-        # Ridge regression closed-form solution
-        w = np.linalg.solve(Phi_train.T @ Phi_train + lam * np.eye(M),
-                            Phi_train.T @ t_train)
-        preds[ell] = Phi_eval @ w
-
+        x_tr = rng.uniform(0, 1, N)
+        t_tr = np.sin(2 * np.pi * x_tr) + rng.normal(0, noise_std, N)
+        P = basis(x_tr)
+        preds[ell] = Phi_eval @ np.linalg.solve(P.T @ P + lam * np.eye(M), P.T @ t_tr)
     y_bar = preds.mean(axis=0)
-    bias_sq = np.mean((y_bar - truth) ** 2)
-    variance = np.mean(np.mean((preds - y_bar[None, :]) ** 2, axis=0))
-    mse = np.mean(np.mean((preds - truth[None, :]) ** 2, axis=0))
-
-    bias_sq_all.append(bias_sq)
-    var_all.append(variance)
-    mse_all.append(mse)
-
-bias_sq_all = np.array(bias_sq_all)
-var_all = np.array(var_all)
-mse_all = np.array(mse_all)
+    bias_sq[i] = np.mean((y_bar - truth) ** 2)
+    var[i] = np.mean(np.mean((preds - y_bar) ** 2, axis=0))
+    t_test = truth + rng.normal(0, noise_std, (L, 200))
+    mse[i] = np.mean(np.mean((preds - t_test) ** 2, axis=0))
 
 fig, ax = plt.subplots(figsize=(9, 5))
-ax.plot(ln_lambdas, bias_sq_all, color='royalblue', lw=2, label=r'$(\mathrm{bias})^2$')
-ax.plot(ln_lambdas, var_all, color='crimson', lw=2, label='variance')
-ax.plot(ln_lambdas, bias_sq_all + var_all, color='magenta', lw=2,
-        label=r'$(\mathrm{bias})^2$ + variance')
-ax.plot(ln_lambdas, mse_all, color='black', lw=2, label='test error (MSE)')
+for y, c, lb in [(bias_sq, 'royalblue', r'$(\mathrm{bias})^2$'), (var, 'crimson', 'variance'),
+                  (bias_sq + var, 'magenta', r'$(\mathrm{bias})^2$ + var'), (mse, 'black', 'test MSE')]:
+    ax.plot(ln_lams, y, color=c, lw=2, label=lb)
 ax.axhline(noise_std**2, color='gray', ls=':', lw=1, label=f'noise floor ($\\sigma^2={noise_std**2}$)')
-ax.set_xlabel(r'$\ln\lambda$')
-ax.set_ylabel('Error')
-ax.set_title('Bias-variance decomposition for regularized basis function regression')
-ax.legend()
-ax.set_ylim(bottom=0, top=0.25)
-plt.tight_layout()
-plt.savefig('bias_variance_tradeoff_curve.png', dpi=150, bbox_inches='tight')
+ax.set(xlabel=r'$\ln\lambda$', ylabel='Error', ylim=(0, 0.25),
+       title='Bias-variance decomposition for regularized basis function regression')
+ax.legend(); plt.tight_layout()
+plt.savefig('images/bias_variance_tradeoff_curve.png', dpi=150, bbox_inches='tight')
 ```
+
+<img src="images/bias_variance_tradeoff_curve.png" width="680">
+
+*Fig. 3: Bias-variance decomposition as a function of regularization strength (reproducing Bishop Figure 3.6). As $\ln\lambda$ increases (stronger regularization), bias$^2$ (blue) rises while variance (red) falls. The test error (black) tracks bias$^2$ + variance (magenta) offset by the constant noise floor (gray dotted). The minimum test error occurs at an intermediate $\lambda$ that balances both sources of error.*
 
 The experiment confirms the decomposition empirically and makes the tradeoff visible: there is a single value of $\ln\lambda$ where the sum of bias$^2$ and variance is minimized, and the test error at that point sits exactly one noise floor above it. Moving $\lambda$ in either direction trades one error source for the other. The practical question — how to find this optimum without access to the true regression function — is what the next section addresses.
 
@@ -446,7 +489,7 @@ This explains the empirical observation that deep neural networks — which have
 
 The bias-variance decomposition explains why ensemble methods work so well. **Bagging** (bootstrap aggregating) trains $L$ models on bootstrap resamples of the training data and averages their predictions. This is a direct, practical approximation to $\bar{y}(\mathbf{x}) = \mathbb{E}_{\mathcal{D}}[y_{\mathcal{D}}(\mathbf{x})]$ — replacing the hypothetical average over all possible datasets with an average over bootstrap datasets. Averaging reduces variance (the individual models' predictions scatter around the mean, and averaging smooths out the scatter) while leaving bias approximately unchanged (the average of biased predictors is still biased by the same amount). This is why bagging helps most with high-variance, low-bias learners like deep decision trees.
 
-**Boosting** works the other end. At each iteration, a new weak learner is fit to the *residuals* of the current ensemble — the gap between the ensemble's predictions and the targets. Each new learner corrects the systematic errors of its predecessors, so the ensemble's average prediction $\bar{y}(\mathbf{x})$ moves closer to $\mathbb{E}[t \mid \mathbf{x}]$ with each step: this is bias reduction. Variance does increase with each added learner (more parameters that can respond to noise), but a small learning rate (shrinkage) ensures each learner contributes only a fraction of its fit, keeping the variance growth slow relative to the bias reduction. The net effect is a steady decrease in total error — until, eventually, the variance cost of additional learners exceeds the bias benefit.
+**Boosting** works the other end. At each iteration, a new weak learner is fit to the *residuals* of the current ensemble — the gap between the ensemble's predictions and the targets (for squared loss; in general, gradient boosting fits the negative gradient of the loss). Each new learner corrects the systematic errors of its predecessors, so the ensemble's average prediction $\bar{y}(\mathbf{x})$ moves closer to $\mathbb{E}[t \mid \mathbf{x}]$ with each step: this is bias reduction. Variance does increase with each added learner (more parameters that can respond to noise), but a small learning rate (shrinkage) ensures each learner contributes only a fraction of its fit, keeping the variance growth slow relative to the bias reduction. The net effect is a steady decrease in total error — until, eventually, the variance cost of additional learners exceeds the bias benefit.
 
 ### 7.5 The Bayesian Resolution
 
@@ -460,7 +503,7 @@ This is not a single predictor $y_{\mathcal{D}}(\mathbf{x})$ — it is a weighte
 
 From the bias-variance perspective, the Bayesian predictive mean $\mathbb{E}[t_* \mid \mathbf{x}_*, \mathcal{D}]$ can still be analyzed for bias and variance in the frequentist sense (treating $\mathcal{D}$ as random), and it typically has good bias-variance properties: the prior acts as a regularizer (controlling variance) while the averaging over the posterior reduces the effective model complexity adaptively.
 
-More practically, in the frequentist framework the main tool for selecting model complexity is cross-validation — splitting the data to estimate test error and choosing $\lambda$ to minimize it. The Bayesian framework offers an alternative: the **marginal likelihood** (model evidence) $p(\mathcal{D}) = \int p(\mathcal{D} \mid \mathbf{w})\, p(\mathbf{w})\, d\mathbf{w}$ provides a principled score for model comparison that naturally penalizes excessive complexity (Bayesian Occam's razor). This avoids the need to hold out data for validation — all data is used for inference. The tradeoff is computational: marginal likelihoods are tractable only for conjugate models like Bayesian linear regression.
+More practically, in the frequentist framework the main tool for selecting model complexity is cross-validation — splitting the data to estimate test error and choosing $\lambda$ to minimize it. The Bayesian framework offers an alternative: the **marginal likelihood** (model evidence) $p(\mathcal{D}) = \int p(\mathcal{D} \mid \mathbf{w})\, p(\mathbf{w})\, d\mathbf{w}$ provides a principled score for model comparison that naturally penalizes excessive complexity (Bayesian Occam's razor). This avoids the need to hold out data for validation — all data is used for inference. The tradeoff is computational: exact marginal likelihoods are available in closed form mainly for conjugate models (Bayesian linear regression, Gaussian processes); beyond these, approximate methods such as the Laplace approximation or variational inference are needed.
 
 The lecture slides frame Bayesian regression as the answer to the question "how do we select model complexity without splitting the data?" — and this is exactly the marginal likelihood's role. It replaces the frequentist's cross-validation loop with a single integral that balances data fit against model complexity.
 
@@ -489,3 +532,4 @@ The fundamental tension is that bias and variance typically move in opposite dir
 - Hastie, T., Tibshirani, R., and Friedman, J. *The Elements of Statistical Learning*, 2nd ed. (2009). §2.9 (bias-variance decomposition), §7.3 (bias-variance and model selection). Particularly clear on the connection between model complexity, training set size, and optimal regularization.
 - Geman, S., Bienenstock, E., and Doursat, R. (1992). "Neural networks and the bias/variance dilemma." *Neural Computation*, 4(1):1–58. The foundational paper on bias-variance in the context of flexible statistical models.
 - Friedman, J. H. (1997). "On bias, variance, 0/1 loss, and the curse-of-dimensionality." *Data Mining and Knowledge Discovery*, 1(1):55–77. Extends the decomposition beyond squared loss to classification.
+- Belkin, M., Hsu, D., Ma, S., and Mandal, S. (2019). "Reconciling modern machine-learning practice and the classical bias–variance trade-off." *Proceedings of the National Academy of Sciences*, 116(32):15849–15854. Introduces the double descent curve and demonstrates it across model families.

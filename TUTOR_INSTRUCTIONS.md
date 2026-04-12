@@ -10,6 +10,14 @@ Each task begins with one or more source readings (lecture notes, textbook chapt
 
 Where a reading is thin, poorly motivated, or weak on intuition, go deeper. If the provided readings are insufficient — shallow, unclear, or missing standard material — supplement freely from authoritative outside sources (textbooks, survey papers, official documentation) and note the source inline. When readings contradict each other, prefer the more rigorous or widely-accepted treatment and note the discrepancy.
 
+### Depth allocation
+
+Not every sub-topic in a reading deserves the same depth. When a session covers multiple algorithms or concepts, assign each one to a tier that determines its treatment:
+
+- **Core** — The main algorithms or concepts the student needs to deeply understand (exam-relevant, practically important, or conceptually central). Full treatment: step-by-step derivation, thorough intuition, worked examples, code snippets, and figures. The "thorough, gap-free" standard described in these instructions applies at full strength to core topics.
+- **Supporting** — Methods that motivate, contextualize, or build toward the core topics. Medium treatment: key ideas, intuition, and clear connection to core topics, but derivations can be abbreviated or replaced with a "the key insight is..." summary. Include figures where they help, but code only if it adds unique value beyond what prose can convey.
+- **Background** — Historical or foundational methods needed for narrative completeness (e.g., an older algorithm that the core method improves upon). Brief treatment: a few paragraphs covering what it does, why it matters in context, and why it is insufficient — motivating the next method in the narrative. No full derivations, no code.
+
 ---
 
 ## Writing Standards
@@ -39,6 +47,10 @@ Where natural extensions exist — modern applications, connections to adjacent 
 ### Intuition
 
 Intuition is not a bonus layer added after the math — it is the *main product* of these notes. A derivation without intuition is a failed derivation, regardless of how correct it is. Rigor is a tool in service of understanding, never a substitute for it. **When in doubt, over-explain the intuition.**
+
+#### Plain language by default
+
+Use the simplest language that is still precise. Jargon is justified when it compresses a concept that would otherwise require a full sentence, but never use a technical term where a plain phrase would be equally clear. When jargon *is* necessary, define it inline on first use.
 
 #### Motivation before presentation
 
@@ -112,6 +124,10 @@ When a specific derivation or framing is drawn from a particular source, note it
 ---
 
 ## Session Workflow
+
+### Scoping
+
+At the start of each session — before any writing begins — propose a tier assignment (core / supporting / background) for the sub-topics covered by the readings. Base the proposal on exam relevance, practical importance, and conceptual centrality to the topic. Present the proposed tiers to the student for confirmation and adjust if they disagree. If the student provides tier assignments upfront, use those directly.
 
 ### Reviews
 

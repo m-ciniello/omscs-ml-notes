@@ -502,32 +502,30 @@ Residual variance is not the only way to estimate intrinsic dimensionality. Othe
 
 ## 8. Laplacian Eigenmaps
 
-Laplacian Eigenmaps (Belkin and Niyogi, 2003) takes a different approach. Instead of approximating geodesic distances and running MDS, it directly encodes local neighborhood relationships in a graph and finds the embedding by solving an eigenvalue problem on that graph.
+Laplacian Eigenmaps (Belkin and Niyogi, 2003) takes a different approach. Instead of approximating geodesic distances and running MDS, it directly encodes local neighborhood relationships in a graph and finds the embedding by solving an eigenvalue problem on that graph. The core idea: if $x_i$ and $x_j$ are close in the original space, their embeddings should also be close — and the right tool for formalizing "close on a graph" is the **graph Laplacian**.
 
-### 8.1 The Core Objective
+### 8.1 The Graph Laplacian
 
-**What do we want from an embedding?** At minimum: if $x_i$ and $x_j$ are close in the original space, their embeddings should also be close. Start with the 1D case: assign each data point a single real number $f_i \in \mathbb{R}$. Given a weight matrix $W$ where $W_{ij}$ is large when $x_i$ and $x_j$ are close (and zero when they are far), we want to find the assignment that minimizes:
-
-$$\min_{f \in \mathbb{R}^n} \sum_{i,j} W_{ij}(f_i - f_j)^2$$
-
-The sum ranges over all ordered pairs $i, j = 1, \ldots, n$ (equivalently $\sum_i \sum_j$). Here $f = (f_1, f_2, \ldots, f_n)$ is just a vector of $n$ real numbers — one per data point — and we are searching for the best placement of all $n$ points on a number line. The objective penalizes placing nearby points (high $W_{ij}$) far apart: a large weight amplifies the cost of a large $(f_i - f_j)^2$.
-
-For a $k$-dimensional embedding, we solve this $k$ times to get $k$ coordinates per point. Each solution gives one column of the embedding matrix $Y \in \mathbb{R}^{n \times k}$, where row $i$ is the embedding $y_i$ of point $x_i$.
-
-The matrix structure encoding this objective is the **graph Laplacian**.
-
-### 8.2 The Graph Laplacian
-
-**Definition.** Given a weighted graph with $n$ nodes and weight matrix $W$ (where $W_{ij}$ is the edge weight between nodes $i$ and $j$, set to 0 if not connected), define:
+**Definition.** Given a weighted graph with $n$ nodes and symmetric weight matrix $W$ (where $W_{ij}$ is the edge weight between nodes $i$ and $j$, set to 0 if not connected), define:
 
 - **Degree matrix** $D$: a diagonal matrix with $D_{ii} = \sum_j W_{ij}$ (the sum of all edge weights incident to node $i$).
 - **Graph Laplacian** $L = D - W$.
 
-**Intuition: what does $L$ do to a vector?** Multiply $L$ by any vector $f$ and look at the $i$-th entry:
+**What does $D - W$ capture?** $W$ encodes *where* the connections are and how strong they are; $D$ encodes *how connected* each node is overall. Subtracting $W$ from $D$ produces a matrix that measures the difference between a node's total connectivity and its actual pairwise affinities — in other words, how much each node differs from its neighbors. A row of $L$ is zero-sum by construction ($L\mathbf{1} = 0$, as we will verify below): the diagonal entry $D_{ii}$ is exactly canceled by the off-diagonal entries $-W_{ij}$. This zero-sum structure is what makes $L$ a *difference operator* rather than a magnitude operator — it is blind to the absolute level of a signal on the graph and responds only to variation between neighbors.
 
-$$(Lf)_i = D_{ii}f_i - \sum_j W_{ij}f_j = \sum_j W_{ij}(f_i - f_j)$$
+**What does $L$ do to a vector?** Assign each node $i$ a real number $f_i$ and stack these into a vector $f \in \mathbb{R}^n$. Multiply $L = D - W$ by $f$ and look at the $i$-th entry. Since $D$ is diagonal, row $i$ of $D$ has only one nonzero entry ($D_{ii}$ in column $i$), so $(Df)_i = D_{ii}f_i$ — all other terms are zeroed out. The $W$ part gives the full sum $(Wf)_i = \sum_j W_{ij}f_j$. Subtracting:
 
-This is a weighted sum of how much point $i$'s value differs from each of its neighbors. If $f_i$ equals the weighted average of its neighbors, $(Lf)_i = 0$; if it deviates significantly, $(Lf)_i$ is large. In other words, $L$ is a **smoothness detector** — it measures how much a function varies across the graph. This is a discrete analogue of the Laplacian operator $\nabla^2$ from calculus, which is why it shares the name.
+$$(Lf)_i = D_{ii}f_i - \sum_j W_{ij}f_j = \left(\sum_j W_{ij}\right)f_i - \sum_j W_{ij}f_j = \sum_j W_{ij}(f_i - f_j)$$
+
+The middle step substitutes $D_{ii} = \sum_j W_{ij}$ (the definition of the degree matrix), which lets us merge the two sums. The result is a weighted sum of how much point $i$'s value differs from each of its neighbors.
+
+**When is $(Lf)_i$ zero?** When $f_i$ equals the **weighted average** of its neighbors' values. The weighted average is $\bar{f}_i = \sum_j W_{ij}f_j / D_{ii}$. If $f_i = \bar{f}_i$, then $D_{ii}f_i = \sum_j W_{ij}f_j$, so every term $W_{ij}f_i$ in the expanded sum exactly cancels the corresponding $W_{ij}f_j$, giving $(Lf)_i = \sum_j W_{ij}(f_i - f_j) = 0$. A concrete example: suppose node $i$ has three neighbors with weights $W_{i1} = 2$, $W_{i2} = 3$, $W_{i3} = 5$ and values $f_1 = 4$, $f_2 = 6$, $f_3 = 8$. The weighted average is $(2 \cdot 4 + 3 \cdot 6 + 5 \cdot 8)/(2+3+5) = 6.6$. Setting $f_i = 6.6$:
+
+$$(Lf)_i = 2(6.6-4) + 3(6.6-6) + 5(6.6-8) = 5.2 + 1.8 - 7.0 = 0$$
+
+The positive deviations (from neighbors below) exactly cancel the negative deviations (from neighbors above). But if $f_i = 10$ — well above all neighbors — the differences are all positive and $(Lf)_i = 2(6) + 3(4) + 5(2) = 34$, a large value signaling that node $i$ deviates sharply from its neighborhood.
+
+In other words, $L$ is a **smoothness detector**: $(Lf)_i$ is zero when node $i$ blends in with its neighbors and large when it sticks out. A function $f$ that varies slowly across the graph (nearby nodes have similar values) produces a small $Lf$ everywhere; a function that oscillates rapidly between neighbors produces a large $Lf$. This is a discrete analogue of the Laplacian operator $\nabla^2$ from calculus, which is why it shares the name.
 
 **Key identity.** For any vector $f \in \mathbb{R}^n$:
 
@@ -540,7 +538,15 @@ In the first sum, $f_i^2$ does not depend on $j$, so $\sum_{i,j} W_{ij}f_i^2 = \
 
 $$= \frac{1}{2}(2f^\top Df - 2f^\top Wf) = f^\top(D-W)f = f^\top L f$$
 
-This identity is fundamental: it shows that $f^\top L f$ is exactly the weighted sum of squared differences we want to minimize. So minimizing our embedding objective is equivalent to minimizing $f^\top L f$.
+**The embedding objective.** This identity gives us exactly what we need. To embed $n$ data points on a number line, assign each point a coordinate $f_i$ and minimize the smoothness cost:
+
+$$\min_{f \in \mathbb{R}^n} f^\top L f$$
+
+This penalizes placing nearby points (high $W_{ij}$) far apart: a large weight amplifies the cost of a large $(f_i - f_j)^2$. For a $k$-dimensional embedding, stack $k$ such coordinate vectors as columns of $Y \in \mathbb{R}^{n \times k}$ and minimize the total cost across all coordinates:
+
+$$\min_{Y \in \mathbb{R}^{n \times k}} \operatorname{tr}(Y^\top L Y) \quad \text{subject to} \quad Y^\top D Y = I_k$$
+
+The trace decomposes as $\operatorname{tr}(Y^\top LY) = \sum_{\ell=1}^{k} y_\ell^\top L y_\ell$ — a sum of $k$ independent smoothness costs, one per coordinate. But the columns cannot be found independently: the constraint $Y^\top D Y = I_k$ enforces both unit scale ($y_\ell^\top D y_\ell = 1$) and **orthogonality** between coordinates ($y_\ell^\top D y_m = 0$ for $\ell \neq m$). Without orthogonality, every coordinate would collapse to the single smoothest direction, producing a degenerate 1D embedding repeated $k$ times. Orthogonality forces each successive coordinate to capture the next-smoothest variation on the graph that hasn't already been used.
 
 **Properties of $L$:**
 1. $L$ is symmetric and positive semi-definite ($f^\top Lf \geq 0$ for all $f$, which follows directly from the identity above since $W_{ij} \geq 0$).
@@ -549,7 +555,7 @@ This identity is fundamental: it shows that $f^\top L f$ is exactly the weighted
 
    *Why?* Recall $f^\top Lf = \frac{1}{2}\sum_{ij}W_{ij}(f_i - f_j)^2$. A vector $f$ achieves $f^\top Lf = 0$ if and only if $W_{ij}(f_i - f_j)^2 = 0$ for every pair — i.e., $f$ must be constant within each connected component (since $W_{ij} > 0$ for any connected edge). If there are $k$ components, you can assign *any* constant value to each component independently, giving exactly $k$ linearly independent zero-eigenvectors (one indicator vector per component). For a single connected graph there is only one such vector, the constant vector $\mathbf{1}$, so there is exactly one zero eigenvalue. Practically: if you see multiple near-zero eigenvalues in a Laplacian eigenmaps solution, the graph is nearly or exactly disconnected — usually a sign that the $K$-NN bandwidth is too small.
 
-### 8.3 The Algorithm
+### 8.2 The Algorithm
 
 **Step 1 — Build weighted graph.** Connect nearby points using $\varepsilon$-neighborhoods or $K$-nearest neighbors. Assign weights using either:
 - **Binary weights:** $W_{ij} = 1$ if connected, 0 otherwise.
@@ -561,17 +567,21 @@ This identity is fundamental: it shows that $f^\top L f$ is exactly the weighted
 
 $$Lf = \lambda Df$$
 
-In plain language: we are looking for directions $f$ (one value per data point) that vary as *little* as possible between well-connected neighbors (small $f^\top L f$) while still having meaningful spread across the dataset (unit $f^\top D f$). The $D$ weighting on the right-hand side ensures that heavily-connected nodes don't dominate the normalization.
+In plain language: we are looking for directions $f$ (one value per data point) that vary as *little* as possible between well-connected neighbors (small $f^\top L f$) while still having meaningful spread across the dataset (unit $f^\top D f$). Where does this eigenproblem come from? It is the optimality condition for a single column of the trace problem from §8.1. Consider the 1D sub-problem for one coordinate: $\min_f f^\top Lf$ subject to $f^\top Df = 1$ and $f^\top D\mathbf{1} = 0$. The scale constraint prevents the trivial solution $f = \mathbf{0}$; the orthogonality constraint excludes the constant vector $\mathbf{1}$, which achieves $f^\top Lf = 0$ (zero cost) but assigns every point the same coordinate — useless as an embedding.
 
-This is the **generalized eigenproblem** — it differs from the standard eigenproblem $Lf = \lambda f$ by having $D$ on the right-hand side. This form arises directly from the constrained optimization via Lagrange multipliers: the problem $\min_f f^\top Lf$ subject to $f^\top Df = 1$ has Lagrangian
+**Deriving the eigenproblem via Lagrange multipliers.** Temporarily ignore the orthogonality constraint and consider just $\min_f f^\top Lf$ subject to $f^\top Df = 1$. The Lagrangian is:
 
 $$\mathcal{L}(f, \lambda) = f^\top Lf - \lambda(f^\top Df - 1)$$
 
-Setting $\partial \mathcal{L}/\partial f = 0$ gives $2Lf - 2\lambda Df = 0$, i.e., $Lf = \lambda Df$. The solutions are the generalized eigenvectors of $(L, D)$, and the corresponding eigenvalue $\lambda = f^\top Lf$ is the value of the objective at that solution — so the eigenvector with the *smallest* $\lambda$ solves the minimization. The normalization $f^\top Df = 1$ accounts for node degree: a node with many high-weight neighbors contributes more to the graph, so it is normalized more heavily than an isolated node.
+Setting $\partial \mathcal{L}/\partial f = 0$ gives $2Lf - 2\lambda Df = 0$, i.e., $Lf = \lambda Df$. This is the **generalized eigenproblem** — it differs from the standard eigenproblem $Lf = \lambda f$ by having $D$ on the right-hand side. The solutions are the generalized eigenvectors of $(L, D)$, and the corresponding eigenvalue $\lambda = f^\top Lf$ is the value of the objective at that solution — so the eigenvector with the *smallest* $\lambda$ solves the minimization. Since $\lambda_0 = 0$ corresponds to the constant vector (excluded by the orthogonality constraint), the first useful solution is $f_1$, the eigenvector with the second-smallest eigenvalue $\lambda_1$.
+
+For the full $k$-dimensional problem, the trace objective $\operatorname{tr}(Y^\top LY)$ decomposes into $k$ per-column problems of exactly this form, with the constraint $Y^\top DY = I_k$ requiring each successive column to be $D$-orthogonal to all previous ones. Generalized eigenvectors of a symmetric problem are automatically $D$-orthogonal, so solving the single eigenproblem $Lf = \lambda Df$ and taking the $k$ smallest non-trivial eigenvectors gives the global solution to the trace problem in one shot.
+
+**Why $f^\top Df = 1$ instead of $f^\top f = 1$?** The $D$-weighted normalization prevents a subtle failure mode. With the simpler constraint $f^\top f = 1$, the optimizer can assign extreme values to a few low-degree nodes (which have few edges, so those values incur little penalty in $f^\top Lf$) and near-zero values to the densely-connected majority. The resulting embedding would concentrate all of its variance in a handful of peripheral points while collapsing the core of the graph. Weighting by $D$ forces each node's contribution to scale with its connectivity, producing a balanced embedding where well-connected regions receive proportional representation.
 
 **Equivalence to the normalized Laplacian.** The generalized eigenproblem $Lf = \lambda Df$ is equivalent to a standard eigenproblem on the **symmetric normalized Laplacian** $L_{\text{sym}} = D^{-1/2}LD^{-1/2}$. Substituting $f = D^{-1/2}f'$ into $Lf = \lambda Df$ and left-multiplying by $D^{-1/2}$ gives $L_{\text{sym}}f' = \lambda f'$. Both forms appear in the literature (and sklearn's `SpectralEmbedding` uses the normalized Laplacian by default); they yield the same eigenvalues and related eigenvectors via $f = D^{-1/2}f'$.
 
-**Step 4 — Form the embedding.** Let $f_0, f_1, \ldots, f_{n-1}$ be the eigenvectors sorted by increasing eigenvalue $\lambda_0 \leq \lambda_1 \leq \cdots$. Discard $f_0$ (the constant vector with $\lambda_0 = 0$ — it carries no information about relative positions). The $d$-dimensional embedding of $x_i$ is:
+**Step 4 — Form the embedding.** Let $f_0, f_1, \ldots, f_{n-1}$ be the eigenvectors sorted by increasing eigenvalue $\lambda_0 \leq \lambda_1 \leq \cdots$. Discard $f_0$ (the constant vector with $\lambda_0 = 0$, excluded by the orthogonality constraint as discussed above). The $d$-dimensional embedding of $x_i$ is:
 
 $$y_i = (f_1(i),\ f_2(i),\ \ldots,\ f_d(i))$$
 
@@ -604,7 +614,7 @@ axes[1].set_title("Laplacian Eigenmaps — local smoothness only")
 plt.tight_layout(); plt.show()
 ```
 
-### 8.4 So What? — The Spectral Payoff
+### 8.3 So What? — The Spectral Payoff
 
 Laplacian Eigenmaps differs from Isomap in a philosophically important way. Isomap asks: *what are the geodesic distances between every pair of points, and can we find coordinates that reproduce them globally?* Laplacian Eigenmaps asks only: *can we find coordinates that keep neighboring points together?* The global question requires accurately estimating geodesic distances across the entire manifold — a task that fails whenever the graph is noisy, the manifold has intrinsic curvature, or the data is unevenly sampled. The local question requires only that short-range edges carry reliable similarity information, which is a far weaker assumption.
 
@@ -614,11 +624,13 @@ There is also a deeper theoretical grounding. Belkin and Niyogi (2003) show that
 
 This spectral perspective also motivates UMAP: UMAP's default initialization is a Laplacian Eigenmap on the same $k$-NN graph it builds for the full optimization. Starting from a spectral embedding (rather than a random one) gives the gradient optimization a principled, roughly correct starting point, reducing the variation between runs and avoiding grossly wrong local minima.
 
-### 8.5 Limitations
+### 8.4 Limitations
 
 - Only encodes local neighborhoods; no explicit mechanism for global structure preservation.
 - Sensitive to the choice of $K$, $\varepsilon$, and heat kernel bandwidth $t$.
 - Sensitive to noise, which can corrupt edge weights and distort the eigenvectors.
+- **No out-of-sample mapping.** The embedding is defined only for the $n$ training points (they are entries of eigenvectors, not outputs of a learned function). Embedding a new point requires either re-solving the eigenproblem with $n+1$ points or using an approximation such as the Nyström extension to interpolate from existing eigenvectors.
+- **Computational cost.** Building the $k$-NN graph is $O(n^2 D)$ in the ambient dimension $D$ (or $O(nD\log n)$ with spatial indexing); storing $W$ and $L$ is $O(n^2)$ in the dense case, though sparsity from the $k$-NN construction keeps this manageable in practice. The eigensolver is the dominant cost for large $n$, typically $O(n^2 k)$ for the $k$ smallest eigenvectors using iterative methods like ARPACK.
 
 ---
 
@@ -654,11 +666,11 @@ where $P_i$ is the conditional distribution over all other points given $x_i$ in
 
 **Why KL divergence?** Recall $\mathrm{KL}(P\|Q) = \sum_j p_j \log(p_j/q_j)$. KL divergence is asymmetric: it assigns large cost when $p_{j|i}$ is large but $q_{j|i}$ is small (nearby points placed too far apart in the map), and small cost when $p_{j|i}$ is small but $q_{j|i}$ is large (far-apart points placed too close). This asymmetry means the cost function strongly enforces that *nearby* pairs are placed nearby — at the mild expense of caring less about the arrangement of distant pairs.
 
-**So what does this buy over MDS and Sammon?** Two things. First, the per-point bandwidth $\sigma_i$ adapts automatically to local data density: in a dense region, a small $\sigma_i$ achieves the target perplexity; in a sparse region, $\sigma_i$ expands to find enough neighbors. MDS and Sammon use the same Euclidean distances everywhere and cannot adapt to density variation — a sparse outlier and a point in a dense cluster are treated identically by the cost function. Second, the probabilistic framing encodes neighborhood structure continuously rather than with a hard cutoff. Rather than saying "these $K$ points are neighbors and all others are not," $p_{j|i}$ assigns graded importance to every other point. This makes the optimization more stable and less sensitive to the exact choice of neighborhood size.
+**So what does this buy over MDS and Sammon?** Two things. First, the per-point bandwidth $\sigma_i$ adapts automatically to local data density: in a dense region, a small $\sigma_i$ suffices to capture the local neighborhood; in a sparse region, $\sigma_i$ expands to find enough neighbors. (The mechanism for choosing $\sigma_i$ — called *perplexity* — is detailed in §9.6.) MDS and Sammon use the same Euclidean distances everywhere and cannot adapt to density variation — a sparse outlier and a point in a dense cluster are treated identically by the cost function. Second, the probabilistic framing encodes neighborhood structure continuously rather than with a hard cutoff. Rather than saying "these $K$ points are neighbors and all others are not," $p_{j|i}$ assigns graded importance to every other point. This makes the optimization more stable and less sensitive to the exact choice of neighborhood size.
 
 ### 9.2 Symmetric SNE
 
-**Why the asymmetric gradient is complicated.** The asymmetric cost is $C = \sum_i \mathrm{KL}(P_i \| Q_i)$, where $Q_i$ is the conditional distribution $q_{j|i}$ over map points. Each $q_{j|i}$ is normalized within the row for point $i$: its denominator $\sum_{k \neq i} \exp(-\|y_i - y_k\|^2)$ depends on $y_i$ but not on $y_j$. When differentiating $C$ with respect to $y_i$, $y_i$ appears in three places simultaneously: (1) as the center of row $i$'s Gaussian (in numerators of $q_{j|i}$ for all $j$), (2) as the normalizer of row $i$ (in all $q_{j|i}$), and (3) as a *neighbor* in row $j$'s Gaussian (in the numerator and denominator of $q_{i|j}$ for all $j \neq i$). Case (3) means each update to $y_i$ also changes how $y_i$ looks as a map-neighbor from every other point's perspective. This coupling across rows produces cross terms that do not simplify cleanly. The resulting gradient involves two separate nested sums — one for how $y_i$ moves within its own row, and one for how it influences every other row — making gradient computation $O(n^2)$ per step with a large constant.
+**Why the asymmetric gradient is complicated.** The asymmetric cost is $C = \sum_i \mathrm{KL}(P_i \| Q_i)$, where $Q_i$ is the conditional distribution $q_{j|i}$ over map points. Each $q_{j|i}$ is normalized within the row for point $i$: its denominator $\sum_{k \neq i} \exp(-\|y_i - y_k\|^2)$ is a shared normalizer across all $j$ in row $i$ — it depends on $y_i$ and every other point, but is the same regardless of which $q_{j|i}$ you are computing. When differentiating $C$ with respect to $y_i$, $y_i$ appears in three places simultaneously: (1) as the center of row $i$'s Gaussian (in numerators of $q_{j|i}$ for all $j$), (2) as the normalizer of row $i$ (in all $q_{j|i}$), and (3) as a *neighbor* in row $j$'s Gaussian (in the numerator and denominator of $q_{i|j}$ for all $j \neq i$). Case (3) means each update to $y_i$ also changes how $y_i$ looks as a map-neighbor from every other point's perspective. This coupling across rows produces cross terms that do not simplify cleanly. The resulting gradient involves two separate nested sums — one for how $y_i$ moves within its own row, and one for how it influences every other row — making gradient computation $O(n^2)$ per step with a large constant.
 
 Van der Maaten and Hinton propose symmetrizing by using **joint** probabilities instead of conditional probabilities:
 
@@ -698,7 +710,7 @@ The consequence: to accurately model the small distances (nearby pairs), most of
 
 Van der Maaten and Hinton's key insight: **use a heavy-tailed distribution in the low-dimensional space** to compensate for the geometric volume mismatch.
 
-Specifically, replace the Gaussian in $q_{ij}$ with a **Student-$t$ distribution with 1 degree of freedom** (the Cauchy distribution):
+Specifically, replace the Gaussian in $q_{ij}$ with a **Student-$t$ distribution with 1 degree of freedom** (the Cauchy distribution). Why 1 degree of freedom? The Student-$t$ family interpolates between heavy tails (low DoF) and the Gaussian (DoF $\to \infty$). One degree of freedom — the Cauchy — is the heaviest-tailed member of the family: it provides the maximum amount of extra "room" in the low-dimensional map. Van der Maaten and Hinton note that higher DoF would also alleviate crowding to some extent, but the Cauchy is the simplest choice that provides sufficient compensation for 2D maps. The definition:
 
 $$q_{ij} = \frac{(1 + \|y_i - y_j\|^2)^{-1}}{\displaystyle\sum_{k \neq l}(1 + \|y_k - y_l\|^2)^{-1}} \tag{9.2}$$
 
@@ -845,7 +857,11 @@ t-SNE excels at revealing *local* cluster structure. But several of its properti
 
 **t-SNE is non-deterministic.** The cost function is non-convex; different random initializations give different maps. Always run multiple times.
 
-**t-SNE is primarily a visualization tool.** The Cauchy kernel's heavy tails are well-suited to 2D: by placing more probability mass at moderate distances than a Gaussian would, the Cauchy gives the 2D map enough "room" to separate points that are at moderate distances in high-dimensional space — alleviating the crowding problem without over-compressing local neighborhoods. Van der Maaten and Hinton validate this empirically but do not claim exact volumetric compensation: the Cauchy is a useful heavy-tailed distribution, not a precisely tuned geometric correction. The Cauchy's suitability is specific to 2D (and by extension 3D). For a target dimension $d > 3$, the volume mismatch between high-D and $d$-D is less severe — fewer points need to be pushed out to make room — but the Cauchy still applies the same heavy-tailed attenuation regardless of $d$. The result is that moderately distant points experience stronger repulsion than the geometry warrants, pushing them further apart than they should be and distorting local structure. For embedding to $d > 3$, the right solution is a lighter-tailed kernel; UMAP's $(1 + a\|y_i - y_j\|^{2b})^{-1}$ kernel (with adjustable $b$ fitted to `min_dist`) can accommodate this. Use UMAP or autoencoders when $d > 3$.
+**t-SNE is primarily a visualization tool.** It excels at 2D (and to a lesser extent 3D) embeddings but should not be used for higher target dimensions. Use UMAP or autoencoders when $d > 3$.
+
+**Why the Cauchy kernel is specific to low target dimensions.** The Cauchy kernel's heavy tails are well-suited to 2D: by placing more probability mass at moderate distances than a Gaussian would, the Cauchy gives the 2D map enough "room" to separate points that are at moderate distances in high-dimensional space — alleviating the crowding problem without over-compressing local neighborhoods. Van der Maaten and Hinton validate this empirically but do not claim exact volumetric compensation: the Cauchy is a useful heavy-tailed distribution, not a precisely tuned geometric correction.
+
+For a target dimension $d > 3$, the volume mismatch between high-D and $d$-D is less severe — fewer points need to be pushed out to make room — but the Cauchy still applies the same heavy-tailed attenuation regardless of $d$. The result is that moderately distant points experience stronger repulsion than the geometry warrants, pushing them further apart than they should be and distorting local structure. The right solution is a lighter-tailed kernel; UMAP's $(1 + a\|y_i - y_j\|^{2b})^{-1}$ kernel (with adjustable $b$ fitted to `min_dist`) can accommodate this.
 
 ### 9.9 Limitations
 
@@ -878,11 +894,13 @@ Before examining the cost function, it is worth understanding how UMAP construct
 
 $$v_{j|i} = \exp\!\left(-\frac{\max(0,\, d(x_i, x_j) - \rho_i)}{\sigma_i}\right)$$
 
-where $\sigma_i$ is calibrated (like t-SNE's bandwidth) to give each point a fixed effective number of neighbors. The subtraction of $\rho_i$ is crucial: it guarantees each point has at least one neighbor at membership strength 1 (the nearest neighbor), making the similarity adaptive to the *local density* around $i$ rather than treating all distances on a global scale. The symmetrized similarity is:
+where $\sigma_i$ is calibrated (like t-SNE's bandwidth) to give each point a fixed effective number of neighbors. The subtraction of $\rho_i$ is crucial: it guarantees each point has at least one neighbor at membership strength 1 (the nearest neighbor), making the similarity adaptive to the *local density* around $i$ rather than treating all distances on a global scale.
+
+As with SNE (§9.2), these directed similarities must be symmetrized before optimization — the cost function (§10.3) operates on undirected pairs $(i,j)$ and requires $p_{ij} = p_{ji}$. UMAP symmetrizes via the **fuzzy set union**:
 
 $$p_{ij} = v_{j|i} + v_{i|j} - v_{j|i} \cdot v_{i|j}$$
 
-This is the **fuzzy set union**. To see where it comes from: interpret $v_{j|i}$ as the probability that the directed edge $i \to j$ "exists" (as a Bernoulli random variable), and $v_{i|j}$ similarly for $j \to i$. The two events are modeled as independent (the fuzzy-set assumption). Then the probability that *at least one* of the two directed edges exists — i.e., that the undirected edge $\{i,j\}$ exists — is $P(A \cup B) = P(A) + P(B) - P(A \cap B) = v_{j|i} + v_{i|j} - v_{j|i} \cdot v_{i|j}$. By construction $p_{ij} = p_{ji}$: the undirected edge is strong whenever *either* directed membership is high, so a point in a sparse region (where the directed edges pointing *to* it are weak) still has a strong connection to its nearest neighbor (whose directed edge *from* that neighbor to it is strong).
+To see where this comes from: interpret $v_{j|i}$ as the probability that the directed edge $i \to j$ "exists" (as a Bernoulli random variable), and $v_{i|j}$ similarly for $j \to i$. The two events are modeled as independent (the fuzzy-set assumption). Then the probability that *at least one* of the two directed edges exists — i.e., that the undirected edge $\{i,j\}$ exists — is $P(A \cup B) = P(A) + P(B) - P(A \cap B) = v_{j|i} + v_{i|j} - v_{j|i} \cdot v_{i|j}$. By construction $p_{ij} = p_{ji}$: the undirected edge is strong whenever *either* directed membership is high, so a point in a sparse region (where the directed edges pointing *to* it are weak) still has a strong connection to its nearest neighbor (whose directed edge *from* that neighbor to it is strong).
 
 **Low-dimensional similarities $q_{ij}$:** UMAP uses a smooth approximation to a 1/0 step function rather than the Cauchy kernel used by t-SNE:
 
@@ -898,8 +916,6 @@ UMAP replaces the KL divergence with a cost based on treating each pair $(i,j)$ 
 
 $$C(P, Q) = \sum_{i \neq j} \left[\, p_{ij} \log \frac{p_{ij}}{q_{ij}} + (1 - p_{ij}) \log \frac{1 - p_{ij}}{1 - q_{ij}} \,\right] \tag{10.1}$$
 
-This expression is $\sum_{i\neq j} \mathrm{KL}(\mathrm{Bernoulli}(p_{ij})\|\mathrm{Bernoulli}(q_{ij}))$. It is sometimes loosely called "binary cross-entropy" because it differs from the binary cross-entropy $-p\log q - (1-p)\log(1-q)$ only by the entropy of $p$ — a constant with respect to $q$ during optimization, so the two objectives are equivalent for finding the optimal $q_{ij}$ values. We will use the "binary cross-entropy" label as shorthand while keeping this equivalence in mind.
-
 Decomposing the two terms:
 
 **Term 1:** $\displaystyle\sum_{i\neq j} p_{ij} \log \frac{p_{ij}}{q_{ij}}$ — identical to the t-SNE cost. Penalizes placing nearby pairs (large $p_{ij}$) too far apart in the map (small $q_{ij}$).
@@ -909,6 +925,8 @@ Decomposing the two terms:
 **So what?** Term 2 is the mechanism for global structure preservation. t-SNE has no such force — it simply doesn't care where clusters end up relative to each other. UMAP does: pairs that are far apart in high-D experience a repulsive force if the map places them too close. This means the relative positions of clusters in a UMAP plot are more informative than in a t-SNE plot, though still not exact.
 
 The cross-entropy interpretation: treat each pair $(i,j)$ as a binary event — either $x_i$ and $x_j$ are "connected" (with probability $p_{ij}$) or not (probability $1 - p_{ij}$). UMAP finds an embedding whose connection probabilities $q_{ij}$ match $p_{ij}$ in this binary sense, for both the "connected" and the "not connected" cases.
+
+*A note on terminology:* Eq. (10.1) is $\sum_{i\neq j} \mathrm{KL}(\mathrm{Bernoulli}(p_{ij})\|\mathrm{Bernoulli}(q_{ij}))$. It is sometimes loosely called "binary cross-entropy" because it differs from the binary cross-entropy $-p\log q - (1-p)\log(1-q)$ only by the entropy of $p$ — a constant with respect to $q$ during optimization, so the two objectives produce the same optimal embedding.
 
 ### 10.4 Hyperparameters
 
@@ -1036,7 +1054,7 @@ Notes: $m$ = number of edges in the neighborhood graph; $k$ = `n_neighbors` in U
 ### Common Pitfalls
 
 1. **Interpreting t-SNE inter-cluster distances as meaningful.** They aren't. Two clusters far apart in t-SNE might be closer in UMAP; neither perfectly reflects high-dimensional structure.
-2. **Over-trusting hyperparameter defaults.** Both t-SNE perplexity and UMAP `n_neighbors` should be tuned. Low `n_neighbors` in UMAP can invent structure that doesn't exist (see §10.3).
+2. **Over-trusting hyperparameter defaults.** Both t-SNE perplexity and UMAP `n_neighbors` should be tuned. Low `n_neighbors` in UMAP can invent structure that doesn't exist (see §10.4).
 3. **Running t-SNE once.** Non-convex optimization + random initialization = variable results. Run multiple times and compare.
 4. **Applying t-SNE to $d > 3$ targets.** Use UMAP instead.
 5. **Interpreting manifold coordinates as features for downstream learning.** t-SNE especially is lossy and non-isometric — the coordinates should not generally be fed as features to a classifier without careful validation.
