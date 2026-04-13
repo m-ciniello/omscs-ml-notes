@@ -139,7 +139,7 @@ An optimal policy $\pi^*$ is one that maximizes $V^\pi(s)$ simultaneously for ev
 
 $$\pi^* = \arg\max_\pi V^\pi(s), \quad \forall s \in S$$
 
-A foundational result in MDP theory (Bellman, 1957) guarantees that for the infinite-horizon discounted model, such a policy always exists, it is **deterministic** (maps states to single actions, not distributions), and it is **stationary** (does not depend on the time step). Its value function, denoted $V^*(s)$, is the unique solution to the **Bellman optimality equation**:
+A foundational result in MDP theory (Bellman, 1957) guarantees that for the infinite-horizon discounted model, such a policy always exists, it is **deterministic** (maps states to single actions, not distributions), and it is **stationary** (does not depend on the time step). Its value function, denoted $V^*(s)$, represents the best possible value of each state — the value achieved when $\pi^*$ is followed at every step. $V^*(s)$ is the unique solution to the **Bellman optimality equation**:
 
 **Result: the Bellman optimality equation for $V^*$**
 
@@ -172,6 +172,8 @@ $$V^*(s) = \max_{a \in A} Q^*(s, a)$$
 and the optimal policy becomes simply:
 
 $$\pi^*(s) = \arg\max_{a \in A} Q^*(s, a)$$
+
+To summarize how these three objects relate: $V^*(s)$ gives the value of state $s$ assuming optimal play from the start — including the first action. $Q^*(s, a)$ gives the value of state $s$ if you take a specific action $a$ first — which may or may not be optimal — and then act optimally thereafter. $\pi^*(s)$ is the action where these two agree: the first action that *is* the optimal one, i.e., the $a$ for which $Q^*(s, a) = V^*(s)$.
 
 This is the key insight: **once the agent has $Q^*$, selecting optimal actions is a simple lookup** — pick the action with the highest Q-value in the current state. No explicit access to $T$ or $R$ is needed at decision time. And crucially, the agent can *learn* $Q^*$ without ever having $T$ or $R$ as explicit functions: Q-learning (Section 5) builds up $Q^*$ iteratively from observed transitions $\langle s, a, r, s' \rangle$. The model's influence is baked into the learned Q-values through experience, but the agent never constructs or stores $T$ or $R$ themselves.
 
