@@ -2,6 +2,39 @@
 
 ---
 
+## Table of Contents
+
+1. [What Problem Does Reinforcement Learning Solve?](#1-what-problem-does-reinforcement-learning-solve)
+2. [Markov Decision Processes: The Formal Framework](#2-markov-decision-processes-the-formal-framework)
+   - 2.1 Definition
+   - 2.2 Policies and the Objective
+   - 2.3 Value Functions and the Bellman Equations
+   - 2.4 The Q-Function: Making Actions Explicit
+   - 2.5 A Worked Example: Grid World
+3. [Dynamic Programming: Solving MDPs with a Known Model](#3-dynamic-programming-solving-mdps-with-a-known-model)
+   - 3.1 Value Iteration
+   - 3.2 Policy Iteration
+   - 3.3 Value Iteration vs. Policy Iteration
+4. [From Known Models to Unknown: The RL Dichotomy](#4-from-known-models-to-unknown-the-rl-dichotomy)
+5. [Q-Learning](#5-q-learning)
+   - 5.1 Why Learn Q* Instead of V*?
+   - 5.2 The Q-Learning Algorithm (Deterministic Case)
+   - 5.3 How Q-Values Propagate: A Worked Example
+   - 5.4 Convergence of Q-Learning (Deterministic Case)
+   - 5.5 Extension to Nondeterministic MDPs
+   - 5.6 Exploration Strategies for Q-Learning
+   - 5.7 Improving Training Efficiency
+   - 5.8 SARSA: The On-Policy Alternative
+   - 5.9 Double Q-Learning: Correcting Overestimation Bias
+6. [Temporal Difference Learning](#6-temporal-difference-learning)
+   - 6.1 TD(0): One-Step Temporal Differences
+   - 6.2 The Adaptive Heuristic Critic
+   - 6.3 TD(λ): Multi-Step Temporal Differences
+   - 6.4 On-Policy vs. Off-Policy Learning
+7. [The Big Picture: Connecting the Algorithms](#7-the-big-picture-connecting-the-algorithms)
+
+---
+
 ## 1. What Problem Does Reinforcement Learning Solve?
 
 Imagine building an autonomous agent — a robot navigating a warehouse, a program playing backgammon, an elevator controller deciding which floors to visit. The agent perceives the state of its environment, takes actions that change that state, and receives scalar reward signals indicating how good the resulting situation is. Its goal: learn a strategy for choosing actions that maximizes cumulative reward over time.
@@ -133,8 +166,6 @@ $$V^\pi(s_3) = 100 + 0.9 \cdot V^\pi(\text{goal})$$
 
 Three equations, three unknowns. Since $V^\pi(\text{goal}) = 0$ (an **absorbing state** — once entered, every action loops back to itself with zero reward, so no future reward is possible), we solve from the end: $V^\pi(s_3) = 100$, $V^\pi(s_2) = 90$, $V^\pi(s_1) = 81$. This direct solvability depends on the policy being fixed. The Bellman *optimality* equation (below) introduces a $\max$ over actions, making the system nonlinear and requiring iterative algorithms instead.
 
-This equation is the basis for **policy evaluation** (Section 3.2) and **TD learning** (Section 6).
-
 An optimal policy $\pi^*$ is one that maximizes $V^\pi(s)$ simultaneously for every state $s$:
 
 $$\pi^* = \arg\max_\pi V^\pi(s), \quad \forall s \in S$$
@@ -187,13 +218,7 @@ This recursive equation expresses each Q-value in terms of the Q-values of succe
 
 ### 2.5 A Worked Example: Grid World
 
-To ground these definitions concretely, consider the simple grid world from Mitchell (1997), Chapter 13:
-
-<img src="images/grid_world_q_values.png" width="680">
-
-*Fig. 3: A 6-cell grid world with goal state $G$. Shows the immediate reward function $r(s,a)$, the $Q(s,a)$ values, $V^*(s)$ values, and one optimal policy ($\gamma = 0.9$). [Mitchell, 1997, Figure 13.2]*
-
-The environment is a $2 \times 3$ grid (two rows, three columns) with the goal state $G$ in the top-right corner:
+To ground these definitions concretely, consider a simple grid world adapted from Mitchell (1997), Chapter 13. The environment is a $2 \times 3$ grid (two rows, three columns) with the goal state $G$ in the top-right corner:
 
 ```
 +------------+------------+------------+
@@ -345,17 +370,9 @@ Q-learning (Watkins, 1989) is the most important model-free RL algorithm. It lea
 
 ### 5.1 Why Learn $Q^*$ Instead of $V^*$?
 
-An agent that has learned $V^*$ can select optimal actions — but only if it also knows the model. To choose an action in state $s$, it must evaluate:
+Recall from Section 2.4 that an agent with $V^*$ still needs the model ($T$ and $R$) to select actions — it must evaluate $R(s, a) + \gamma \sum_{s'} T(s, a, s') V^*(s')$ for every candidate action. An agent with $Q^*$ just takes $\arg\max_a Q^*(s, a)$ — a simple lookup, no model required.
 
-$$\pi^*(s) = \arg\max_a \left[ R(s, a) + \gamma \sum_{s'} T(s, a, s') V^*(s') \right]$$
-
-which requires computing expected next-state values using $T$ and $R$. If these functions are unknown — as in a robot that can't predict the consequences of its motor commands — $V^*$ alone is useless for action selection.
-
-The Q-function absorbs $T$ and $R$ into the value itself:
-
-$$Q^*(s, a) = R(s, a) + \gamma \sum_{s'} T(s, a, s') V^*(s')$$
-
-so the agent can select actions by simply computing $\arg\max_a Q^*(s, a)$, which requires no knowledge of the environment dynamics. This is why Q-learning targets $Q^*$ rather than $V^*$.
+But here is the crucial question: $Q^*$ is *defined* in terms of $T$ and $R$, so how does the agent obtain it without knowing them? The answer is that Q-learning never evaluates the definition. Instead, it learns $Q^*$ values incrementally from observed transitions $\langle s, a, r, s' \rangle$ — each real-world experience nudges the estimates closer to the true $Q^*$. The model's influence is captured implicitly through the agent's accumulated experience, not through explicit computation. This is the algorithm we develop next.
 
 ### 5.2 The Q-Learning Algorithm (Deterministic Case)
 
@@ -373,7 +390,7 @@ The right-hand side is the agent's best current estimate of what $Q^*(s, a)$ sho
 
 **Algorithm: Q-Learning (Deterministic MDP)**
 
-> Initialize $\hat{Q}(s, a) = 0$ for all $s \in S$, $a \in A$.
+> Initialize $\hat{Q}(s, a) = 0$ for all $s \in S$, $a \in A$. (The table has an entry for every state-action pair from the start. Zero initialization is a neutral default — the $\max_{a'}$ over unvisited entries returns 0, so untried actions don't artificially inflate or deflate the bootstrap target. Initializing to high values instead creates optimistic estimates that encourage exploration — see "optimism in the face of uncertainty" in the companion document.)
 >
 > Observe the current state $s$.
 >
@@ -391,15 +408,45 @@ The right-hand side is the agent's best current estimate of what $Q^*(s, a)$ sho
 
 To see Q-learning in action, return to the grid world from Section 2.5 with all Q-values initialized to zero and the only nonzero reward being 100 for entering goal state $G$.
 
-**Episode 1:** The agent wanders randomly. No Q-values change until it happens to execute the transition into $G$, receiving reward 100. At that moment:
+Initially, every entry in the Q-table is zero — the agent knows nothing:
 
-$$\hat{Q}(s_{\text{adj}}, a_{\text{into } G}) \leftarrow 100 + 0.9 \times \max_{a'} \hat{Q}(G, a') = 100 + 0 = 100$$
+| | left | right | up | down |
+|---|---|---|---|---|
+| bot-left | 0 | 0 | 0 | 0 |
+| bot-center | 0 | 0 | 0 | 0 |
+| bot-right | 0 | 0 | 0 | 0 |
+
+**Episode 1:** The agent wanders randomly. No Q-values change (every update computes $r + \gamma \max_{a'} \hat{Q}(s', a') = 0 + 0.9 \times 0 = 0$) until it happens to execute the transition into $G$, receiving reward 100:
+
+$$\hat{Q}(\text{bot-right}, \text{up}) \leftarrow 100 + 0.9 \times \max_{a'} \hat{Q}(G, a') = 100 + 0 = 100$$
+
+| | left | right | up | down |
+|---|---|---|---|---|
+| bot-left | 0 | 0 | 0 | 0 |
+| bot-center | 0 | 0 | 0 | 0 |
+| bot-right | 0 | 0 | **100** | 0 |
 
 Only one table entry is nonzero after the entire first episode.
 
-**Episode 2:** If the agent passes through the state adjacent to $G$ that now has a nonzero Q-value, it can update the Q-value for the transition *two* steps from the goal:
+**Episode 2:** The agent again wanders randomly. If it passes through bot-right, the nonzero Q-value there doesn't help yet (it's already set). But when it visits bot-center and moves right to bot-right, it can now pick up that value:
 
-$$\hat{Q}(s_2, a_{\text{toward adj}}) \leftarrow 0 + 0.9 \times 100 = 90$$
+$$\hat{Q}(\text{bot-center}, \text{right}) \leftarrow 0 + 0.9 \times \max_{a'} \hat{Q}(\text{bot-right}, a') = 0 + 0.9 \times 100 = 90$$
+
+| | left | right | up | down |
+|---|---|---|---|---|
+| bot-left | 0 | 0 | 0 | 0 |
+| bot-center | 0 | **90** | 0 | 0 |
+| bot-right | 0 | 0 | **100** | 0 |
+
+**Episode 3:** Similarly, when bot-left moves right to bot-center:
+
+$$\hat{Q}(\text{bot-left}, \text{right}) \leftarrow 0 + 0.9 \times 90 = 81$$
+
+| | left | right | up | down |
+|---|---|---|---|---|
+| bot-left | 0 | **81** | 0 | 0 |
+| bot-center | 0 | **90** | 0 | 0 |
+| bot-right | 0 | 0 | **100** | 0 |
 
 The information propagates backward from the goal, one state per episode. After enough episodes, the "frontier" of nonzero Q-values reaches the entire state space, eventually converging to the true $Q^*$ values shown in Section 2.5.
 
@@ -426,6 +473,8 @@ for s, a in [("bot-right", "up"), ("bot-center", "right"), ("bot-left", "right")
 
 Output: Q-values of 100.0, 90.0, and 81.0 propagate backward from the goal — exactly the $V^*$ values we computed earlier.
 
+**Connection to value iteration.** This backward propagation should feel familiar — it is the same mechanism as value iteration (Section 3.1). Both propagate value information backward through the Bellman equation from rewarding states. The difference is how they get the successor information. Value iteration has full access to $T$ and $R$, so each sweep updates *every* state simultaneously using the known transition probabilities. Q-learning has no model — it updates one state-action pair at a time using whatever transition the agent actually experiences in the real environment. Each real-world step is effectively a single sample drawn from the transition distribution $T(s, a, \cdot)$ that the agent doesn't have written down. Over many visits to the same $(s, a)$, these samples average out to the true expectation that value iteration would compute directly. Q-learning is, in this sense, value iteration performed one sample at a time, with the environment itself serving as the model.
+
 ### 5.4 Convergence of Q-Learning (Deterministic Case)
 
 Does Q-learning actually converge to $Q^*$? Yes — under conditions that are surprisingly mild.
@@ -448,9 +497,9 @@ Now we use the fact that for any two functions $f_1, f_2$: $|\max_x f_1(x) - \ma
 
 $$\leq \gamma \max_{a'} |\hat{Q}_n(s', a') - Q^*(s', a')|$$
 
-Since this holds for the specific $s'$ resulting from $(s, a)$, and the maximum over all $(s, a)$ pairs is at least as large:
+This is the maximum error over actions at the specific next state $s'$. But $\Delta_n$ is the maximum error over *all* states and *all* actions — which is at least as large as the max at any single state. So:
 
-$$\leq \gamma \max_{s'', a'} |\hat{Q}_n(s'', a') - Q^*(s'', a')| = \gamma \Delta_n$$
+$$\leq \gamma \,\Delta_n$$
 
 So every updated entry has error at most $\gamma \Delta_n$. Crucially, no update can *increase* the maximum error above $\Delta_n$: the updated entry's error is at most $\gamma \Delta_n < \Delta_n$, while un-updated entries retain their old error $\leq \Delta_n$. Therefore, once every state-action pair has been updated at least once (which need not happen in a single synchronous sweep — the agent visits pairs one at a time in arbitrary order), the maximum error across all entries is at most $\gamma \Delta_n$. Since each pair is visited infinitely often, there are infinitely many such complete rounds. After $k$ complete rounds, $\Delta \leq \gamma^k \Delta_0$. Since $\gamma < 1$, this converges to 0. $\blacksquare$
 
@@ -470,7 +519,11 @@ $$\hat{Q}(s, a) \leftarrow (1 - \alpha_n)\,\hat{Q}(s, a) + \alpha_n \left[ r + \
 
 where $\alpha_n$ is a decaying learning rate. A common choice is $\alpha_n = 1 / (1 + \text{visits}_n(s, a))$, where $\text{visits}_n(s, a)$ counts how many times the pair $(s, a)$ has been visited up to iteration $n$.
 
-The new estimate $r + \gamma \max_{a'} \hat{Q}(s', a')$ is a single noisy sample of $Q^*(s, a)$. By blending it gradually with the running average, the noise cancels over many visits. Setting $\alpha_n = 1$ recovers the deterministic rule.
+The new estimate $r + \gamma \max_{a'} \hat{Q}(s', a')$ is a single noisy sample of $Q^*(s, a)$. By blending it gradually with the running average, the noise cancels over many visits. Setting $\alpha_n = 1$ recovers the deterministic rule. Rearranging gives an equivalent and more common form:
+
+$$\hat{Q}(s, a) \leftarrow \hat{Q}(s, a) + \alpha_n \left[ r + \gamma \max_{a'} \hat{Q}(s', a') - \hat{Q}(s, a) \right]$$
+
+The bracketed quantity — the gap between the new sample and the current estimate — is the **prediction error**: how much better (or worse) the observed transition was compared to what the agent expected. Each update nudges $\hat{Q}$ by $\alpha_n$ times this error. This is the form used throughout the rest of these notes.
 
 **Theorem (Convergence of Q-learning, nondeterministic MDP).** *(Watkins & Dayan, 1992.)* If each state-action pair is visited infinitely often, $0 \leq \alpha_n < 1$, and the learning rate schedule satisfies:
 
@@ -478,7 +531,13 @@ $$\sum_{i=1}^{\infty} \alpha_{n(i, s, a)} = \infty \quad \text{and} \quad \sum_{
 
 where $n(i, s, a)$ is the iteration of the $i$-th visit to $(s, a)$, then $\hat{Q}_n(s, a) \to Q^*(s, a)$ as $n \to \infty$ with probability 1, for all $s, a$.
 
-The two conditions on $\alpha$ are the standard **Robbins-Monro conditions** from stochastic approximation theory. The first ($\sum \alpha = \infty$) ensures the learning rate is large enough to overcome any initial error. The second ($\sum \alpha^2 < \infty$) ensures it decays fast enough to suppress the noise from stochastic transitions. The choice $\alpha_n = 1 / (1 + \text{visits}_n(s,a))$ satisfies both (it behaves like $1/k$ for the $k$-th visit to each pair, and $\sum 1/k = \infty$, $\sum 1/k^2 < \infty$).
+The two conditions on $\alpha$ are the standard **Robbins-Monro conditions** from stochastic approximation theory. They capture a tension: the learning rate must decay, but not too fast.
+
+- **$\sum \alpha = \infty$ (decay slowly enough).** As shown above, each update shifts $\hat{Q}$ by $\alpha_n$ times the prediction error. If the learning rates sum to a finite number, the total amount of correction the agent can ever make is bounded — and if the initial Q-values are far from $Q^*$, that budget may not be enough. The infinite sum guarantees the agent always has enough "learning capacity" remaining to fully correct its estimates, no matter how wrong they started.
+
+- **$\sum \alpha^2 < \infty$ (decay fast enough).** In a stochastic environment, each update carries noise — the same $(s, a)$ pair produces different rewards and next states on different visits. The $\alpha$ coefficient controls how much this noise affects the running estimate. Since each update adds $\alpha_i \times \text{noise}_i$ to the estimate, and scaling a random variable by $\alpha$ scales its variance by $\alpha^2$ (because $\text{Var}(\alpha X) = \alpha^2 \text{Var}(X)$), the cumulative noise variance after $k$ visits is proportional to $\sum_{i=1}^{k} \alpha_i^2$. If this sum is infinite (e.g., constant $\alpha$), the noise never dies down and the estimates oscillate forever. Making $\sum \alpha^2$ finite ensures the accumulated noise variance stays bounded and the estimates converge.
+
+The schedule $\alpha_n = 1/(1 + \text{visits}_n(s,a))$ satisfies both: it behaves like $1/k$ for the $k$-th visit to each pair, and the harmonic series diverges ($\sum 1/k = \infty$) while its squares converge ($\sum 1/k^2 = \pi^2/6 < \infty$). A constant learning rate $\alpha_n = c$ fails the second condition ($\sum c^2 = \infty$), which is why constant-rate Q-learning oscillates around $Q^*$ rather than converging to it — though in practice the oscillation is often small enough to be acceptable (see the companion document, Section 2.5).
 
 ### 5.6 Exploration Strategies for Q-Learning
 
@@ -494,7 +553,13 @@ $$P(a \mid s) = \frac{\exp(\hat{Q}(s, a) / \tau)}{\sum_{a' \in A} \exp(\hat{Q}(s
 
 High temperature $\tau$ gives nearly uniform random action selection (exploration). Low temperature concentrates probability on the highest-Q action (exploitation). Unlike $\epsilon$-greedy, this method is more likely to explore promising alternatives than clearly hopeless ones.
 
-An important property of Q-learning is that it is **off-policy**: the Q-values converge to $Q^*$ regardless of the exploration strategy used, as long as all state-action pairs are visited sufficiently. The agent can explore however it likes during training — the convergence of the learned values is unaffected. This is because the update rule uses $\max_{a'} \hat{Q}(s', a')$ (the value of the *best* action from the next state), not the value of the action the agent actually took from $s'$.
+An important property of Q-learning is that it is **off-policy**: it learns about the optimal policy even while following a different, exploratory policy. To see why, look at the update target: $r + \gamma \max_{a'} \hat{Q}(s', a')$. The $\max$ asks "what is the value of the *best* action from $s'$?" — not "what action did the agent *actually take* from $s'$?" So even if the agent chose a random exploratory action from $s'$, the update ignores that and uses the best action's value instead. The exploration strategy affects which state-action pairs get visited (and therefore *how fast* the agent converges), but not *what it converges to* — the target is always $Q^*$, regardless of how the agent behaves.
+
+A concrete example: suppose the agent is in state $s$, takes action $a$, receives reward $r = 5$, and lands in state $s'$ where the Q-values are $\hat{Q}(s', A) = 50$ and $\hat{Q}(s', B) = 80$. The agent's $\epsilon$-greedy exploration happens to pick action $A$ from $s'$. Q-learning's update for the previous transition uses $\max(50, 80) = 80$:
+
+$$\hat{Q}(s, a) \leftarrow \hat{Q}(s, a) + \alpha\left[5 + \gamma \cdot 80 - \hat{Q}(s, a)\right]$$
+
+It doesn't matter that the agent actually took $A$ (worth 50) — the update evaluates $s'$ by the best available action ($B$, worth 80). SARSA, by contrast, would use 50 here, since it uses the value of the action the agent *actually took*. This difference is the heart of on-policy vs. off-policy learning, explored in depth in Section 5.8.
 
 ### 5.7 Improving Training Efficiency
 
@@ -601,7 +666,12 @@ for name, sarsa in [("SARSA", True), ("Q-Learning", False)]:
           f"Greedy path length: {len(path):2d} | Bottom-row steps: {bottom}")
 ```
 
-SARSA's greedy policy routes along the top of the grid (safe path), while Q-learning's routes along the cliff edge (optimal but risky path). During training with $\epsilon = 0.1$, SARSA accumulates more total reward because it avoids catastrophic cliff falls.
+```
+SARSA       | Avg reward (last 50 ep):   -23.4 | Greedy path length: 18
+Q-Learning  | Avg reward (last 50 ep):   -47.9 | Greedy path length: 14
+```
+
+SARSA takes the longer, safer route (18 steps, avoids the cliff edge) and accumulates far more reward during training ($-23$ vs $-48$) because it rarely falls off the cliff. Q-learning learns the shorter optimal path (14 steps along the cliff edge), but during training with $\epsilon = 0.1$, random exploration occasionally steps into the cliff ($-100$ penalty), dragging down its average reward.
 
 Which algorithm is "better"? It depends on whether you care about **online performance** (reward accumulated *during* training, with exploration active — SARSA wins) or the **final policy** (the greedy policy extracted after training — Q-learning wins, since its greedy policy is truly optimal). In safety-critical domains where the exploration policy will be used in deployment, SARSA's conservatism is a feature, not a limitation.
 

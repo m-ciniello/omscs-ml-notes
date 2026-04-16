@@ -2,6 +2,37 @@
 
 ---
 
+## Table of Contents
+
+1. [Beyond Tabular Q-Learning: Three Obstacles](#1-beyond-tabular-q-learning-three-obstacles)
+2. [Exploration vs. Exploitation](#2-exploration-vs-exploitation)
+   - 2.1 The k-Armed Bandit Problem
+   - 2.2 Formally Justified Approaches
+   - 2.3 Practical Exploration Strategies
+   - 2.4 Exploration in the Multi-State Setting
+   - 2.5 Practical Hyperparameter Schedules
+3. [Model-Based Methods: Learning Faster with a Model](#3-model-based-methods-learning-faster-with-a-model)
+   - 3.1 Certainty Equivalence: The Naive Approach
+   - 3.2 Dyna: Interleaving Real and Simulated Experience
+   - 3.3 Prioritized Sweeping: Directing Computation Where It Matters
+   - 3.4 The Model-Free vs. Model-Based Trade-Off
+4. [Generalization: Function Approximation for Large State Spaces](#4-generalization-function-approximation-for-large-state-spaces)
+   - 4.1 State Discretization
+   - 4.2 How Function Approximation Integrates with Q-Learning
+   - 4.3 The Convergence Problem
+   - 4.4 Deep Q-Networks (DQN): Stabilizing Neural Q-Learning
+   - 4.5 Approaches to Generalization
+   - 4.6 Hierarchical Methods
+5. [Partial Observability](#5-partial-observability)
+   - 5.1 The Problem: Perceptual Aliasing
+   - 5.2 Coping Strategies
+6. [Applications: Where RL Meets the Real World](#6-applications-where-rl-meets-the-real-world)
+   - 6.1 TD-Gammon: A Landmark Success
+   - 6.2 Robotics and Control
+7. [The Big Picture: A Practical Roadmap](#7-the-big-picture-a-practical-roadmap)
+
+---
+
 ## 1. Beyond Tabular Q-Learning: Three Obstacles
 
 The companion document, *RL Foundations*, developed the theory of MDPs, the Bellman equations, and model-free algorithms like Q-learning and TD($\lambda$). These algorithms have provable convergence guarantees — but those guarantees rest on assumptions that rarely hold in practice:
