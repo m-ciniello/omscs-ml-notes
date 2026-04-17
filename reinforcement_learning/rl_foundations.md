@@ -4,34 +4,37 @@
 
 ## Table of Contents
 
-1. [What Problem Does Reinforcement Learning Solve?](#1-what-problem-does-reinforcement-learning-solve)
-2. [Markov Decision Processes: The Formal Framework](#2-markov-decision-processes-the-formal-framework)
-   - 2.1 Definition
-   - 2.2 Policies and the Objective
-   - 2.3 Value Functions and the Bellman Equations
-   - 2.4 The Q-Function: Making Actions Explicit
-   - 2.5 A Worked Example: Grid World
-3. [Dynamic Programming: Solving MDPs with a Known Model](#3-dynamic-programming-solving-mdps-with-a-known-model)
-   - 3.1 Value Iteration
-   - 3.2 Policy Iteration
-   - 3.3 Value Iteration vs. Policy Iteration
-4. [From Known Models to Unknown: The RL Dichotomy](#4-from-known-models-to-unknown-the-rl-dichotomy)
-5. [Q-Learning](#5-q-learning)
-   - 5.1 Why Learn Q* Instead of V*?
-   - 5.2 The Q-Learning Algorithm (Deterministic Case)
-   - 5.3 How Q-Values Propagate: A Worked Example
-   - 5.4 Convergence of Q-Learning (Deterministic Case)
-   - 5.5 Extension to Nondeterministic MDPs
-   - 5.6 Exploration Strategies for Q-Learning
-   - 5.7 Improving Training Efficiency
-   - 5.8 SARSA: The On-Policy Alternative
-   - 5.9 Double Q-Learning: Correcting Overestimation Bias
-6. [Temporal Difference Learning](#6-temporal-difference-learning)
-   - 6.1 TD(0): One-Step Temporal Differences
-   - 6.2 The Adaptive Heuristic Critic
-   - 6.3 TD(λ): Multi-Step Temporal Differences
-   - 6.4 On-Policy vs. Off-Policy Learning
-7. [The Big Picture: Connecting the Algorithms](#7-the-big-picture-connecting-the-algorithms)
+- [Reinforcement Learning Foundations: MDPs, Value Functions, and Core Algorithms](#reinforcement-learning-foundations-mdps-value-functions-and-core-algorithms)
+  - [Table of Contents](#table-of-contents)
+  - [1. What Problem Does Reinforcement Learning Solve?](#1-what-problem-does-reinforcement-learning-solve)
+  - [2. Markov Decision Processes: The Formal Framework](#2-markov-decision-processes-the-formal-framework)
+    - [2.1 Definition](#21-definition)
+    - [2.2 Policies and the Objective](#22-policies-and-the-objective)
+    - [2.3 Value Functions and the Bellman Equations](#23-value-functions-and-the-bellman-equations)
+    - [2.4 The Q-Function: Making Actions Explicit](#24-the-q-function-making-actions-explicit)
+    - [2.5 A Worked Example: Grid World](#25-a-worked-example-grid-world)
+  - [3. Dynamic Programming: Solving MDPs with a Known Model](#3-dynamic-programming-solving-mdps-with-a-known-model)
+    - [3.1 Value Iteration](#31-value-iteration)
+    - [3.2 Policy Iteration](#32-policy-iteration)
+    - [3.3 Value Iteration vs. Policy Iteration](#33-value-iteration-vs-policy-iteration)
+  - [4. From Known Models to Unknown: The RL Dichotomy](#4-from-known-models-to-unknown-the-rl-dichotomy)
+  - [5. Q-Learning](#5-q-learning)
+    - [5.1 Why Learn $Q^*$ Instead of $V^*$?](#51-why-learn-q-instead-of-v)
+    - [5.2 The Q-Learning Algorithm (Deterministic Case)](#52-the-q-learning-algorithm-deterministic-case)
+    - [5.3 How Q-Values Propagate: A Worked Example](#53-how-q-values-propagate-a-worked-example)
+    - [5.4 Convergence of Q-Learning (Deterministic Case)](#54-convergence-of-q-learning-deterministic-case)
+    - [5.5 Extension to Nondeterministic MDPs](#55-extension-to-nondeterministic-mdps)
+    - [5.6 Exploration Strategies for Q-Learning](#56-exploration-strategies-for-q-learning)
+    - [5.7 Improving Training Efficiency](#57-improving-training-efficiency)
+    - [5.8 SARSA: The On-Policy Alternative](#58-sarsa-the-on-policy-alternative)
+    - [5.9 Double Q-Learning: Correcting Overestimation Bias](#59-double-q-learning-correcting-overestimation-bias)
+  - [6. Temporal Difference Learning](#6-temporal-difference-learning)
+    - [6.1 TD(0): One-Step Temporal Differences](#61-td0-one-step-temporal-differences)
+    - [6.2 The Adaptive Heuristic Critic](#62-the-adaptive-heuristic-critic)
+    - [6.3 TD($\\lambda$): Multi-Step Temporal Differences](#63-tdlambda-multi-step-temporal-differences)
+    - [6.4 On-Policy vs. Off-Policy Learning](#64-on-policy-vs-off-policy-learning)
+  - [7. The Big Picture: Connecting the Algorithms](#7-the-big-picture-connecting-the-algorithms)
+  - [Sources and Further Reading](#sources-and-further-reading)
 
 ---
 
@@ -76,6 +79,8 @@ A (finite) Markov decision process consists of four components:
 - A finite set of **actions** $A$, representing the choices available to the agent.
 - A **transition function** $T : S \times A \to \Delta(S)$, where $\Delta(S)$ denotes the **probability simplex** over $S$ — the set of all probability distributions over states. $T(s, a, s')$ gives the probability of transitioning to state $s'$ when the agent takes action $a$ in state $s$. This satisfies $\sum_{s' \in S} T(s, a, s') = 1$ for all $s, a$.
 - A **reward function** $R : S \times A \to \mathbb{R}$, where $R(s, a)$ gives the expected immediate reward for taking action $a$ in state $s$. Note that the reward depends on the action, not just the state — different actions from the same state can yield different rewards. (Some textbooks use $R(s)$ or $R(s, a, s')$; these are equivalent in expressiveness. We use $R(s, a)$ throughout.)
+
+  **A practical warning:** the reward function is hand-designed, and the agent's learned behavior is extremely sensitive to it. All the algorithms in this document are *solvers* — they find the optimal policy *for the reward function you give them*. If the reward poorly captures the desired behavior (e.g., the step cost is too large relative to the goal reward, or a shortcut through a penalty zone turns out to be "worth it"), the agent will learn a perfectly optimal solution to the wrong problem. In practice, designing a good reward function (**reward shaping**) is often harder than choosing the right algorithm.
 
 The defining property is the **Markov property**: the transition probabilities and expected rewards depend only on the current state $s$ and the chosen action $a$, not on the history of states and actions that preceded them. Formally:
 
@@ -404,9 +409,26 @@ The right-hand side is the agent's best current estimate of what $Q^*(s, a)$ sho
 >
 > $\quad$ $s \leftarrow s'$
 
+**What does the Q-table actually represent?** Each entry $\hat{Q}(s, a)$ is the agent's current *estimate* of the full recursive value — the total discounted reward from taking action $a$ in state $s$ and then acting optimally forever. But the agent doesn't compute this recursion directly. It starts with all zeros and incrementally nudges entries closer to the true values, one real transition at a time. The right-hand side of the update, $r + \gamma \max_{a'} \hat{Q}(s', a')$, is a one-step sample of the recursive value: the immediate reward plus the current best estimate of everything that follows.
+
+Despite the dense notation, the actual code is remarkably simple — the entire update is one line:
+
+```python
+Q[s][a] += alpha * (r + gamma * max(Q[s2]) - Q[s][a])
+```
+
+That's the Bellman equation, Q-learning update, and TD error all in one expression. The **TD error** is the parenthesized quantity — the difference between what we *observed* and what we *currently believe*:
+
+- **What we observed** (one real step): `r + gamma * max(Q[s2])` — "I got reward `r`, and from here the best I can do is `max(Q[s2])`."
+- **What we currently believe**: `Q[s][a]` — "I thought this (s, a) pair was worth this much."
+
+The update just nudges the estimate a fraction (`alpha`) of the way toward the observation. A large TD error means the estimate is stale and needs a big correction; a near-zero TD error means the estimate already agrees with the one-step sample.
+
+This means that with zero initialization, **nothing meaningful happens until the agent first discovers a nonzero reward**. Before that, `max(Q[s2])` is 0 for every successor state, so every update just says "this step cost me $-0.1$, so adjust slightly downward" — there is no directional signal pulling the agent toward any particular state. The agent is effectively wandering randomly. Only once it stumbles into a reward (or penalty) can that signal propagate backward through subsequent updates to inform earlier states. This is the fundamental exploration challenge: the agent must *find* reward before it can *learn from* reward.
+
 ### 5.3 How Q-Values Propagate: A Worked Example
 
-To see Q-learning in action, return to the grid world from Section 2.5 with all Q-values initialized to zero and the only nonzero reward being 100 for entering goal state $G$.
+To see this propagation in action, return to the grid world from Section 2.5 with all Q-values initialized to zero and the only nonzero reward being 100 for entering goal state $G$.
 
 Initially, every entry in the Q-table is zero — the agent knows nothing:
 
@@ -587,7 +609,25 @@ $$Q(s_t, a_t) \leftarrow Q(s_t, a_t) + \alpha \left[ r_t + \gamma \max_{a'} Q(s_
 
 $$\underbrace{Q(s,a)}_{\text{updated entry}} \;\leftarrow\; Q(s,a) + \alpha\Big[\; r + \gamma\;\underbrace{Q(s', a')}_{\substack{\text{SARSA: action} \\ \text{actually taken}}} \;-\; Q(s,a) \;\Big] \quad\text{vs.}\quad \alpha\Big[\; r + \gamma\;\underbrace{\max_{a'} Q(s', a')}_{\substack{\text{Q-learning: best} \\ \text{possible action}}} \;-\; Q(s,a) \;\Big]$$
 
-The only difference is the bootstrap target: SARSA uses $Q(s_{t+1}, a_{t+1})$ — the value of the action the agent *actually takes* next — while Q-learning uses $\max_{a'} Q(s_{t+1}, a')$ — the value of the *best* action. This seemingly small difference has profound consequences.
+The only difference is the bootstrap target: SARSA uses $Q(s_{t+1}, a_{t+1})$ — the value of the action the agent *actually takes* next — while Q-learning uses $\max_{a'} Q(s_{t+1}, a')$ — the value of the *best* action. In code, the entire distinction is one line:
+
+```python
+# Both: take action, observe transition
+a = epsilon_greedy(Q, s)
+s2, r = env.step(s, a)
+
+# Q-learning (off-policy): "what's the BEST I could do from s2?"
+td_target = r + gamma * np.max(Q[s2])
+
+# SARSA (on-policy): "what will I ACTUALLY do from s2?"
+a2 = epsilon_greedy(Q, s2)
+td_target = r + gamma * Q[s2][a2]
+
+# Same update rule in both cases
+Q[s][a] += alpha * (td_target - Q[s][a])
+```
+
+Q-learning's `max` assumes optimal play from $s'$ onward — but the agent won't actually play optimally, because it'll keep exploring with probability $\epsilon$. The update values $s'$ as if the agent will always pick the best action, when in reality it sometimes picks randomly. SARSA closes this gap: by using the Q-value of the action the agent *will actually take* (including random exploratory ones), its estimates reflect the true behavior policy. This seemingly small difference has profound consequences.
 
 **Algorithm: SARSA**
 

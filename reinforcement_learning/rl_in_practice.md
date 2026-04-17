@@ -4,32 +4,43 @@
 
 ## Table of Contents
 
-1. [Beyond Tabular Q-Learning: Three Obstacles](#1-beyond-tabular-q-learning-three-obstacles)
-2. [Exploration vs. Exploitation](#2-exploration-vs-exploitation)
-   - 2.1 The k-Armed Bandit Problem
-   - 2.2 Formally Justified Approaches
-   - 2.3 Practical Exploration Strategies
-   - 2.4 Exploration in the Multi-State Setting
-   - 2.5 Practical Hyperparameter Schedules
-3. [Model-Based Methods: Learning Faster with a Model](#3-model-based-methods-learning-faster-with-a-model)
-   - 3.1 Certainty Equivalence: The Naive Approach
-   - 3.2 Dyna: Interleaving Real and Simulated Experience
-   - 3.3 Prioritized Sweeping: Directing Computation Where It Matters
-   - 3.4 The Model-Free vs. Model-Based Trade-Off
-4. [Generalization: Function Approximation for Large State Spaces](#4-generalization-function-approximation-for-large-state-spaces)
-   - 4.1 State Discretization
-   - 4.2 How Function Approximation Integrates with Q-Learning
-   - 4.3 The Convergence Problem
-   - 4.4 Deep Q-Networks (DQN): Stabilizing Neural Q-Learning
-   - 4.5 Approaches to Generalization
-   - 4.6 Hierarchical Methods
-5. [Partial Observability](#5-partial-observability)
-   - 5.1 The Problem: Perceptual Aliasing
-   - 5.2 Coping Strategies
-6. [Applications: Where RL Meets the Real World](#6-applications-where-rl-meets-the-real-world)
-   - 6.1 TD-Gammon: A Landmark Success
-   - 6.2 Robotics and Control
-7. [The Big Picture: A Practical Roadmap](#7-the-big-picture-a-practical-roadmap)
+- [Reinforcement Learning in Practice: Exploration, Generalization, and Scaling](#reinforcement-learning-in-practice-exploration-generalization-and-scaling)
+  - [Table of Contents](#table-of-contents)
+  - [1. Beyond Tabular Q-Learning: Three Obstacles](#1-beyond-tabular-q-learning-three-obstacles)
+  - [2. Exploration vs. Exploitation](#2-exploration-vs-exploitation)
+    - [2.1 The $k$-Armed Bandit Problem](#21-the-k-armed-bandit-problem)
+    - [2.2 Formally Justified Approaches](#22-formally-justified-approaches)
+    - [2.3 Practical Exploration Strategies](#23-practical-exploration-strategies)
+    - [2.4 Exploration in the Multi-State Setting](#24-exploration-in-the-multi-state-setting)
+    - [2.5 Practical Hyperparameter Schedules](#25-practical-hyperparameter-schedules)
+    - [2.6 Practical Convergence Monitoring](#26-practical-convergence-monitoring)
+  - [3. Model-Based Methods: Learning Faster with a Model](#3-model-based-methods-learning-faster-with-a-model)
+    - [3.1 Certainty Equivalence: The Naive Approach](#31-certainty-equivalence-the-naive-approach)
+    - [3.2 Dyna: Interleaving Real and Simulated Experience](#32-dyna-interleaving-real-and-simulated-experience)
+    - [3.3 Prioritized Sweeping: Directing Computation Where It Matters](#33-prioritized-sweeping-directing-computation-where-it-matters)
+    - [3.4 The Model-Free vs. Model-Based Trade-Off](#34-the-model-free-vs-model-based-trade-off)
+  - [4. Generalization: Function Approximation for Large State Spaces](#4-generalization-function-approximation-for-large-state-spaces)
+    - [4.1 State Discretization: Making Tabular Methods Work with Continuous Spaces](#41-state-discretization-making-tabular-methods-work-with-continuous-spaces)
+    - [4.2 How Function Approximation Integrates with Q-Learning](#42-how-function-approximation-integrates-with-q-learning)
+    - [4.3 The Convergence Problem](#43-the-convergence-problem)
+    - [4.4 Deep Q-Networks (DQN): Stabilizing Neural Q-Learning](#44-deep-q-networks-dqn-stabilizing-neural-q-learning)
+    - [4.5 Approaches to Generalization](#45-approaches-to-generalization)
+    - [4.6 Hierarchical Methods](#46-hierarchical-methods)
+  - [5. Partial Observability](#5-partial-observability)
+    - [5.1 The Problem: Perceptual Aliasing](#51-the-problem-perceptual-aliasing)
+    - [5.2 Coping Strategies](#52-coping-strategies)
+  - [6. Applications: Where RL Meets the Real World](#6-applications-where-rl-meets-the-real-world)
+    - [6.1 TD-Gammon: A Landmark Success](#61-td-gammon-a-landmark-success)
+    - [6.2 Robotics and Control](#62-robotics-and-control)
+  - [7. The Big Picture: A Practical Roadmap](#7-the-big-picture-a-practical-roadmap)
+  - [Sources and Further Reading](#sources-and-further-reading)
+    - [Primary sources](#primary-sources)
+    - [Exploration](#exploration)
+    - [Model-based methods](#model-based-methods)
+    - [Function approximation and deep RL](#function-approximation-and-deep-rl)
+    - [Generalization and hierarchical methods](#generalization-and-hierarchical-methods)
+    - [Partial observability](#partial-observability)
+    - [Applications](#applications)
 
 ---
 
@@ -171,15 +182,31 @@ for ep in [0, 1000, 4000, 8000, 9999]:
 # Output: 1.000 → 0.876 → 0.506 → 0.010 → 0.010
 ```
 
-**Tuning priority.** Getting the exploration schedule right matters more than fine-tuning the learning rate. If the agent never visits good states — because exploration is too narrow or stops too early — no learning rate will help. A practical workflow: (1) start with generous exploration ($\epsilon = 1.0$, slow decay), (2) verify the agent visits the relevant parts of the state space, (3) then tune $\alpha$ for convergence speed. When systematic tuning is needed, random search over log-spaced grids (e.g., $\alpha \in \{0.01, 0.05, 0.1, 0.5\}$, $\epsilon_{\text{decay}} \in \{0.5T, 0.8T, 0.95T\}$) is more efficient than grid search, since most hyperparameter landscapes have low effective dimensionality (Bergstra & Bengio, 2012).
+**Tuning priority.** Getting the exploration schedule right matters more than fine-tuning the learning rate. If the agent never visits good states — because exploration is too narrow or stops too early — no learning rate will help. A practical workflow: (1) start with generous exploration ($\epsilon = 1.0$, slow decay), (2) verify the agent visits the relevant parts of the state space, (3) then tune $\alpha$ for convergence speed. When systematic tuning is needed, random search over log-spaced ranges (e.g., $\alpha \in \{0.01, 0.05, 0.1, 0.5\}$, $\epsilon_{\text{decay}} \in \{0.5T, 0.8T, 0.95T\}$) is more efficient than grid search, since most hyperparameter landscapes have **low effective dimensionality** — only one or two hyperparameters actually drive performance, and random search explores each individual dimension more thoroughly than a grid with the same budget (Bergstra & Bengio, 2012).
+
+### 2.6 Practical Convergence Monitoring
+
+The theoretical convergence guarantees (Section 5.4 of the companion document) say Q-learning converges given infinite visits to every state-action pair — but they say nothing about *when to stop* in a finite training run. Unlike supervised learning, RL has no train/validation split and no clean notion of "overfitting" — the agent is learning the environment, not generalizing to unseen data. The practical risk is *under-exploration* (stopping before the agent has found the optimal route), not overfitting. Common stopping heuristics:
+
+- **Return plateau.** Track the average episodic return (or steps-to-goal) over a rolling window. When the moving average stabilizes within some tolerance for $N$ consecutive episodes, the policy is unlikely to improve further. This is the most widely used criterion and the easiest to implement.
+- **Value stability.** Monitor $\max_{s,a} |Q_{\text{new}}(s,a) - Q_{\text{old}}(s,a)|$ across episodes. When the largest Q-value change drops below a threshold $\epsilon$, the value function has settled. This is the Q-learning analogue of the Bellman residual stopping criterion used in value iteration (companion document, Section 3.1).
+- **Policy stability.** If the greedy policy $\pi(s) = \arg\max_a Q(s,a)$ hasn't changed at any state for $N$ episodes, the agent has converged *behaviorally* — even if the Q-values are still being refined. Policy often stabilizes before values do.
+
+A useful diagnostic is to track $V^*(s_{\text{start}}) = \max_a Q(s_{\text{start}}, a)$ over training. This single number measures how far the reward signal has propagated from the goal back to the starting state. If you can compute the true optimal value (e.g., via value iteration on a known model), the gap between your estimate and the true value directly measures remaining suboptimality. In most real problems you can't compute the true value, but the trajectory of $V^*(s_{\text{start}})$ still reveals whether learning has plateaued.
 
 ---
 
 ## 3. Model-Based Methods: Learning Faster with a Model
 
-Model-free methods like Q-learning are guaranteed to find the optimal policy, but they are profligate with experience. Each real-world transition $\langle s, a, r, s' \rangle$ updates a single Q-table entry and is then effectively discarded. In environments where real-world actions are expensive — a robot taking physical steps, a factory adjusting its production line — this is wasteful.
+Model-free methods like Q-learning are guaranteed to find the optimal policy, but they are wasteful with experience. Each real-world transition $\langle s, a, r, s' \rangle$ updates a single Q-table entry and is then effectively discarded. In a toy grid world this hardly matters — environment steps are just array lookups. But in many real settings, each interaction is genuinely expensive:
 
-**Model-based methods** take a different approach: learn an approximate model of the environment ($\hat{T}$ and $\hat{R}$), then use that model to plan. The model can be "consulted" many times between real-world actions, generating simulated experience that is vastly cheaper than the real thing. This makes model-based methods more **sample-efficient** (fewer real-world steps to convergence), at the cost of more computation per step.
+- **Robotics:** every step means physically moving hardware, consuming time, and risking damage.
+- **Healthcare:** each "step" is a treatment decision for an actual patient.
+- **Autonomous driving:** real interactions mean real miles, fuel, and safety risk.
+
+In these domains, an algorithm that needs hundreds of thousands of real transitions to converge is impractical. The core motivation for model-based RL is **sample efficiency** — squeezing more learning out of each precious real experience.
+
+**Model-based methods** take a different approach: learn an approximate model of the environment ($\hat{T}$ and $\hat{R}$), then use that model to plan. The model can be "consulted" many times between real-world actions, generating simulated experience that is vastly cheaper than the real thing. This makes model-based methods more **sample-efficient** (fewer real-world steps to convergence), at the cost of more computation per step. The trade-off is essentially: *think cheaply instead of acting expensively*.
 
 ### 3.1 Certainty Equivalence: The Naive Approach
 
@@ -193,86 +220,115 @@ This has three problems (Kaelbling et al., 1996):
 
 The more practical model-based algorithms below address these issues by interleaving model learning, planning, and acting.
 
+To see *why* certainty equivalence is so expensive, consider what its online variant does after every single real step — it re-solves the entire estimated MDP from scratch:
+
+```
+after each real step:
+    for iteration in range(until_convergence):   # outer loop: repeat until stable
+        for s in ALL states:                     # inner loop: sweep every state
+            for a in ALL actions:
+                Q[s][a] = R̂(s,a) + γ * Σ T̂(s,a,s') * max_a' Q(s',a')
+```
+
+This is exhaustive and exact, but the nested loops make it impractical for large state spaces — on our 6×6 grid that's 144 state-action pairs per sweep, but a real problem with millions of states makes full sweeps impossible. Dyna (below) replaces this full solve with a handful of random model lookups — far cheaper per step, at the cost of only *incrementally* improving Q-values rather than solving to convergence.
+
 ### 3.2 Dyna: Interleaving Real and Simulated Experience
 
-Sutton's **Dyna** architecture (1990, 1991) occupies a middle ground between model-free learning and full certainty equivalence. It simultaneously:
+Sutton's **Dyna** architecture (1990, 1991) occupies a middle ground between model-free learning and full certainty equivalence. The "model" here is surprisingly simple: a lookup table that stores every real transition the agent has observed. Each time the agent takes action $a$ in state $s$ and lands in $s'$ with reward $r$, it records the entry $(s, a) \mapsto (s', r)$. That's the entire model — no probability distributions, no function approximation, just a dictionary of past experience.
 
-1. Uses real experience to update the model ($\hat{T}$, $\hat{R}$).
-2. Uses real experience to update Q-values directly (like Q-learning).
-3. Uses the model to generate $k$ additional "simulated" updates per real step.
+Dyna simultaneously:
+
+1. Uses real experience to update Q-values directly (like Q-learning).
+2. Stores the transition in the model (add an entry to the dictionary).
+3. Uses the model to generate $k$ additional "simulated" updates per real step — by randomly sampling stored transitions and applying the same Q-learning update as if the agent had just experienced them again.
 
 **Algorithm: Dyna**
 
 > Given an experience tuple $\langle s, a, r, s' \rangle$ from the real environment:
 >
-> 1. **Update the model:** increment transition counts for $s \xrightarrow{a} s'$ and reward statistics for $(s, a)$.
->
-> 2. **Direct (model-free) update:** apply the standard Q-learning sample backup using the *actual* observed transition:
+> 1. **Direct (model-free) update:** apply the standard Q-learning sample backup using the *actual* observed transition:
 >
 > $\qquad Q(s, a) \leftarrow Q(s, a) + \alpha \left[ r + \gamma \max_{a'} Q(s', a') - Q(s, a) \right]$
 >
+> 2. **Update the model:** store the transition $(s, a) \mapsto (s', r)$ in the dictionary.
+>
 > 3. **Simulated (model-based) updates:** Repeat $k$ times:
 >    - Choose a previously-visited state-action pair $(s_k, a_k)$ at random.
->    - Sample $s'_k$ from $\hat{T}(s_k, a_k, \cdot)$ and use $\hat{R}(s_k, a_k)$ as the reward.
->    - Update: $Q(s_k, a_k) \leftarrow Q(s_k, a_k) + \alpha \left[ \hat{R}(s_k, a_k) + \gamma \max_{a'} Q(s'_k, a') - Q(s_k, a_k) \right]$
+>    - Look up the stored transition: $(s'_k, r_k) = \text{model}(s_k, a_k)$.
+>    - Apply the same Q-learning update: $Q(s_k, a_k) \leftarrow Q(s_k, a_k) + \alpha \left[ r_k + \gamma \max_{a'} Q(s'_k, a') - Q(s_k, a_k) \right]$
 >
 > 4. **Act:** Choose the next action from $s'$ using the Q-values (with exploration).
 >
-> This is the key insight of Dyna: step 2 is standard model-free Q-learning (learning from real experience), while step 3 uses the learned model to generate additional "imagined" experience for the same kind of update. The real and simulated updates are identical in form — the only difference is where the transition comes from.
+> This is the key insight of Dyna: step 1 is standard model-free Q-learning (learning from real experience), while step 3 uses the learned model to generate additional "imagined" experience for the same kind of update. The real and simulated updates are identical in form — the only difference is where the transition comes from.
 
-The parameter $k$ controls the computation-per-step budget. With $k = 0$, Dyna reduces to standard Q-learning. With large $k$, the agent performs extensive "mental simulation" between each real-world action, propagating value information through the model much faster than Q-learning can propagate it through real experience.
+The parameter $k$ controls the computation-per-step budget. With $k = 0$, the simulated-update loop never executes and Dyna reduces to standard Q-learning — the model is still built, but never consulted. With large $k$, the agent performs extensive "mental simulation" between each real-world action.
+
+**Why does random replay help?** At first glance, randomly picking from all past transitions seems wasteful. If the agent just reached the goal, why replay a transition from far away where nothing interesting happened? The answer is that not every replay needs to be useful — with $k = 50$, even a few replays that land near recently-updated states will propagate value one step further back. Over multiple real steps, this creates a wave of value propagation that spreads far faster than waiting for the agent to physically revisit each state. The model also grows richer with every real step (more dictionary entries), so simulated updates become more useful over time as the agent has explored more of the environment.
+
+That said, random selection *is* suboptimal — many of those $k$ replays do land on states where nothing has changed and produce near-zero updates. This motivates **prioritized sweeping** (Section 3.3), which directs replays to states where value has recently changed.
+
+The code below demonstrates Dyna on a 6×6 grid. The agent starts at bottom-left `(5,0)` and must reach the goal at top-right `(0,5)`. Two trap cells at `(1,4)` and `(1,5)` carry a −10 penalty, forcing the agent to learn a safe route around them rather than simply beelining toward the goal.
 
 ```python
 import numpy as np
 
 np.random.seed(0)
-ROWS, COLS = 4, 4
-GOAL = (0, 3)
-ACTIONS = [(-1,0),(1,0),(0,-1),(0,1)]
+ROWS, COLS = 6, 6
+GOAL = (0, 5)                             # top-right corner
+TRAPS = {(1, 4), (1, 5)}                  # danger zone: −10 penalty
+# Each action is a (Δrow, Δcol) offset.  Row 0 is the top of the grid,
+# so "up" decreases the row index and "down" increases it.
+ACTIONS = [(-1,0),(1,0),(0,-1),(0,1)]      # up, down, left, right
 gamma, alpha = 0.95, 0.1
 
 def step(s, a):
+    """Take action a (index into ACTIONS) from state s (row, col).
+    Returns (next_state, reward). Rewards: +10 goal, −10 trap, −0.1 otherwise.
+    Moves that would leave the grid are clipped to the boundary."""
     nr, nc = s[0]+ACTIONS[a][0], s[1]+ACTIONS[a][1]
     nr, nc = max(0,min(ROWS-1,nr)), max(0,min(COLS-1,nc))
     s2 = (nr, nc)
-    return s2, (10.0 if s2 == GOAL else -0.1)
+    if s2 == GOAL:   return s2, 10.0
+    if s2 in TRAPS:  return s2, -10.0
+    return s2, -0.1
 
 def run_dyna(k_sim, episodes=80):
-    Q = np.zeros((ROWS, COLS, 4))
-    model = {}
-    visited = []
+    """Run Dyna-Q on the 6x6 grid. k_sim=0 reduces to plain Q-learning."""
+    Q = np.zeros((ROWS, COLS, 4))          # Q-table: one value per (row, col, action)
+    model = {}                              # learned model: (s, a) -> (s', r)
+    visited = []                            # list of (s, a) pairs seen so far
     for ep in range(episodes):
-        s = (3, 0)
+        s = (5, 0)                          # start bottom-left
         for _ in range(200):
+            # ε-greedy action selection (ε = 0.1)
             a = np.argmax(Q[s]) if np.random.random() > 0.1 else np.random.randint(4)
             s2, r = step(s, a)
+
+            # Step 1: direct Q-learning update (real experience)
             Q[s][a] += alpha * (r + gamma * np.max(Q[s2]) - Q[s][a])
+
+            # Step 2: store transition in the model
             model[(s, a)] = (s2, r)
             if (s, a) not in visited: visited.append((s, a))
+
+            # Step 3: k_sim simulated updates from the model (Dyna's key idea)
             for _ in range(k_sim):
                 si, ai = visited[np.random.randint(len(visited))]
                 s2i, ri = model[(si, ai)]
                 Q[si][ai] += alpha * (ri + gamma * np.max(Q[s2i]) - Q[si][ai])
+
             s = s2
             if s == GOAL: break
     return Q
 
 for k in [0, 5, 50]:
     Q = run_dyna(k)
-    print(f"k={k:2d}: V(start) = {np.max(Q[3,0]):.2f},  V(near goal) = {np.max(Q[0,2]):.2f}")
+    print(f"k={k:2d}: V(start) = {np.max(Q[5,0]):.2f},  V(near goal) = {np.max(Q[0,4]):.2f}")
 ```
 
 With $k=0$ (pure Q-learning), 80 episodes is far too few for value estimates to propagate across the grid. With $k=50$, the same 80 episodes of real experience produce accurate values everywhere — each real step triggers 50 simulated updates that spread information through the model.
 
-**Empirical performance.** On a 3,277-state grid world (Kaelbling et al., 1996), the results are dramatic:
-
-| Algorithm | Steps to convergence | Backups to convergence |
-|---|---|---|
-| Q-learning | 531,000 | 531,000 |
-| Dyna ($k = 200$) | 62,000 | 3,055,000 |
-| Prioritized sweeping ($k = 200$) | 28,000 | 1,010,000 |
-
-Dyna needs **8.5× fewer real-world steps** than Q-learning, at the cost of about 6× more computation. When real-world steps are expensive and computation is cheap, this is an excellent trade.
+**A note on reward design.** The agent's behavior is entirely shaped by the reward values we chose — and it is surprisingly sensitive to them. In the code above, the goal reward (+10) dwarfs the step cost (−0.1), so the agent is strongly motivated to reach the goal even if it takes a long path. But change the balance and the behavior shifts dramatically: make traps only mildly negative (say −1 instead of −10) and the agent may learn to cut *through* a trap cell if the shortcut saves enough step costs to offset the penalty. Make the step cost too large relative to the goal reward and the agent may prefer to stay in place rather than risk accumulating penalties on the way. The algorithm finds the optimal policy *for the reward function you give it* — getting the reward right is often harder than choosing the algorithm.
 
 ### 3.3 Prioritized Sweeping: Directing Computation Where It Matters
 
@@ -281,6 +337,8 @@ Dyna's weakness is that its simulated updates are chosen randomly — it may was
 The key idea: when a state's value changes significantly, the states that *lead to* it (its predecessors) likely need updating too. Prioritized sweeping maintains a priority queue of states, ordered by how much their values are expected to change.
 
 **Algorithm: Prioritized Sweeping**
+
+Note: the algorithm below is written in terms of $V(s)$ rather than $Q(s,a)$. This is a natural choice because the priority queue operates on *states* — when a state's value changes, its predecessor *states* need updating. Using Q would require queueing individual $(s,a)$ pairs ($|S| \times |A|$ entries instead of $|S|$). The two are equivalent: step 2 below computes $V(s)$ by taking the best action from $s$, i.e. $V(s) = \max_a Q(s,a)$. (The $\max$ makes this implicitly $V^*$; plain $V^\pi$ without a $\max$ would be the value under a specific policy — see the companion document, Sections 2.2–2.4.)
 
 > In addition to the model ($\hat{T}$, $\hat{R}$), maintain:
 > - For each state $s'$: its set of **predecessor pairs** — all $(s, a)$ such that $\hat{T}(s, a, s') > 0$.
@@ -302,7 +360,15 @@ The key idea: when a state's value changes significantly, the states that *lead 
 
 When the agent discovers something surprising — finding a goal for the first time, or encountering an unexpected transition — the affected state gets a large value change, which triggers a cascade of priority promotions among its predecessors. Computation flows backward along the most relevant paths. When the world is "boring" (transitions match expectations), little computation is wasted.
 
-In the same 3,277-state grid world, prioritized sweeping converges in about **half the real-world steps of Dyna** and **one-third the computation** — and uses **20× fewer steps than Q-learning** with only about 2× the computation.
+**Empirical comparison.** On a 3,277-state grid world (Kaelbling et al., 1996), the results are dramatic. Here, a **backup** is a single Q-value update — one application of the Bellman equation to one $(s, a)$ entry ("backing up" value from successor states to the current state). Q-learning performs one backup per real step; Dyna performs $1 + k$ backups per real step (one real, $k$ simulated).
+
+| Algorithm | Steps to convergence | Backups to convergence |
+|---|---|---|
+| Q-learning | 531,000 | 531,000 |
+| Dyna ($k = 200$) | 62,000 | 3,055,000 |
+| Prioritized sweeping ($k = 200$) | 28,000 | 1,010,000 |
+
+Dyna needs **8.5× fewer real-world steps** than Q-learning, at the cost of about 6× more computation. This is exactly the "think cheaply instead of acting expensively" trade-off: if each real step is a robot moving or a patient receiving treatment, 6× more CPU time is a bargain for 8.5× fewer real interactions. Prioritized sweeping does even better on both axes — about **half the real steps of Dyna** and **one-third the computation** — because it directs its simulated backups where they'll have the most impact rather than picking randomly.
 
 ### 3.4 The Model-Free vs. Model-Based Trade-Off
 
@@ -379,7 +445,9 @@ The first two continuous states differ by only 0.001 in pole angle and map to th
 
 ### 4.2 How Function Approximation Integrates with Q-Learning
 
-The modification is conceptually straightforward. Replace the Q-table with a parameterized function $\hat{Q}(s, a; \mathbf{w})$ — a neural network, for example, with weights $\mathbf{w}$. After each transition $\langle s, a, r, s' \rangle$, compute the TD target:
+The discretization approach above works, but it has a fundamental limitation: each bin is independent. Visiting state $(0.01, -0.5, 0.05, 0.8)$ teaches the agent nothing about nearby states like $(0.02, -0.5, 0.05, 0.8)$ — even though the right action is almost certainly the same. Function approximation solves this by replacing the lookup table with a smooth function that *generalizes* across similar states: learning about one state automatically improves estimates for its neighbors.
+
+The modification to Q-learning is conceptually straightforward. Replace the Q-table with a parameterized function $\hat{Q}(s, a; \mathbf{w})$ — a neural network, for example, with weights $\mathbf{w}$. After each transition $\langle s, a, r, s' \rangle$, compute the TD target:
 
 $$y = r + \gamma \max_{a'} \hat{Q}(s', a'; \mathbf{w})$$
 
@@ -387,21 +455,57 @@ Then update $\mathbf{w}$ to reduce the error between $\hat{Q}(s, a; \mathbf{w})$
 
 $$\mathbf{w} \leftarrow \mathbf{w} + \alpha \left[ y - \hat{Q}(s, a; \mathbf{w}) \right] \nabla_{\mathbf{w}} \hat{Q}(s, a; \mathbf{w})$$
 
+(This is standard gradient descent on the MSE loss $\frac{1}{2}[y - \hat{Q}]^2$, with the chain rule expanded out. The $[y - \hat{Q}]$ factor is the TD error; $\nabla_\mathbf{w}\hat{Q}$ is the gradient of the network output with respect to its weights. Note that $y$ is treated as a **fixed target** — we don't differentiate through it, even though it depends on $\mathbf{w}$. This deliberate choice is a source of instability discussed in Section 4.3.)
+
+The core algorithm is unchanged — the same TD error drives learning in both cases. The difference is how Q-values are stored and how updates propagate:
+
+| | **Tabular** | **Function Approximation** |
+|---|---|---|
+| **Representation** | One entry per $(s, a)$ pair | Parameterized function $\hat{Q}(s,a;\mathbf{w})$ |
+| **Storage** | $O(\|S\| \times \|A\|)$ | $O(\|\mathbf{w}\|)$ — typically much smaller |
+| **Update rule** | $Q[s][a]$ += $\alpha \cdot \text{TD error}$ | $\mathbf{w}$ += $\alpha \cdot \text{TD error} \cdot \nabla_\mathbf{w}\hat{Q}$ |
+| **Generalization** | None — each entry is independent | Automatic — similar states share parameters |
+| **Convergence** | Guaranteed (Sections 5.4–5.5 of companion doc) | Not guaranteed in general (Section 4.3) |
+
+The update rule is the key line: in the tabular case, only $Q[s][a]$ changes and all other entries are untouched. With function approximation, the weight update $\Delta\mathbf{w}$ shifts the Q-estimates for *every* state-action pair simultaneously — that's both the source of generalization (nearby states improve together) and the source of instability (fixing one estimate can break another).
+
+It's worth pausing to recall what the TD target $y = r + \gamma \max_{a'} \hat{Q}(s', a')$ actually represents. It's the agent's best current estimate of the full recursive value of $(s, a)$ — not just the next step, but all future steps, recursively discounted. The immediate reward $r$ is ground truth (observed), while $\max_{a'}\hat{Q}(s', a')$ is the agent's estimate of everything from $s'$ onward, assuming optimal play. In both the tabular and function approximation cases, the Q-values answer the same question — "what's the value of each action from this state?" — they just store the answer differently. The table has a separate slot for every $(s, a)$; the network computes it on the fly from the state input. So $\max_{a'} Q(s', a')$ in the tabular case becomes "take the max over the network's output vector for input $s'$" — same math, different representation.
+
 There are several ways to structure the network:
 
-- **State-action input, scalar output:** The network takes $(s, a)$ as input and outputs $\hat{Q}(s, a)$. This generalizes over both states and actions, but finding the optimal action requires evaluating the network for every possible action.
-- **State input, one output per action:** The network takes $s$ as input and has $|A|$ output units, one for each action. The optimal action is $\arg\max$ over outputs. This is more efficient for action selection but requires a finite, enumerable action space.
-- **Separate network per action:** Each action has its own network mapping states to Q-values. Simple but doesn't share learned features across actions.
+- **State-action input, scalar output:** The network takes $(s, a)$ as input and outputs $\hat{Q}(s, a)$. This generalizes over both states and actions, but finding the optimal action requires a separate forward pass for *each* action — expensive when $|A|$ is large.
+- **State input, one output per action:** The network takes $s$ as input and has $|A|$ output units, one for each action. A single forward pass produces all action values; the optimal action is just $\arg\max$ over the output vector. **This is by far the most common architecture** — it's what DQN and most deep RL methods with discrete actions use. Its main limitation is that it requires a finite, enumerable action space (for continuous actions, policy gradient and actor-critic methods are used instead).
+- **Separate network per action:** Each action has its own network mapping states to Q-values. Simple but can't share learned features across actions, so rarely used in practice.
 
 ### 4.3 The Convergence Problem
 
-In tabular Q-learning, updating the Q-value for $(s, a)$ changes *only* that table entry. The convergence proof relies on this: each update reduces the error for the updated entry without increasing error anywhere else.
+In tabular Q-learning, updating the Q-value for $(s, a)$ changes *only* that table entry. The convergence proof (companion document, Section 5.4) relies on this. Recall the key idea: define the maximum error across all entries as $\Delta_n = \max_{s,a} |\hat{Q}_n(s,a) - Q^*(s,a)|$. Each Q-learning update mixes an error-free observation ($r$, entering with weight 1) with an error-prone bootstrap estimate ($\max_{a'}\hat{Q}(s',a')$, entering with weight $\gamma < 1$). Because $\gamma < 1$ shrinks the bootstrap error, the updated entry's error is at most $\gamma \Delta_n$ — strictly less than the worst-case error before the update. No other entries are affected, so the maximum error across the whole table can only decrease. This is the **contraction property**: each complete round of updates shrinks the worst-case error by at least a factor of $\gamma$, guaranteeing convergence to $Q^*$.
 
-With function approximation, updating $\mathbf{w}$ to fit $(s, a)$ better may worsen the Q-estimates for entirely different state-action pairs — the weight change "leaks" to other entries through the shared parameters. This destroys the contraction property that underwrites the convergence proof.
+With function approximation, this argument breaks down. Updating $\mathbf{w}$ to fit $(s, a)$ better may worsen the Q-estimates for entirely different state-action pairs — the weight change "leaks" to other entries through the shared parameters. An update that reduces error at $(s, a)$ might increase error at $(s_3, a_2)$ by even more, so the maximum error across all entries can *grow*. The contraction property is gone, and with it the convergence guarantee.
 
-The consequences can be severe. Boyan and Moore (1995) demonstrated simple MDPs where value iteration with function approximation diverges — the value estimates grow without bound, even though tabular value iteration converges instantly. Thrun and Schwartz (1993) identified a related failure mode: the $\max$ operator in the Bellman equation systematically overestimates values when the function approximator has errors (since the maximum of noisy estimates is biased upward), and this bias compounds across iterations.
+The consequences can be severe:
 
-These failures are instances of what Sutton and Barto (2018, Ch. 11) call the **deadly triad**: the combination of (1) **function approximation** (generalizing from a subset of states), (2) **bootstrapping** (updating estimates from other estimates, as in TD methods), and (3) **off-policy learning** (learning about a policy different from the one generating data). Any two of the three can coexist safely — Monte Carlo methods use function approximation and off-policy learning but don't bootstrap; tabular Q-learning bootstraps off-policy but doesn't generalize; on-policy TD with function approximation bootstraps and generalizes but stays on-policy. It is specifically the combination of all three that creates the instability demonstrated by Boyan and Moore.
+- **Divergence.** Boyan and Moore (1995) demonstrated simple MDPs where value iteration with function approximation diverges — the value estimates grow without bound, even though tabular value iteration converges instantly. The mechanism is exactly the "leaking" described above: each update intended to fix one state's estimate destabilizes others, and the errors compound faster than they're corrected.
+
+- **Systematic overestimation.** Thrun and Schwartz (1993) identified a subtler failure mode arising from the $\max$ operator in the Bellman update. With a Q-table, each entry's error is independent. But with function approximation, the estimates carry correlated noise — the approximator is slightly wrong everywhere. The $\max$ operator picks the *highest* of these noisy estimates, which is biased upward (the maximum of several noisy guesses tends to be an overestimate, for the same reason that the tallest person in a random group is probably above-average height). This overestimation feeds into the next round of updates as the bootstrap target, inflating the next round's estimates, which inflates the round after that — a positive feedback loop that can push values far above their true optimal.
+
+These failures are instances of what Sutton and Barto (2018, Ch. 11) call the **deadly triad** — three ingredients that are each useful on their own but become unstable when combined:
+
+1. **Function approximation** — instead of storing a separate value for every state, we use a parameterized function (like a neural network) that generalizes across states. This is essential for large state spaces, but it means updating one state's value changes the estimates for *other* states too. An update that helps one state can hurt another, and we have no control over which states are affected.
+
+2. **Bootstrapping** — instead of waiting until the end of an episode to see the true total reward, we update our estimate using *another estimate*: the TD target $r + \gamma \max_{a'} \hat{Q}(s', a')$. The $\max_{a'}\hat{Q}(s', a')$ part is our own guess about the best future value from $s'$ — it could be wrong. This is what makes TD learning fast (we learn after every step, not just at episode end), but it means errors in our estimates feed directly into our updates. If $\max_{a'}\hat{Q}(s', a')$ is too high, the update pushes $\hat{Q}(s, a)$ too high as well.
+
+3. **Off-policy learning** — the agent learns about one policy (the optimal policy, via the $\max$ operator) while following a different policy (the exploratory $\epsilon$-greedy policy). This is powerful because it lets the agent explore freely while still learning the optimal values. But it creates a mismatch: the states the agent *visits* (under the exploratory policy) are not the same states it *cares about* (under the optimal policy). The function approximator gets trained on the distribution of states the agent actually sees, which may not cover the states that matter most for the optimal policy.
+
+Any two of the three can coexist safely:
+
+| Combination | Example | Why it's stable |
+|---|---|---|
+| Function approx + off-policy, **no bootstrap** | Monte Carlo methods | Updates use true observed returns, not estimates — no error propagation |
+| Bootstrap + off-policy, **no function approx** | Tabular Q-learning | Each entry is independent — fixing one can't break another |
+| Function approx + bootstrap, **no off-policy** | On-policy TD (SARSA) with a neural net | The training distribution matches the policy being evaluated — no mismatch |
+
+It is specifically the combination of all three that creates the instability demonstrated by Boyan and Moore: the function approximator generalizes errors across states (1), bootstrapping propagates those errors into future updates (2), and the distribution mismatch from off-policy learning means the approximator is being trained on the "wrong" states (3). Each ingredient amplifies the damage caused by the other two.
 
 **When does it work?** Despite these negative results, function approximation succeeds spectacularly in some applications — most famously Tesauro's TD-Gammon (see Section 6.1). Several factors seem to matter:
 
@@ -533,6 +637,14 @@ The agent's problem is now to find a policy mapping belief states to actions. Th
 *Fig. 2: Structure of a POMDP agent. A state estimator (SE) computes the belief state $b$ from the previous belief, the last action $a$, and the current observation $i$. A policy $\pi$ maps the belief state to an action. [Kaelbling et al., 1996, Figure 10]*
 
 In practice, POMDP solutions are limited to small problems due to their computational cost. The approaches described above (stochastic policies, history windows, recurrent networks) represent practical compromises that sacrifice formal optimality for tractability.
+
+> **Practical note — how real systems handle partial observability.** Most real-world RL problems *are* partially observable (noisy sensors, hidden variables, incomplete information), but practitioners rarely formalize them as POMDPs. Instead, the dominant strategies are:
+>
+> - **History stacking.** Feed the last $n$ observations as input. DQN on Atari is the canonical example: a single video frame doesn't reveal ball velocity, so the network receives the last 4 frames stacked together — a finite history window. Simple, effective, and by far the most common approach.
+> - **Recurrent / attention-based networks.** Use an LSTM or Transformer whose hidden state learns to retain whatever history matters. This is standard in robotics (noisy sensors), games with hidden information (poker, StarCraft with fog of war), and dialogue systems (where the "state" is the full conversation). The network decides what to remember, rather than the designer choosing a fixed window.
+> - **Full POMDP methods** see use in a few niche domains where the state space is small enough to be tractable: medical treatment planning, spoken dialogue management, and simple robot navigation with a handful of discrete states.
+>
+> The pattern is clear: rather than solving the POMDP exactly, practitioners restore (approximate) observability by giving the agent more history, and let the function approximator figure out what to remember. Less principled, but far more scalable.
 
 ---
 

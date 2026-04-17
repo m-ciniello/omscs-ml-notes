@@ -63,6 +63,10 @@ After every significant derivation or result, address two questions in sequence:
 1. **What does it say?** Explain the result in plain terms. Use analogies, concrete numerical examples (a single worked example with small numbers, e.g. $D = 3$, $M = 1$, often communicates more than a paragraph of abstract description), or "what would happen if..." reasoning to make it stick.
 2. **Why does it matter?** Answer "so what?" — why we derived it, what it enables, and how it connects to the larger goal. Watch for three failure modes where significance is most often dropped: (a) re-deriving a known quantity via a new route, (b) introducing a new object or algebraic reformulation whose purpose isn't yet clear — always state upfront what the new form reveals that the old one didn't, and (c) a clean derivation whose payoff is implicit. In all three cases, add a bridging paragraph before moving on.
 
+#### Narrate the math
+
+When a formula has multiple terms with distinct roles, restate it as a first-person narrative from the perspective of the algorithm or agent. For example, rather than only saying "the TD error is $r + \gamma \max_{a'} Q(s', a') - Q(s, a)$," break it into what each piece *means*: "what I observed" vs. "what I currently believe." This technique turns opaque notation into a story the reader can follow without mentally parsing symbols. Use it especially for update rules, loss functions, and objective functions where the terms correspond to competing forces or distinct sources of information.
+
 ---
 
 ### Rigor
