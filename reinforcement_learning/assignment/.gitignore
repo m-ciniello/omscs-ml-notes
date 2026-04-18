@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Virtual envs
+.venv/
+venv/
+env/
+
+# macOS
+.DS_Store
+
+# Experiment outputs (keep directory structure via .gitkeep)
+results/*
+!results/.gitkeep
+figures/*
+!figures/.gitkeep
+
+# Batch-run log files
+.logs/
+
+# IDE
+.vscode/
+.idea/
