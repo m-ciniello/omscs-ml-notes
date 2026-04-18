@@ -43,7 +43,9 @@ class _DPBase:
     Provides the common state (env, gamma, V, policy, transitions)
     and two helpers that both VI and PI need:
       - _greedy_action: the argmax-over-actions loop
-      - evaluate_policy: run the solved policy on the live environment
+      - run_episode / run_episodes: run the solved policy in the env
+        (matches the API of TabularAgent and DQNAgent so all agents
+        share one benchmarking entry point).
     """
 
     def __init__(self, env, gamma=0.95):
@@ -54,30 +56,23 @@ class _DPBase:
         self.policy = np.zeros((env.rows, env.cols), dtype=int)
         self.iterations = 0
 
-    def _q_value(self, s, a):
-        """Compute Q(s, a) = E[R + γ V(s')] under the transition model.
-
-        With stochastic transitions, each (s, a) can produce multiple
-        outcomes.  We take the probability-weighted sum:
-            Q(s, a) = Σ p * (r + γ V(s'))
-        This is the Bellman equation with the expectation made explicit.
-        """
-        return sum(p * (r + self.gamma * self.V[s2])
-                   for p, s2, r in self.transitions[(s, a)])
-
     def _greedy_action(self, s):
-        """Return (best_action, best_value) for state s under current V.
+        """Return (argmax_a Q(s, a), max_a Q(s, a)) under the current V.
 
-        This is the argmax_a Q(s, a) loop that appears in VI's Bellman
-        update, VI's policy extraction, and PI's policy improvement —
-        factored out here so it's written once.
+        Q(s, a) = Σ p * (r + γ V(s')) over outcomes (p, s', r) — the
+        Bellman equation with the expectation made explicit.  See
+        rl_foundations.md §2.4 (Q-function) and the §2.1 aside on why
+        the per-transition reward form matches R(s, a) in expressiveness.
+
+        Used by VI's Bellman update, VI's policy extraction, and PI's
+        policy improvement — factored here so the argmax is written once.
         """
-        best_a, best_v = 0, -np.inf
-        for a in range(self.env.N_ACTIONS):
-            q_sa = self._q_value(s, a)
-            if q_sa > best_v:
-                best_a, best_v = a, q_sa
-        return best_a, best_v
+        q_values = np.array([
+            sum(p * (r + self.gamma * self.V[s2])
+                for p, s2, r in self.transitions[(s, a)])
+            for a in range(self.env.N_ACTIONS)
+        ])
+        return int(np.argmax(q_values)), float(q_values.max())
 
     def _extract_policy(self):
         """Set π(s) = argmax_a [R(s,a) + γ V(s')] for every state."""
@@ -89,24 +84,27 @@ class _DPBase:
     def show(self):
         show_policy_and_values(self.V, self.policy, self.env)
 
-    def evaluate_policy(self, n_episodes=100, max_steps=200):
-        """Run the solved policy on the environment and return step counts.
+    def run_episode(self, verbose=False, max_steps=200):
+        """Run one episode of the solved policy. Returns number of steps.
 
-        Useful for comparing against learning agents on the same metric
-        (steps-to-goal per episode).
+        Matches the signature of TabularAgent.run_episode and
+        DQNAgent.run_episode so all agents share one benchmarking API.
         """
-        step_counts = []
-        for _ in range(n_episodes):
-            s = self.env.start
-            for t in range(max_steps):
-                a = self.policy[s]
-                s, _ = self.env.step(s, a)
-                if self.env.is_terminal(s):
-                    step_counts.append(t + 1)
-                    break
-            else:
-                step_counts.append(max_steps)
-        return step_counts
+        s = self.env.start
+        for t in range(max_steps):
+            a = self.policy[s]
+            s_next, r = self.env.step(s, a)
+            if verbose:
+                print(f"  t={t}: s={s} a={a} r={r:+.2f} s'={s_next}")
+            s = s_next
+            if self.env.is_terminal(s):
+                return t + 1
+        return max_steps
+
+    def run_episodes(self, n, verbose=False, max_steps=200):
+        """Run n episodes of the solved policy. Returns list of step counts."""
+        return [self.run_episode(verbose=verbose, max_steps=max_steps)
+                for _ in range(n)]
 
 
 class ValueIteration(_DPBase):

@@ -12,7 +12,6 @@
     - [2.2 Policies and the Objective](#22-policies-and-the-objective)
     - [2.3 Value Functions and the Bellman Equations](#23-value-functions-and-the-bellman-equations)
     - [2.4 The Q-Function: Making Actions Explicit](#24-the-q-function-making-actions-explicit)
-    - [2.5 A Worked Example: Grid World](#25-a-worked-example-grid-world)
   - [3. Dynamic Programming: Solving MDPs with a Known Model](#3-dynamic-programming-solving-mdps-with-a-known-model)
     - [3.1 Value Iteration](#31-value-iteration)
     - [3.2 Policy Iteration](#32-policy-iteration)
@@ -78,7 +77,13 @@ A (finite) Markov decision process consists of four components:
 - A finite set of **states** $S$, representing all possible configurations of the environment.
 - A finite set of **actions** $A$, representing the choices available to the agent.
 - A **transition function** $T : S \times A \to \Delta(S)$, where $\Delta(S)$ denotes the **probability simplex** over $S$ — the set of all probability distributions over states. $T(s, a, s')$ gives the probability of transitioning to state $s'$ when the agent takes action $a$ in state $s$. This satisfies $\sum_{s' \in S} T(s, a, s') = 1$ for all $s, a$.
-- A **reward function** $R : S \times A \to \mathbb{R}$, where $R(s, a)$ gives the expected immediate reward for taking action $a$ in state $s$. Note that the reward depends on the action, not just the state — different actions from the same state can yield different rewards. (Some textbooks use $R(s)$ or $R(s, a, s')$; these are equivalent in expressiveness. We use $R(s, a)$ throughout.)
+- A **reward function** $R : S \times A \to \mathbb{R}$, where $R(s, a)$ gives the expected immediate reward for taking action $a$ in state $s$. Note that the reward depends on the action, not just the state — different actions from the same state can yield different rewards. We use $R(s, a)$ throughout these notes; see the aside below on why $R(s)$ and $R(s, a, s')$ are equivalent in expressiveness.
+
+  **Aside: $R(s, a)$ vs. $R(s, a, s')$.** Some textbooks — and most code — use $R(s, a, s')$: a reward that depends on the *landing* state as well. The two forms are equivalent in expressiveness. Given any MDP specified with per-transition rewards $R(s, a, s')$, define
+  $$R(s, a) := \sum_{s' \in S} T(s, a, s') \, R(s, a, s')$$
+  i.e. the expected reward over next states. The Bellman equation then factors two ways that agree term-by-term:
+  $$\underbrace{R(s,a) + \gamma \sum_{s'} T(s,a,s') V(s')}_{\text{notes form}} \;=\; \underbrace{\sum_{s'} T(s,a,s')\big[R(s,a,s') + \gamma V(s')\big]}_{\text{code form}}$$
+  So any $R(s, a, s')$ MDP has an equivalent $R(s, a)$ MDP with the same $V^*$ and $\pi^*$. The per-transition form is more convenient in code — in a grid world the reward typically depends on the landing cell (goal vs. step penalty), which is awkward to express as $R(s, a)$ but natural as $R(s, a, s')$. It is also what a learning agent actually observes: each sample $\langle s, a, r, s' \rangle$ bundles a realized reward with its specific next state. The $R(s, a)$ form reads more cleanly in derivations; both compute the same thing.
 
   **A practical warning:** the reward function is hand-designed, and the agent's learned behavior is extremely sensitive to it. All the algorithms in this document are *solvers* — they find the optimal policy *for the reward function you give them*. If the reward poorly captures the desired behavior (e.g., the step cost is too large relative to the goal reward, or a shortcut through a penalty zone turns out to be "worth it"), the agent will learn a perfectly optimal solution to the wrong problem. In practice, designing a good reward function (**reward shaping**) is often harder than choosing the right algorithm.
 
@@ -221,52 +226,7 @@ $$Q^*(s, a) = R(s, a) + \gamma \sum_{s' \in S} T(s, a, s') \max_{a' \in A} Q^*(s
 
 This recursive equation expresses each Q-value in terms of the Q-values of successor states. It will be the direct foundation of the Q-learning update rule.
 
-### 2.5 A Worked Example: Grid World
-
-To ground these definitions concretely, consider a simple grid world adapted from Mitchell (1997), Chapter 13. The environment is a $2 \times 3$ grid (two rows, three columns) with the goal state $G$ in the top-right corner:
-
-```
-+------------+------------+------------+
-|  top-left  |  top-ctr   |     G      |
-|  V* = 0    |  V* = 0    |  V* = 0    |
-| (dead end) | (dead end) | (goal,     |
-|            |            |  absorbing)|
-+------------+------------+------------+
-|  bot-left  |  bot-ctr   |  bot-right |
-|  V* = 81   |  V* = 90   |  V* = 100  |
-|     →      |     →      |     ↑      |
-+------------+------------+------------+
-
-Optimal policy: bot-left → bot-ctr → bot-right → G
-```
-
-The bottom row connects left-to-right, and the bottom-right cell can move up into $G$. The top-left and top-center cells are **absorbing dead ends**: once the agent enters them, it stays there with zero reward forever (no outgoing transitions). Their optimal values are therefore 0. The immediate reward is 100 for any action leading into the goal state $G$, and 0 everywhere else. With $\gamma = 0.9$:
-
-- $V^*(G) = 0$ (absorbing state — no future reward after arrival).
-- $V^*(\text{bottom-right}) = 100$ (one step from $G$, immediate reward 100).
-- $V^*(\text{bottom-center}) = 90$ (two steps from $G$: reward $0 + 0.9 \times 100 = 90$).
-- $V^*(\text{bottom-left}) = 81$ (three steps: $0 + 0.9 \times 0 + 0.9^2 \times 100 = 81$).
-
-The Q-values for each state-action pair equal the immediate reward plus $\gamma$ times $V^*$ of the resulting state. The optimal policy follows the highest Q-values, directing the agent along the shortest path to $G$.
-
-```python
-import numpy as np
-
-gamma = 0.9
-V_star = {"G": 0, "top-left": 0, "top-center": 0,
-          "bot-right": 100, "bot-center": 90, "bot-left": 81}
-
-Q_bot_center_right = 0 + gamma * V_star["bot-right"]    # = 90
-Q_bot_center_left  = 0 + gamma * V_star["bot-left"]      # = 72.9
-Q_bot_center_up    = 0 + gamma * V_star["top-center"]    # = 0
-
-print(f"Q(bot-center, right) = {Q_bot_center_right}")  # 90.0
-print(f"Q(bot-center, left)  = {Q_bot_center_left}")    # 72.9
-print(f"Q(bot-center, up)    = {Q_bot_center_up}")      # 0.0
-print(f"Best action: right (max Q = {max(Q_bot_center_right, Q_bot_center_left, Q_bot_center_up)})")
-```
-
-The agent in the bottom-center cell chooses "right" because $Q(\text{bot-center}, \text{right}) = 90$ is the largest Q-value. It doesn't need to simulate the environment or plan ahead — the Q-value already summarizes the entire future.
+**The Q-table.** For finite MDPs, what algorithms actually maintain is a **Q-table**: one scalar per $(s, a)$ pair — conceptually an $|S| \times |A|$ matrix (or nested maps / tensors in code). We write $\hat{Q}(s, a)$ for the **running estimate** of $Q^*(s, a)$; Q-learning rewrites entries over time so they satisfy the Bellman optimality equation in the limit. That is the concrete payoff of "making actions explicit": the greedy policy is a **row-wise max** over the table, $\arg\max_a \hat{Q}(s, a)$, with no call to $T$ or $R$ at decision time. Section 5.3 shows how nonzeros spread backward through the table on a tiny grid MDP (following Mitchell, 1997, Chapter 13).
 
 ---
 
@@ -292,15 +252,70 @@ Value iteration finds the optimal value function $V^*$ by iteratively applying t
 
 Each iteration applies what is called a **full backup**: for every state, the update uses information from *all* possible successor states, weighted by their transition probabilities. This contrasts with the **sample backups** used in model-free methods (Section 5), which use a single observed transition.
 
-**Why does it converge?** The Bellman optimality equation defines $V^*$ as a fixed point of the operator $\mathcal{T}$ defined by $(\mathcal{T}V)(s) = \max_a [R(s,a) + \gamma \sum_{s'} T(s,a,s') V(s')]$. This operator is a **contraction mapping** with contraction factor $\gamma$ under the max-norm: for any two value functions $V_1, V_2$,
+**Why does it converge?** The Bellman optimality equation defines $V^*$ as a fixed point of the operator $\mathcal{T}$ defined by
 
-$$\|\mathcal{T}V_1 - \mathcal{T}V_2\|_\infty \leq \gamma \|V_1 - V_2\|_\infty$$
+$$(\mathcal{T}V)(s) \;=\; \max_a \Big[ R(s,a) + \gamma \sum_{s'} T(s,a,s') \, V(s') \Big].$$
 
-By the Banach fixed-point theorem, repeated application of a contraction mapping converges to the unique fixed point, which is $V^*$. The error decreases by at least a factor of $\gamma$ per iteration. This contraction-by-$\gamma$ mechanism is the same force that drives convergence of Q-learning (Section 5.4) — there it operates on individual sample updates rather than full sweeps, but the core argument is identical.
+Three pieces of vocabulary are worth unpacking before the main argument.
+
+*The operator $\mathcal{T}$.* A value function $V$ is just a vector of $|S|$ numbers — one value per state. The operator $\mathcal{T}$ takes such a vector as input and returns another vector $\mathcal{T}V$ as output; it is a *function that acts on functions*. What does the output vector look like? Exactly what one sweep of value iteration produces: for each state, $(\mathcal{T}V)(s)$ computes "the best action under the current $V$." So when we iterate $V_{k+1} := \mathcal{T}V_k$, the statement "apply the operator" and the statement "do one VI sweep" mean the same thing.
+
+*The max-norm.* The notation $\|V\|_\infty := \max_s |V(s)|$ is the largest absolute component of $V$. Consequently $\|V_1 - V_2\|_\infty$ measures the worst disagreement between two value functions anywhere in the state space — if $V_1$ and $V_2$ agree perfectly at most states but differ by 10 at a single state, then $\|V_1 - V_2\|_\infty = 10$.
+
+*Contraction.* The operator $\mathcal{T}$ is a **$\gamma$-contraction** under this norm: for any two value functions $V_1, V_2$,
+
+$$\|\mathcal{T}V_1 - \mathcal{T}V_2\|_\infty \;\leq\; \gamma \, \|V_1 - V_2\|_\infty.$$
+
+In words: *no matter where the biggest gap between $V_1$ and $V_2$ is, one sweep of $\mathcal{T}$ shrinks that gap by at least a factor of $\gamma$.* The mechanism is visible in the operator itself: the $V$-dependence on the right-hand side enters only through $\gamma \sum_{s'} T(s,a,s') V(s')$, a probability-weighted average of $V$ scaled by $\gamma$. A weighted average can never exceed the worst-case disagreement (that's the max-norm point), and the leading $\gamma$ damps whatever's left. The outer $\max_a$ on top does not add anything — if two quantities $f_1(a)$ and $f_2(a)$ are both within $\varepsilon$ of each other for every $a$, their maxima are also within $\varepsilon$.
+
+**From contraction to convergence.** If $V^*$ is a fixed point of $\mathcal{T}$ (i.e., $\mathcal{T}V^* = V^*$), applying the contraction inequality with $V_1 = V_k$ and $V_2 = V^*$ gives
+
+$$\|V_{k+1} - V^*\|_\infty = \|\mathcal{T}V_k - \mathcal{T}V^*\|_\infty \leq \gamma \, \|V_k - V^*\|_\infty,$$
+
+so after $k$ sweeps, $\|V_k - V^*\|_\infty \leq \gamma^k \, \|V_0 - V^*\|_\infty$ — the error drops geometrically, regardless of how bad the initial guess was. Uniqueness of the fixed point follows from the same inequality: if $V^*$ and $V^{**}$ were both fixed points, their distance would satisfy $\|V^* - V^{**}\|_\infty \leq \gamma \|V^* - V^{**}\|_\infty$, which forces the distance to zero. Together these facts are the **Banach fixed-point theorem**: any contraction on a complete metric space has a unique fixed point, and iteration converges to it from any starting point.
+
+This contraction-by-$\gamma$ mechanism is the same force that drives convergence of Q-learning (Section 5.4) — there it operates on individual sample updates rather than full sweeps, but the core argument is identical. The same mechanism also applies to policy evaluation in PI (Section 3.2): the Bellman policy operator $\mathcal{T}^\pi$ defined by $(\mathcal{T}^\pi V)(s) = R(s, \pi(s)) + \gamma \sum_{s'} T(s, \pi(s), s') V(s')$ — the optimality operator without the max — is also a $\gamma$-contraction, and iteration converges to the unique fixed point $V^\pi$.
 
 **When to stop.** A natural stopping criterion uses the **Bellman residual**: if the maximum change in $V$ between two successive iterations is less than $\epsilon$, then the greedy policy derived from the current $V$ is guaranteed to have value within $2\gamma\epsilon / (1 - \gamma)$ of optimal at every state (Williams & Baird, 1993). In practice, the greedy policy often becomes optimal long before the value function has fully converged.
 
 **Complexity.** Each iteration costs $O(|A| \cdot |S|^2)$ time — for each of the $|S|$ states and $|A|$ actions, we sum over $|S|$ successor states. When the transition function is sparse (each action leads to a constant number of next states with nonzero probability), this drops to $O(|A| \cdot |S|)$. The number of iterations is polynomial in $|S|$ and the magnitude of the largest reward for a fixed $\gamma$, but grows as $O(\text{poly}(1/(1-\gamma)))$ — convergence slows as the agent cares more about the distant future.
+
+**Implementation sketch (value iteration).** Take a $5 \times 5$ **grid world**: states are cells $(r, c)$ with $r, c \in \{0, \ldots, 4\}$. A single `step(s, a)` function encodes both the **transition model** and the **reward model**: it returns the landing cell (one of four moves changes row or column by $\pm 1$; stepping off the grid leaves the agent in place) and the reward (a small step penalty on every landing cell except the **goal** $(4, 4)$, which yields `GOAL_REWARD` on entry and is absorbing, i.e. $V(\text{goal}) = 0$). Because the dynamics are deterministic, each $(s, a)$ has a single $(s', r)$ outcome — so the Bellman expectation over $s'$ collapses to a single term, and we can skip building an explicit transition table.
+
+```python
+import numpy as np
+
+ROWS, COLS, GOAL = 5, 5, (4, 4)
+gamma, theta = 0.9, 1e-10
+STEP_COST, GOAL_REWARD = -0.02, 1.0
+MOVES = [(-1, 0), (1, 0), (0, -1), (0, 1)]  # up, down, left, right
+
+def step(s, a):
+    """Deterministic dynamics: return (next_state, reward)."""
+    dr, dc = MOVES[a]
+    s2 = (max(0, min(ROWS - 1, s[0] + dr)),
+          max(0, min(COLS - 1, s[1] + dc)))
+    return s2, (GOAL_REWARD if s2 == GOAL else STEP_COST)
+
+V = np.zeros((ROWS, COLS))
+while True:
+    delta = 0.0
+    for r in range(ROWS):
+        for c in range(COLS):
+            if (r, c) == GOAL:
+                continue
+            best = max(reward + gamma * V[s2]
+                       for s2, reward in (step((r, c), a) for a in range(4)))
+            delta = max(delta, abs(best - V[r, c]))
+            V[r, c] = best
+    if delta < theta:
+        break
+
+print(f"V(0,0) = {V[0, 0]:.4f}   V(3,4) = {V[3, 4]:.4f}   V(4,3) = {V[4, 3]:.4f}")
+# γ=0.9, GOAL_REWARD=1, STEP_COST=-0.02:  V(3,4)=V(4,3)=1.0, V(0,0)≈0.374
+```
+
+The inner `max` over actions is the Bellman optimality operator; `step()` is the deterministic special case of writing $T$ and $R$ as lookup tables. To generalize to a stochastic MDP, `step(s, a)` would return a distribution over $(s', r)$ pairs, and the single term `reward + gamma * V[s2]` would become the expected value $\sum_{s', r} p(s', r \mid s, a)\,[r + \gamma V(s')]$ — the full Bellman backup.
 
 ### 3.2 Policy Iteration
 
@@ -322,24 +337,93 @@ Policy iteration takes a different approach: instead of working with the value f
 >
 > $\quad$ If $\pi' = \pi$, stop (the policy is optimal). Otherwise, set $\pi := \pi'$ and repeat.
 
-The **policy evaluation** step fixes the policy and asks: "how good is each state under this fixed behavior?" Since the policy is fixed, there is no "max" — the Bellman equation becomes a system of linear equations in $|S|$ unknowns, which can be solved directly (e.g., by Gaussian elimination in $O(|S|^3)$ time).
+The **policy evaluation** step fixes the policy and asks: "how good is each state under this fixed behavior?" Since the policy is fixed, there is no "max" — the Bellman equation becomes a system of linear equations in $|S|$ unknowns, which can be solved directly (e.g., by Gaussian elimination in $O(|S|^3)$ time). In software it is usually cheaper to **iterate** the Bellman backup for $\pi$ until the value residual falls below a tolerance — the same fixed-point problem, but exploiting sparsity of $T$ the same way value iteration does.
 
-The **policy improvement** step asks, for each state: "is there an action better than the one the current policy prescribes?" If switching to a different action increases the expected return, the policy is updated. The **policy improvement theorem** guarantees that the new policy $\pi'$ satisfies $V^{\pi'}(s) \geq V^\pi(s)$ for every state $s$. If $\pi'$ differs from $\pi$, then $V^{\pi'}(s) > V^\pi(s)$ for at least one state — so each strict improvement step yields a genuinely better policy until $\pi$ is already optimal.
+The **policy improvement** step asks, for each state: "is there an action better than the one the current policy prescribes?" If switching to a different action increases the expected return, the policy is updated. The **policy improvement theorem** guarantees that the new policy $\pi'$ satisfies $V^{\pi'}(s) \geq V^\pi(s)$ for every state $s$, with strict inequality at every state where $\pi'(s) \neq \pi(s)$.
+
+The proof is short enough to spell out. By construction, $\pi'(s) = \arg\max_a Q^\pi(s, a)$, so for every state $s$:
+
+$$Q^\pi(s, \pi'(s)) = \max_a Q^\pi(s, a) \;\geq\; Q^\pi(s, \pi(s)) = V^\pi(s)$$
+
+with strict inequality wherever the $\arg\max$ picks a new action. In words: "taking action $\pi'(s)$ for one step and then following $\pi$ forever after is at least as good as following $\pi$ from the start." Now iterate this one-step swap — use $\pi'$ at step $0$, then at step $1$, then at step $2$, and so on, invoking the same inequality at each step. The bounds chain: $V^\pi(s) \leq Q^\pi(s, \pi'(s)) \leq Q^{\pi'}(s, \pi'(s)) = V^{\pi'}(s)$, where the middle inequality comes from applying the same argument to $V^\pi(s_1)$ on the right-hand side of $Q^\pi(s, \pi'(s)) = R(s, \pi'(s)) + \gamma \mathbb{E}[V^\pi(s_1)]$. So each policy-improvement step yields a genuinely better policy until $\pi$ is already optimal.
 
 **Why does it terminate?** There are at most $|A|^{|S|}$ distinct deterministic policies. Each iteration either stops because $\pi' = \pi$, or else produces a policy $\pi'$ with $V^{\pi'}(s) \geq V^\pi(s)$ for all $s$ and strict inequality for at least one $s$. The latter cannot happen forever: every time the policy changes, the value vector moves strictly "upward" in at least one coordinate while never moving downward in any coordinate, and only finitely many policies exist, so after finitely many improvement steps the algorithm must reach a policy with $\pi' = \pi$ — which is optimal.
 
-**Complexity.** Per-iteration cost is $O(|A| \cdot |S|^2 + |S|^3)$ — the $|S|^3$ comes from solving the linear system in policy evaluation. This is more expensive per iteration than value iteration. However, policy iteration typically converges in far fewer iterations. In practice, neither algorithm dominates the other universally.
+**Complexity.** Textbook per-iteration cost is often written as $O(|A| \cdot |S|^2 + |S|^3)$ — the cubic term is **exact** Gaussian elimination on the $|S| \times |S|$ Bellman system for $V^\pi$. Iterative policy evaluation (as in the sketch below) avoids that cubic step in favor of repeated $O(|A| \cdot |S|^2)$ backups until the value residual is small. Either way, policy iteration typically converges in far fewer **outer** rounds than value iteration needs sweeps; neither algorithm dominates the other universally.
+
+**Implementation sketch (policy iteration).** Reuse the same $5 \times 5$ model (the `step()` function and constants from the value-iteration sketch above). Start from a deliberately poor policy — here, **always move left** (`a = 2`) from every non-goal cell — then alternate iterative policy evaluation with policy improvement until $\pi$ stops changing:
+
+```python
+eval_theta = 1e-10
+
+pi = np.full((ROWS, COLS), 2, dtype=int)   # initial policy: always "left"
+V = np.zeros((ROWS, COLS))
+
+while True:
+    while True:  # policy evaluation: Bellman backup for fixed pi until converged
+        d = 0.0
+        for r in range(ROWS):
+            for c in range(COLS):
+                if (r, c) == GOAL:
+                    continue
+                s2, reward = step((r, c), pi[r, c])
+                v_new = reward + gamma * V[s2]
+                d = max(d, abs(v_new - V[r, c]))
+                V[r, c] = v_new
+        if d < eval_theta:
+            break
+
+    stable = True                            # policy improvement: greedy w.r.t. V
+    for r in range(ROWS):
+        for c in range(COLS):
+            if (r, c) == GOAL:
+                continue
+            q = [reward + gamma * V[s2]
+                 for s2, reward in (step((r, c), a) for a in range(4))]
+            best_a = int(np.argmax(q))
+            if best_a != pi[r, c]:
+                stable = False
+                pi[r, c] = best_a
+    if stable:
+        break
+
+print(f"V(0,0) = {V[0, 0]:.4f}   (matches value iteration on this grid)")
+```
+
+The initial policy wanders along walls instead of heading to $(4, 4)$; repeated evaluation/improvement rounds reshape $\pi$ until it is greedy for the converged $V$, at which point $V$ agrees with the value-iteration solution above.
 
 ### 3.3 Value Iteration vs. Policy Iteration
 
+At first glance the two algorithms look structurally similar — both sweep the state space, both invoke the Bellman equation, both terminate in $V^*$ and $\pi^*$. But they iterate on fundamentally different objects, and that choice drives everything else about them.
+
+**What is being iterated?** VI iterates on $V$: each sweep asks *"under my current guess for $V$, what would the best action's value be at each state?"* and updates $V$ accordingly. The policy is never stored during the solve; it is a derived object, extracted once at the end via $\pi^*(s) = \arg\max_a Q(s, a)$. PI iterates on $\pi$: each outer step asks *"what is the exact value $V^\pi$ of my current policy, and given that, can I strictly improve $\pi$?"* The value function is a means; the policy is the thing being refined.
+
+This difference matters because $V$ and $\pi$ live in very different spaces:
+
+- $V \in \mathbb{R}^{|S|}$ is **continuous**. VI converges *asymptotically* — the max-norm error shrinks by $\gamma$ per sweep (from the contraction argument above), but the iterate $V_k$ never exactly equals $V^*$ in finite time. A stopping criterion (Bellman residual $< \theta$) is required.
+- $\pi \in A^{|S|}$ is **finite and discrete**. There are at most $|A|^{|S|}$ deterministic policies. The policy improvement theorem guarantees each PI outer step strictly improves the policy (until it is already optimal), so PI cannot revisit a policy and must terminate in a finite number of outer iterations.
+
+So VI and PI are not just two procedures with different costs — they are exploiting two different structures of the same problem. VI rides the $\gamma$-contraction of the Bellman optimality operator in a continuous space. PI rides the discreteness and finiteness of policy space, strictly improving its way to an optimum it is guaranteed to reach.
+
+**The tradeoff: outer iterations × per-iteration cost.** The finiteness of policy space is powerful: in practice, PI converges in a *very* small number of outer iterations — typically single-digit or low-teens even for problems with many thousands of states. But each outer iteration is expensive: computing $V^\pi$ requires solving a system of $|S|$ linear equations in $|S|$ unknowns, either exactly (Gaussian elimination, $O(|S|^3)$) or iteratively (many Bellman backups with the policy held fixed). VI's tradeoff is the opposite: every sweep is cheap ($O(|A| \cdot |S|^2)$ with full backups, $O(|A| \cdot |S|)$ when $T$ is sparse), but many sweeps are needed — and when $\gamma$ is close to 1, the $\gamma$-contraction becomes very slow, since each sweep shrinks error by only a factor of $\gamma$.
+
 | | Value Iteration | Policy Iteration |
 |---|---|---|
-| **Per-iteration cost** | $O(\vert A \vert \cdot \vert S \vert^2)$ | $O(\vert A \vert \cdot \vert S \vert^2 + \vert S \vert^3)$ |
-| **Number of iterations** | More (converges slowly) | Fewer (converges fast) |
-| **Update mechanism** | Refines $V$ directly | Solves for exact $V^\pi$, then improves $\pi$ |
+| **What iterates** | $V \in \mathbb{R}^{\vert S \vert}$ (continuous) | $\pi \in A^{\vert S \vert}$ (finite, discrete) |
+| **Per-iteration cost** | $O(\vert A \vert \cdot \vert S \vert^2)$ per sweep | $O(\vert A \vert \cdot \vert S \vert^2)$ per eval sweep; $+\,O(\vert S \vert^3)$ only if $V^\pi$ is solved by exact linear algebra |
+| **Number of iterations** | Many (asymptotic convergence, rate $\gamma$) | Few (finite termination, typically single-digit in practice) |
+| **Update mechanism** | Refines $V$ directly; $\pi$ derived at end | Computes exact $V^\pi$, then greedy-improves $\pi$ |
 | **Stopping** | $V$ nearly converged (Bellman residual) | $\pi$ unchanged |
 
-**Modified policy iteration** (Puterman & Shin, 1978) bridges the gap: instead of solving the linear system exactly during policy evaluation, it runs a few iterations of value-iteration-style updates with the policy held fixed. This is cheaper than exact evaluation but more directed than pure value iteration, and is often the best practical choice.
+**Modified policy iteration: the unifying spectrum.** The key insight that dissolves the VI/PI distinction is that *PI's evaluation step doesn't need to run to convergence*. The improvement step only needs $V^\pi$ accurate enough to rank actions correctly at each state — not to the last decimal. Running only $k$ evaluation sweeps per outer round gives **modified policy iteration** (Puterman & Shin, 1978), and as $k$ varies the algorithm spans a continuous spectrum:
+
+| $k$ = eval sweeps per outer round | Algorithm |
+|---|---|
+| $k = \infty$ (evaluate to full convergence) | Classical policy iteration |
+| $k$ = small integer (say, 3–10) | Modified policy iteration |
+| $k = 1$ (one eval sweep, then improve) | Essentially value iteration |
+
+The last row deserves care: modified PI at $k = 1$ does one sweep *following the current policy* (no max) and then one improvement sweep that takes the max; VI rolls both into a single sweep by taking $\max_a$ directly in the backup. The per-step work and the rate of progress are essentially the same. In other words, what looks like two distinct algorithms is really one family indexed by "how much evaluation per improvement." Small $k$ (modified PI) is often the best practical choice: fast outer convergence from policy-space discreteness, without the over-precision cost of exact evaluation.
 
 Both algorithms require the full model — $T$ and $R$ — and iterate over the entire state space. This is feasible for small MDPs, but the **curse of dimensionality** makes it impractical for real-world problems: backgammon has roughly $10^{20}$ states, a robotic arm with continuous joint angles has an uncountably infinite state space, and even a modest Atari game has $\sim 10^{9}$ distinct screen configurations. No algorithm that sweeps over every state on every iteration can scale to these problems. For problems where the model is unknown or the state space is too large to enumerate, we need a fundamentally different approach.
 
@@ -366,6 +450,8 @@ A **sample backup** replaces the expectation over all possible $s'$ with a singl
 $$Q(s, a) \leftarrow Q(s, a) + \alpha \left[ r + \gamma \max_{a'} Q(s', a') - Q(s, a) \right]$$
 
 The sample is noisy (it's one draw from the transition distribution), but by averaging over many samples, the noise cancels and the estimate converges. This is the Q-learning update, which we now develop carefully.
+
+[FIG:ORIGINAL — Backup diagrams (Sutton & Barto style) comparing four value-learning methods side by side: (1) dynamic programming — a one-step full backup where a state fans out through every action and each action fans out through every possible successor state (with transition probabilities), showing the complete expectation; (2) Monte Carlo — a single long sample trajectory from the current state all the way to a terminal state, with no bootstrapping; (3) TD(0) — a single sampled one-step backup from the current state through one action to one observed successor; (4) Q-learning — same one-step sample structure as TD(0) but with a max over successor actions rather than following the policy. Use open circles for states, filled circles for actions, and arrows for transitions, consistent with Sutton & Barto 2018 Chapter 8 "unified view" diagrams. This figure cements the full-vs-sample and bootstrap-vs-Monte-Carlo distinctions that organize the rest of the document.]
 
 ---
 
@@ -411,13 +497,15 @@ The right-hand side is the agent's best current estimate of what $Q^*(s, a)$ sho
 
 **What does the Q-table actually represent?** Each entry $\hat{Q}(s, a)$ is the agent's current *estimate* of the full recursive value — the total discounted reward from taking action $a$ in state $s$ and then acting optimally forever. But the agent doesn't compute this recursion directly. It starts with all zeros and incrementally nudges entries closer to the true values, one real transition at a time. The right-hand side of the update, $r + \gamma \max_{a'} \hat{Q}(s', a')$, is a one-step sample of the recursive value: the immediate reward plus the current best estimate of everything that follows.
 
-Despite the dense notation, the actual code is remarkably simple — the entire update is one line:
+Despite the dense notation, the actual code — both for the deterministic replacement rule above and the general stochastic case derived in Section 5.5 — fits on a single line:
 
 ```python
 Q[s][a] += alpha * (r + gamma * max(Q[s2]) - Q[s][a])
 ```
 
-That's the Bellman equation, Q-learning update, and TD error all in one expression. The **TD error** is the parenthesized quantity — the difference between what we *observed* and what we *currently believe*:
+Here `alpha` is a **learning rate** controlling how far the estimate moves toward the new target. Setting `alpha = 1` recovers the deterministic replacement rule stated above (the new value simply overwrites the old). For now, read this snippet with `alpha = 1` in mind; Section 5.5 introduces `alpha < 1` to average over noisy samples when transitions are stochastic.
+
+This single line is the Bellman equation, Q-learning update, and TD error all in one expression. The **TD error** is the parenthesized quantity — the difference between what we *observed* and what we *currently believe*:
 
 - **What we observed** (one real step): `r + gamma * max(Q[s2])` — "I got reward `r`, and from here the best I can do is `max(Q[s2])`."
 - **What we currently believe**: `Q[s][a]` — "I thought this (s, a) pair was worth this much."
@@ -428,7 +516,7 @@ This means that with zero initialization, **nothing meaningful happens until the
 
 ### 5.3 How Q-Values Propagate: A Worked Example
 
-To see this propagation in action, return to the grid world from Section 2.5 with all Q-values initialized to zero and the only nonzero reward being 100 for entering goal state $G$.
+To see this propagation in action, consider a tiny **deterministic** grid fragment (adapted from Mitchell, 1997, Chapter 13): **bot-left**, **bot-center**, and **bot-right** lie in a row; from **bot-right** the agent can move **up** into absorbing goal **G**. The only nonzero reward is $100$ when entering $G$; all other transitions shown here earn $0$. Take $\gamma = 0.9$ and initialize every $\hat{Q}(s, a)$ to zero.
 
 Initially, every entry in the Q-table is zero — the agent knows nothing:
 
@@ -470,7 +558,9 @@ $$\hat{Q}(\text{bot-left}, \text{right}) \leftarrow 0 + 0.9 \times 90 = 81$$
 | bot-center | 0 | **90** | 0 | 0 |
 | bot-right | 0 | 0 | **100** | 0 |
 
-The information propagates backward from the goal, one state per episode. After enough episodes, the "frontier" of nonzero Q-values reaches the entire state space, eventually converging to the true $Q^*$ values shown in Section 2.5.
+The information propagates backward from the goal, one state per episode. After enough episodes, the "frontier" of nonzero Q-values moves outward along paths toward $G$, eventually converging to the true $Q^*$ for this fragment — in particular $Q(\text{bot-right}, \text{up}) = 100$, $Q(\text{bot-center}, \text{right}) = 90$, and $Q(\text{bot-left}, \text{right}) = 81$, matching successive one-step Bellman backups toward $G$.
+
+[FIG:ORIGINAL — Q-value propagation across three successive Q-learning episodes in a deterministic grid fragment (bot-left → bot-center → bot-right → Goal). Show three panels in a row, one per episode. Each panel draws the three bottom cells plus the goal cell, with arrows on each relevant action and the current Q-value annotated on the arrow. Panel 1 (after Episode 1): only the "up" arrow from bot-right into G is labeled 100; all other arrows shown as 0 or faded. Panel 2 (after Episode 2): "right" arrow from bot-center now labeled 90, in addition to the Q=100 arrow from Panel 1. Panel 3 (after Episode 3): "right" arrow from bot-left now labeled 81, building on the previous two. The visual should make the "backward wave" of nonzero Q-values from the reward source immediately legible. Based on Mitchell 1997 Figure 13.2 / Sutton & Barto's related figures; no standard reproduction — may need to be generated.]
 
 ```python
 states = ["bot-left", "bot-center", "bot-right", "top-left", "top-center", "G"]
@@ -491,7 +581,7 @@ for s, a in [("bot-right", "up"), ("bot-center", "right"), ("bot-left", "right")
     print(f"Q({s}, {a}) <- {r} + {gamma} * {max(Q[(s_next, a2)] for a2 in actions):.1f} = {Q[(s, a)]:.1f}")
 ```
 
-Output: Q-values of 100.0, 90.0, and 81.0 propagate backward from the goal — exactly the $V^*$ values we computed earlier.
+Output: Q-values of 100.0, 90.0, and 81.0 propagate backward from the goal — exactly the chain of one-step Bellman backups along the optimal path at $\gamma = 0.9$.
 
 **Connection to value iteration.** This backward propagation should feel familiar — it is the same mechanism as value iteration (Section 3.1). Both propagate value information backward through the Bellman equation from rewarding states. The difference is how they get the successor information. Value iteration has full access to $T$ and $R$, so each sweep updates *every* state simultaneously using the known transition probabilities. Q-learning has no model — it updates one state-action pair at a time using whatever transition the agent actually experiences in the real environment. Each real-world step is effectively a single sample drawn from the transition distribution $T(s, a, \cdot)$ that the agent doesn't have written down. Over many visits to the same $(s, a)$, these samples average out to the true expectation that value iteration would compute directly. Q-learning is, in this sense, value iteration performed one sample at a time, with the environment itself serving as the model.
 
@@ -511,7 +601,11 @@ The $r$ terms cancel:
 
 $$= \gamma \left| \max_{a'} \hat{Q}(s', a') - \max_{a'} Q^*(s', a') \right|$$
 
-Now use the bound $|\max_x f_1(x) - \max_x f_2(x)| \leq \max_x |f_1(x) - f_2(x)|$ (the largest gap in function values is at least as large as the gap between their maxima):
+Now use the standard bound $|\max_x f_1(x) - \max_x f_2(x)| \leq \max_x |f_1(x) - f_2(x)|$. A two-line proof: assume WLOG $\max f_1 \geq \max f_2$, let $x^* = \arg\max f_1$, then
+
+$$\max_x f_1(x) - \max_x f_2(x) = f_1(x^*) - \max_x f_2(x) \leq f_1(x^*) - f_2(x^*) \leq \max_x |f_1(x) - f_2(x)|$$
+
+where the first inequality uses $\max_x f_2(x) \geq f_2(x^*)$. Applied to our setting:
 
 $$\leq \gamma \max_{a'} |\hat{Q}(s', a') - Q^*(s', a')| \;\leq\; \gamma \,\|\hat{Q} - Q^*\|_\infty$$
 
@@ -644,6 +738,8 @@ Q-learning's `max` assumes optimal play from $s'$ onward — but the agent won't
 The name "SARSA" comes from the quintuple $(s, a, r, s', a')$ used in each update. Notice the algorithm must select $a'$ *before* updating — it needs to know which action will actually be taken from $s'$ in order to compute the target.
 
 **Why the distinction matters: the cliff-walking example.** Consider a grid world with a cliff along the bottom edge (following Sutton & Barto, 2018). Stepping into the cliff yields a large negative reward ($-100$) and resets the agent to the start. There are two paths to the goal: a "safe" path along the top (longer but far from the cliff) and an "optimal" path along the bottom edge (shorter but adjacent to the cliff).
+
+[FIG:ORIGINAL — Cliff-walking grid world from Sutton & Barto showing the 4×12 grid with start cell (bottom-left) labeled S, goal cell (bottom-right) labeled G, and the cliff row (all cells between S and G on the bottom row) shaded red or marked with "The Cliff" label. Overlay two paths: (1) Q-learning's "optimal" greedy path hugging the cliff edge along row 2, just above the cliff, drawn in one color; (2) SARSA's "safe" path routing up to the top row and across, drawn in another color. Both paths start at S and end at G. This visualization makes the on-policy / off-policy distinction immediately concrete: Q-learning converges to the risky-but-optimal-if-greedy path, SARSA to the longer-but-safe-under-ε-greedy path. Based on Sutton & Barto 2018, Figure 6.13.]
 
 Under $\epsilon$-greedy exploration, the agent occasionally takes random actions. Q-learning learns the optimal path — walk along the cliff edge — because its update uses $\max_{a'} Q(s', a')$, which reflects the value of *optimal future play*. It doesn't "know" that during training, the agent will sometimes stumble randomly into the cliff. The Q-values converge to the values of the optimal deterministic policy, but the agent's *actual performance during training* suffers from repeated cliff falls caused by $\epsilon$-random steps.
 
@@ -794,7 +890,25 @@ $$V^\lambda(s_t) = (1 - \lambda) \sum_{n=1}^{\infty} \lambda^{n-1} V^{(n)}(s_t)$
 
 The factor $(1 - \lambda)$ normalizes the geometric weights to sum to 1. When $\lambda = 0$, all weight is on the 1-step return — this is TD(0). When $\lambda = 1$, the weights decay slowly enough that the result is equivalent (up to normalization) to using the full Monte Carlo return.
 
-Computing the $\lambda$-return as defined above requires waiting until the end of the episode to know all future rewards. The **eligibility trace** mechanism makes TD($\lambda$) implementable online — updating estimates at every step, without waiting.
+**From forward view to backward view.** The λ-return above defines the **forward view** of TD($\lambda$): to update $V(s_t)$, look *ahead* into the rest of the episode. The drawback is we can't execute the update until the episode ends. The **backward view** achieves the same update online, by turning each newly observed TD error into a small correction distributed over all *earlier* states. The equivalence is not obvious — it rests on a telescoping identity worth deriving.
+
+Define the TD error $\delta_t = r_t + \gamma V(s_{t+1}) - V(s_t)$. First, expand an $n$-step return minus the current estimate into a telescoping sum of TD errors. Writing $V^{(n)}(s_t) = r_t + \gamma r_{t+1} + \cdots + \gamma^{n-1} r_{t+n-1} + \gamma^n V(s_{t+n})$ and subtracting $V(s_t)$:
+
+$$V^{(n)}(s_t) - V(s_t) = \underbrace{[r_t + \gamma V(s_{t+1}) - V(s_t)]}_{\delta_t} + \gamma\,\underbrace{[r_{t+1} + \gamma V(s_{t+2}) - V(s_{t+1})]}_{\delta_{t+1}} + \cdots + \gamma^{n-1}\,\delta_{t+n-1}$$
+
+The trick that makes this work is adding and subtracting $\gamma V(s_{t+1})$, $\gamma^2 V(s_{t+2})$, and so on — each intermediate bootstrap cancels with the next, leaving one TD error per step: $V^{(n)}(s_t) - V(s_t) = \sum_{k=0}^{n-1} \gamma^k \delta_{t+k}$. Substitute into the λ-return update and swap the order of summation:
+
+$$V^\lambda(s_t) - V(s_t) = (1 - \lambda) \sum_{n=1}^\infty \lambda^{n-1} \sum_{k=0}^{n-1} \gamma^k \delta_{t+k} \;=\; \sum_{k=0}^\infty \gamma^k \delta_{t+k} \cdot (1-\lambda)\sum_{n=k+1}^\infty \lambda^{n-1}$$
+
+The inner geometric sum evaluates to $\lambda^k/(1-\lambda)$, giving:
+
+**Result: the forward view written as a sum of future TD errors**
+
+$$V^\lambda(s_t) - V(s_t) = \sum_{k=0}^\infty (\gamma\lambda)^k \,\delta_{t+k}$$
+
+In words: the total correction the λ-return applies to $V(s_t)$ is a $(\gamma\lambda)$-discounted sum of the TD errors observed *from $s_t$ onward*.
+
+Now re-group by the time step at which each TD error becomes observable. When $\delta_t$ first becomes available at time $t$, the identity above says it must be added — with weight $(\gamma\lambda)^{t-u}$ — to $V(s_u)$ for *every earlier state* $s_u$ in the trajectory. Tracking "weight $(\gamma\lambda)^{t-u}$ for every past visit" is exactly what an eligibility trace does: at each step the trace decays by $\gamma\lambda$ and then increments by $1$ for the currently-visited state.
 
 **Eligibility traces.** Each state $s$ maintains an eligibility $e(s)$ that tracks how recently and frequently it has been visited:
 
@@ -804,7 +918,7 @@ The update rule then applies the TD error $\delta_t = r_t + \gamma V(s_{t+1}) - 
 
 $$V(s) \leftarrow V(s) + \alpha \, \delta_t \, e(s), \quad \forall s \in S$$
 
-When a reward is received, it doesn't just update the immediately preceding state — it propagates backward through the eligibility trace to all recently visited states. States visited long ago (low eligibility) get small updates; recently visited states (high eligibility) get large ones.
+This is the direct implementation of the telescoping identity above: every newly observed $\delta_t$ is credited back to earlier states $s_u$ with weight $(\gamma\lambda)^{t-u}$, which is precisely the eligibility $e(s_u)$ at time $t$. States visited long ago (low eligibility) get small updates; recently visited states (high eligibility) get large ones. A full episode of backward-view updates sums to the same total correction each state would have received from the forward-view λ-return — but computed online, without buffering the trajectory.
 
 The parameter $\lambda$ controls the trace decay rate. With $\lambda = 0$, only the current state has nonzero eligibility (pure TD(0)). With $\lambda = 1$, the trace decays only by $\gamma$, and rewards propagate far into the past.
 

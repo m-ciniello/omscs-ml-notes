@@ -116,7 +116,7 @@ A **parameterized policy** $\pi_\theta(a \mid s)$ is a function that, given a st
 
 $$\pi_\theta(a \mid s) = \frac{\exp(h_\theta(s, a))}{\sum_{a'} \exp(h_\theta(s, a'))}$$
 
-For continuous actions, a common choice is a **Gaussian policy**: the network outputs a mean $\mu_\theta(s)$ and standard deviation $\sigma_\theta(s)$, and the action is sampled from $\mathcal{N}(\mu_\theta(s),\, \sigma_\theta(s)^2)$.
+For continuous actions, a common choice is a **Gaussian policy**: the network outputs a mean $\mu_\theta(s)$ and (typically) a diagonal covariance — e.g. a standard deviation $\sigma_\theta(s)$ per action dimension — and the action is sampled from $\mathcal{N}(\mu_\theta(s),\, \operatorname{diag}(\sigma_\theta(s)^2))$ (a full $d \times d$ covariance is possible but adds many parameters and is less common).
 
 The **objective** is the expected return under $\pi_\theta$. In the episodic setting (the most common for policy gradients), this is:
 
@@ -174,7 +174,9 @@ A more refined version uses the **reward-to-go** $G_t = \sum_{t'=t}^{T-1} \gamma
 
 $$\nabla_\theta J(\theta) = \mathbb{E}_{\tau \sim \pi_\theta}\left[\sum_{t=0}^{T-1} \nabla_\theta \log \pi_\theta(a_t \mid s_t) \, G_t\right]$$
 
-This is the form used in practice — same expected value, lower variance.
+**Why the expectation is unchanged.** Under the MDP factorization, past rewards $r_0, \ldots, r_{t-1}$ do not depend on $a_t$ given $s_t$. For each $t$, the extra terms you would get if you multiplied $\nabla_\theta \log \pi_\theta(a_t \mid s_t)$ by those past rewards have **zero expectation**, so they drop out of $\nabla_\theta J$ while inflating variance. What remains correlated with the score in the right way is exactly the **reward-to-go** $G_t$. Equivalently, one derives the same **per-timestep** policy gradient by starting from $J(\theta) = \mathbb{E}[\sum_t \gamma^t r_t]$ and pushing the gradient through the policy factors that influence each $r_{t'}$. See Sutton & Barto (2018), §13.3.
+
+This is the form used in practice — same expected gradient, lower variance.
 
 ### 2.3 Why This Is Remarkable
 
@@ -184,7 +186,7 @@ Three properties make the policy gradient theorem powerful:
 
 2. **Works with any differentiable policy.** The gradient only requires $\nabla_\theta \log \pi_\theta(a \mid s)$, which exists for any policy parameterized by a differentiable function (neural networks, linear models, etc.). It does not require the environment to be differentiable.
 
-3. **Handles continuous actions natively.** There is no $\arg\max$ or $\max$ anywhere. For a Gaussian policy $\pi_\theta(a \mid s) = \mathcal{N}(a; \mu_\theta(s), \sigma_\theta(s)^2)$, the log-probability and its gradient are closed-form expressions — so continuous actions are as easy as discrete ones.
+3. **Handles continuous actions natively.** There is no $\arg\max$ or $\max$ anywhere. For a (typically diagonal) Gaussian policy, the log-probability and its gradient are closed-form expressions — so continuous actions are as easy as discrete ones.
 
 The price is **variance**. Because we estimate the gradient from sampled trajectories, the estimate is noisy. A single trajectory might happen to get a high return due to lucky transitions rather than good actions, and the gradient update would incorrectly reinforce those actions. Reducing this variance is the central challenge of practical policy gradient methods, and it drives the progression from REINFORCE (Section 3) through actor-critic methods (Section 5) to PPO (Section 7).
 
@@ -276,7 +278,7 @@ $$\mathbb{E}_{a_t \sim \pi_\theta}\left[\nabla_\theta \log \pi_\theta(a_t \mid s
 
 Since $\sum_a \pi_\theta(a \mid s_t) = 1$ for any $\theta$ (probabilities always sum to 1), the gradient of a constant is zero. The baseline term vanishes in expectation, so the estimate remains unbiased regardless of what $b(s)$ we choose.
 
-But different baselines give very different variance. The variance-minimizing baseline is $b^*(s) = \mathbb{E}[(\nabla_\theta \log \pi)^2 \, G_t] / \mathbb{E}[(\nabla_\theta \log \pi)^2]$ — a weighted average of returns, weighted by the squared gradient magnitude. In practice, this is very close to $V^\pi(s_t)$ (the expected return from state $s_t$), which is far simpler to estimate and is universally used. The intuition is that $G_t - V^\pi(s_t)$ centers the weight around zero: trajectories that are *better than average* (from this state) get positive weight, and trajectories that are *worse than average* get negative weight. This eliminates the problem of all weights being positive.
+But different baselines give very different variance. The strictly variance-minimizing baseline can be written as a particular weighted conditional expectation of $G_t$ given $s_t$, involving the score $\nabla_\theta \log \pi_\theta(a_t \mid s_t)$ (Williams, 1992; Sutton & Barto, 2018, §13.4). It is unwieldy to estimate in deep RL, so implementations almost always use $b(s_t) = V^\pi(s_t)$ or a learned critic $V_\phi(s_t)$, which is simple and dramatically cuts variance even if not exactly optimal. The intuition is that $G_t - V^\pi(s_t)$ centers the weight around zero: trajectories that are *better than average* (from this state) get positive weight, and trajectories that are *worse than average* get negative weight. This eliminates the problem of all weights being positive.
 
 ### 4.2 The Advantage Function
 
@@ -476,7 +478,7 @@ TRPO solves this constrained optimization using a second-order approximation: it
 
 $$J(\theta_\text{new}) \geq J(\theta_\text{old}) + \underbrace{\mathbb{E}_{s \sim \rho_{\theta_\text{old}}}\left[\mathbb{E}_{a \sim \pi_{\theta_\text{new}}}[A^{\pi_{\theta_\text{old}}}(s, a)]\right]}_{\text{surrogate advantage (how much better the new policy looks)}} - C\delta$$
 
-where $C$ is a constant depending on $\gamma$ and the advantage magnitude. As long as the expected advantage exceeds $C\delta$, the update is guaranteed to improve the policy. This **monotonic improvement guarantee** is TRPO's theoretical contribution — it converts the uncontrolled policy gradient into a procedure with provable progress.
+where $C$ is a constant depending on $\gamma$ and the advantage magnitude. As long as the expected advantage exceeds $C\delta$, the update is guaranteed to improve the policy. This **monotonic improvement guarantee** is TRPO's theoretical contribution — it converts the uncontrolled policy gradient into a procedure with provable progress. The bound is stated for the **idealized** surrogate-and-KL setup; practical TRPO uses quadratic trust-region approximations, a finite number of conjugate-gradient steps, and line search, so the inequality is **motivational** — a design principle — rather than a literal certificate after every update.
 
 **Why TRPO is hard to use:** The conjugate gradient computation and line search make TRPO substantially more complex to implement than vanilla policy gradients. It is also incompatible with architectures that share parameters between the actor and critic (common for efficiency), because the KL constraint applies to the actor but the shared parameters also affect the critic. These practical difficulties motivated PPO.
 
@@ -696,7 +698,7 @@ $$L_\text{actor}(\theta) = \mathbb{E}_{s,\, \tilde{a} \sim \pi_\theta}\left[\alp
 
 Reading this: "I want to increase the probability of actions that have high Q-value (negative of the Q-terms), but I also want to keep the policy's entropy high (negative of the $\alpha \log \pi$ term). The temperature $\alpha$ balances these two forces."
 
-SAC uses **off-policy** learning with an experience replay buffer, like DQN and DDPG. This is possible because the Q-function critics can learn from transitions collected under older policies — the same reason experience replay works for DQN. This makes SAC much more sample-efficient than on-policy methods like PPO, which must discard data after each policy update.
+SAC uses **off-policy** learning with an experience replay buffer, like DQN and DDPG. The **critics** are the main off-policy component: Bellman targets for $Q_\phi$ can use $(s, a, r, s')$ tuples collected under older behavior policies, just as in DQN. The **actor** still depends on the **current** policy (reparameterized samples and entropy terms at replayed states), so the overall algorithm is not “pure replay of independent targets” in the same sense as fitted Q-iteration — but reusing past transitions for the Q-updates is what yields the large sample-efficiency gain over on-policy methods like PPO, which discard data after each policy update.
 
 ### 9.3 Automatic Temperature Tuning
 
@@ -717,7 +719,7 @@ SAC achieves state-of-the-art sample efficiency on continuous control benchmarks
 | **On/off-policy** | On-policy | Off-policy | Off-policy |
 | **Sample efficiency** | Lower (discards data) | Higher (replay buffer) | Higher (replay buffer) |
 | **Stability** | Very stable (clipping) | Can be brittle | Stable (entropy + double Q) |
-| **Exploration** | $\epsilon$-greedy or entropy bonus | External noise | Built-in (max entropy) |
+| **Exploration** | Entropy bonus in the objective (and stochastic policy sampling) | External noise | Built-in (max entropy) |
 | **Continuous actions** | Gaussian policy | Deterministic + noise | Squashed Gaussian |
 | **Hyperparameter sensitivity** | Low | High | Low (auto-$\alpha$) |
 

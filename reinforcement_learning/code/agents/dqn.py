@@ -174,19 +174,18 @@ class DQNAgent:
     # --- State encoding ---
 
     def _encode(self, s):
-        """Convert (row, col) tuple to a normalized float tensor.
+        """Convert a (row, col) tuple to a normalized float tensor.
 
-        Normalization to [0, 1] helps the network learn faster — without
-        it, gradients would be dominated by whichever coordinate is larger.
+        Normalization to [0, 1] keeps inputs in the regime weight
+        initialization assumes (see math_to_code.md §2.1 for the full
+        four-reason argument).
         """
         return torch.FloatTensor([s[0] / self._row_scale,
                                   s[1] / self._col_scale])
 
     def _encode_batch(self, states):
-        """Encode a batch of states into a (batch, 2) tensor."""
-        return torch.FloatTensor(
-            [[s[0] / self._row_scale, s[1] / self._col_scale]
-             for s in states])
+        """Encode an iterable of states into a (batch, 2) tensor."""
+        return torch.stack([self._encode(s) for s in states])
 
     # --- Action selection ---
 
