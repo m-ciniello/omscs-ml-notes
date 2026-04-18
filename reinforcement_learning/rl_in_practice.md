@@ -32,7 +32,7 @@
   - [6. Applications: Where RL Meets the Real World](#6-applications-where-rl-meets-the-real-world)
     - [6.1 TD-Gammon: A Landmark Success](#61-td-gammon-a-landmark-success)
     - [6.2 Robotics and Control](#62-robotics-and-control)
-  - [7. The Big Picture: A Practical Roadmap](#7-the-big-picture-a-practical-roadmap)
+  - [7. The Big Picture: Choosing Methods in Practice](#7-the-big-picture-choosing-methods-in-practice)
   - [Sources and Further Reading](#sources-and-further-reading)
     - [Primary sources](#primary-sources)
     - [Exploration](#exploration)
@@ -564,7 +564,141 @@ Together, these two techniques address the core obstacles from Section 4.3: the 
 | **Noisy nets** (Fortunato et al., 2018) | Adds learnable noise to network parameters, replacing $\epsilon$-greedy | Exploration adapts to the task; the network learns where uncertainty matters |
 | **Distributional RL / C51** (Bellemare et al., 2017) | Learns the full return distribution, not just $\mathbb{E}[Q(s,a)]$ | Preserves richer information; improves stability and representation learning |
 
-Each of these components can be applied independently — Double DQN alone, for example, is a drop-in replacement for standard DQN that simply changes the target computation. The full Rainbow agent demonstrated state-of-the-art performance on the Atari benchmark, substantially outperforming any individual component.
+Each of these components can be applied independently — Double DQN alone, for example, is a drop-in replacement for standard DQN that simply changes the target computation. Below we unpack each one in detail.
+
+#### Double DQN
+
+**The problem: systematic overestimation.** Standard DQN computes the TD target as $y = r + \gamma \max_{a'} \hat{Q}(s', a'; \mathbf{w}^-)$. The $\max$ operator does double duty — it both *selects* the best action and *evaluates* how good that action is, using the same (target) network. When Q-estimates have noise (and they always do — the network is an imperfect approximator), $\max$ preferentially picks up the action whose estimate has the highest positive noise. Imagine three actions with true values $[5.0, 5.0, 5.0]$ but noisy estimates $[4.8, 5.3, 4.9]$. The max picks action 2 and reports $5.3$ — overestimating by $0.3$. This bias compounds over training: overestimated Q-values feed into future targets, which overestimate further.
+
+**The fix: decouple selection from evaluation.** Use the *online* network $\mathbf{w}$ to pick which action looks best, then ask the *target* network $\mathbf{w}^-$ how much that action is worth:
+
+$$y = r + \gamma \, \hat{Q}\!\left(s',\; \underbrace{\arg\max_{a'} \hat{Q}(s', a'; \mathbf{w})}_{\text{online picks}}\;;\; \underbrace{\mathbf{w}^-}_{\text{target evaluates}}\right)$$
+
+Since the two networks have somewhat independent errors (the target is a stale copy), the positive noise that caused the online network to select an action is unlikely to be present in the target network's evaluation of that action. The bias largely cancels. In code, the change is minimal — from the agent's `_train_step`:
+
+```python
+# Vanilla DQN: target network selects AND evaluates
+next_q = target_net(s2).max(dim=1).values
+
+# Double DQN: online selects, target evaluates
+best_actions = online_net(s2).argmax(dim=1)
+next_q = target_net(s2).gather(1, best_actions.unsqueeze(1)).squeeze(1)
+```
+
+One line of code, but it makes a meaningful difference in practice — especially in environments with many actions, where the chance of at least one noisy overestimate is high.
+
+#### Dueling Networks
+
+**The problem: wasted capacity on irrelevant action distinctions.** In many states, the choice of action barely matters. Consider a GridWorld cell far from any trap or goal — all four moves lead to similarly-valued states. Standard DQN must learn separate $Q(s, a)$ values for each action even when $Q(s, \text{up}) \approx Q(s, \text{down}) \approx Q(s, \text{left}) \approx Q(s, \text{right})$. The network spends capacity distinguishing actions that don't need distinguishing.
+
+**The fix: separate "how good is this state?" from "how much does action choice matter?"** Instead of outputting $Q(s,a)$ directly, the network splits into two streams after a shared trunk:
+
+- **Value stream** $V(s;\theta_V)$: a single scalar — "how good is it to be in state $s$, regardless of which action I take?"
+- **Advantage stream** $A(s,a;\theta_A)$: one scalar per action — "how much better (or worse) is action $a$ compared to the average action in state $s$?"
+
+They recombine as:
+
+$$Q(s,a) = V(s) + A(s,a) - \frac{1}{|\mathcal{A}|}\sum_{a'} A(s,a')$$
+
+The mean-subtraction term resolves an **identifiability problem**. Without it, you could add any constant $c$ to $V$ and subtract $c$ from every $A$ and get the same $Q$ values — the network could freely shift value between the two streams, making them uninterpretable. Mean-subtracting forces the advantages to be centered at zero, which pins down the decomposition. To see this concretely: suppose $V(s) = 7.0$ and $A(s, \cdot) = [0.5, -0.2, -0.3]$. Then:
+
+| | $V(s)$ | $A(s,a)$ | $\bar{A}$ | $Q(s,a) = V + A - \bar{A}$ |
+|---|---|---|---|---|
+| action 0 | 7.0 | +0.5 | 0.0 | **7.5** |
+| action 1 | 7.0 | −0.2 | 0.0 | **6.8** |
+| action 2 | 7.0 | −0.3 | 0.0 | **6.7** |
+
+The $V$ stream tells us "this state is worth ~7.0" and the $A$ stream tells us "action 0 is 0.5 better than average." In states where all actions are equivalent, $A \approx 0$ everywhere and the $V$ stream does all the work — the network doesn't waste gradient updates trying to distinguish indistinguishable actions.
+
+In the network architecture, the shared trunk (typically convolutional layers for image inputs, or a few dense layers for vector inputs) feeds into two separate heads, each a small MLP. The heads' outputs are combined via the equation above to produce the final Q-values. The change is purely architectural — the loss function and training loop remain the same as standard DQN.
+
+#### Prioritized Experience Replay
+
+**The problem: uniform replay is wasteful.** Standard DQN samples transitions from the replay buffer uniformly at random. But most stored transitions are "boring" — the agent has already learned a good Q-estimate for them (small TD error, nothing left to learn). Meanwhile, rare but informative transitions (near traps, near the goal, surprising outcomes) get the same sampling probability as the boring majority.
+
+**The connection to prioritized sweeping.** This is the same core idea as the prioritized sweeping we implemented in the Dyna agent (Section 3.3): update the "most wrong" estimates first. In Dyna, we maintained a priority queue of $(s, a)$ pairs ranked by TD error and always popped the highest-error pair for the next simulated update. Prioritized replay applies the same logic to the experience replay buffer: transitions with large TD errors get sampled more often.
+
+**Sampling probability.** Each transition $i$ in the buffer has a priority $p_i$. The probability of sampling transition $i$ is:
+
+$$P(i) = \frac{p_i^\alpha}{\sum_k p_k^\alpha}$$
+
+where $\alpha$ controls the strength of prioritization. With $\alpha = 0$, sampling is uniform (standard DQN). With $\alpha = 1$, sampling is fully proportional to priority. Rainbow uses $\alpha = 0.5$ as a compromise. The priority $p_i$ is typically set to $|\delta_i| + \epsilon$ where $\delta_i$ is the TD error and $\epsilon$ is a small constant to ensure every transition has some chance of being sampled.
+
+**Importance sampling correction.** There's a catch that didn't arise in Dyna: biased sampling changes the expected gradient. When we sample high-error transitions more often, the gradient step is biased toward reducing error on those transitions at the expense of the rest. To correct for this, we weight each transition's contribution to the loss by its inverse sampling probability:
+
+$$w_i = \left(\frac{1}{N \cdot P(i)}\right)^\beta$$
+
+where $N$ is the buffer size and $\beta$ controls how much correction to apply. Rainbow anneals $\beta$ from a starting value (e.g., 0.4) to 1.0 over the course of training. Early on, we accept some bias in exchange for faster learning; by the end, the correction is full and the learning is unbiased. The weights $w_i$ are normalized by $\max_i(w_i)$ before being applied, so the maximum weight is always 1.
+
+In practice, transitions are stored in a **sum tree** data structure for efficient $O(\log N)$ sampling proportional to priority, rather than recomputing the full distribution every step.
+
+#### Multi-step Returns
+
+**The problem: slow reward propagation.** Standard DQN uses a 1-step bootstrap target: $y = r + \gamma \max_{a'} \hat{Q}(s', a')$. Only one real reward $r$ is in the target — the rest is an estimate. For a distant reward to influence the Q-value of a state 10 steps away, the value must propagate backward through 10 consecutive 1-step updates. This is the same slow propagation we observed in tabular Q-learning before introducing Dyna.
+
+**The fix: use more real rewards.** Instead of bootstrapping after 1 step, look ahead $n$ steps and use all $n$ real rewards before bootstrapping:
+
+$$y = \underbrace{r_t + \gamma r_{t+1} + \gamma^2 r_{t+2} + \cdots + \gamma^{n-1} r_{t+n-1}}_{\text{$n$ real rewards (no estimation)}} + \underbrace{\gamma^n \max_{a'} \hat{Q}(s_{t+n}, a'; \mathbf{w}^-)}_{\text{bootstrap from step $n$}}$$
+
+This is the Q-learning analogue of the $n$-step TD returns covered in the companion document (Section 7). The **bias-variance tradeoff** works the same way: more real rewards in the target means less reliance on the (possibly wrong) Q-estimate (lower bias), but more stochastic transitions compounding together (higher variance). Rainbow uses $n = 3$ as a practical sweet spot — three real rewards give noticeably faster propagation without excessive variance.
+
+**Off-policy complication.** There's a subtle issue: the $n$-step trajectory was generated by the *behavior* policy (epsilon-greedy at the time of collection), but the target assumes optimal play from step $n$ onward. Strictly, this mismatch requires importance sampling ratios to correct for the behavior/target policy gap over the $n$ intermediate actions. In practice, Rainbow simply ignores this correction and it works fine — the error from the off-policy mismatch is small when $n$ is small (3 steps), and the benefit of faster propagation dominates.
+
+#### Noisy Networks
+
+**The problem: ε-greedy exploration is blunt.** With ε-greedy, the agent explores uniformly at random with probability ε, regardless of the state. It explores exactly as aggressively in a well-understood state (where it knows the right action) as in a novel, uncertain state (where exploration would actually be useful). The exploration rate ε is also a hyperparameter that must be hand-tuned and scheduled — typically starting high and decaying linearly, but the decay schedule is environment-dependent.
+
+**The fix: let the network learn its own exploration.** Replace the fixed weight matrices in the network with *noisy* weights:
+
+$$\mathbf{w} = \boldsymbol{\mu} + \boldsymbol{\sigma} \odot \boldsymbol{\varepsilon}$$
+
+where $\boldsymbol{\mu}$ (the mean) and $\boldsymbol{\sigma}$ (the noise scale) are both learned parameters, and $\boldsymbol{\varepsilon}$ is random noise sampled fresh each forward pass (typically factored Gaussian for efficiency). The $\odot$ denotes element-wise multiplication. Both $\boldsymbol{\mu}$ and $\boldsymbol{\sigma}$ are updated by gradient descent along with the rest of the network.
+
+The key insight is that $\boldsymbol{\sigma}$ is *learned per-parameter*. In regions of the state space where the Q-values are well-determined, the gradient drives $\sigma \to 0$ — the network stops injecting noise because noise hurts performance. In uncertain regions where Q-values are still being refined, $\sigma$ stays large because the exploration it creates leads to informative experiences that improve the loss. The network learns *where and how much* to explore, rather than using a fixed global schedule.
+
+This replaces ε-greedy entirely — no ε hyperparameter, no decay schedule. The exploration is state-dependent and self-tuning. In practice, Noisy Nets apply the noise to the fully-connected layers of the Q-network (each linear layer becomes a "NoisyLinear" layer), and a fresh noise sample $\boldsymbol{\varepsilon}$ is drawn at the start of each forward pass.
+
+#### Distributional RL (C51)
+
+**The problem: collapsing the return distribution into a single number.** Standard Q-learning learns $Q(s,a) = \mathbb{E}[G_t \mid s, a]$ — the *expected* return. But two state-action pairs can have the same expected return with very different risk profiles. For example: action A always yields return 5, while action B yields 0 or 10 with equal probability. Both have $Q = 5$, but they represent very different situations. By learning only the mean, the agent throws away information about the shape of the distribution — variance, skewness, multimodality — that could be useful for learning.
+
+More importantly, even if you only care about the expected value (risk-neutral policy), learning the full distribution gives the network *richer gradients*. The loss becomes: "did you get the whole distribution right?" instead of "did you get a single number right?" This helps the network learn better internal representations of states, which improves learning even though the final action selection still uses the mean.
+
+**The mechanism: categorical distribution over atoms.** C51 replaces the single Q-value with a discrete probability distribution over a fixed set of 51 "atoms" (possible return values) evenly spaced between $V_{\min}$ and $V_{\max}$:
+
+$$z_i = V_{\min} + i \cdot \frac{V_{\max} - V_{\min}}{(N_{\text{atoms}} - 1)}, \quad i = 0, 1, \ldots, 50$$
+
+For each $(s, a)$, the network outputs a vector of 51 probabilities $p_i(s,a)$ (via a softmax) representing: "what is the probability that the return falls at value $z_i$?" The expected Q-value is just the weighted sum: $Q(s,a) = \sum_i z_i \cdot p_i(s,a)$.
+
+**The distributional Bellman equation.** In the scalar case, the Bellman equation says $Q(s,a) = r + \gamma Q(s', a^*)$. For distributions, we apply the same transformation to every atom: shift by $r$ and scale by $\gamma$:
+
+$$z_i' = r + \gamma \, z_i$$
+
+This produces a new set of target atoms $z_i'$ that generally don't align with the fixed grid $\{z_0, z_1, \ldots, z_{50}\}$. The **projection step** redistributes each displaced atom's probability onto its two nearest neighbors in the fixed grid, proportionally to how close it is:
+
+For target atom $z_i' = r + \gamma z_i$ falling between fixed atoms $z_l$ and $z_u$:
+
+$$p_l \mathrel{+}= p_i(s', a^*) \cdot \frac{z_u - z_i'}{z_u - z_l}, \qquad p_u \mathrel{+}= p_i(s', a^*) \cdot \frac{z_i' - z_l}{z_u - z_l}$$
+
+This is just linear interpolation: if the projected atom lands 70% of the way from $z_l$ toward $z_u$, then 30% of its probability goes to $z_l$ and 70% to $z_u$.
+
+**Loss function: cross-entropy, not MSE.** Since we're comparing two probability distributions (the network's output and the projected target), the loss is the **cross-entropy** (equivalently, the KL divergence):
+
+$$\mathcal{L} = -\sum_i m_i \log p_i(s, a)$$
+
+where $m_i$ is the projected target distribution. This is the standard classification loss — treat each atom as a "class" and train the network to match the target distribution. Cross-entropy works better than MSE here because it respects the probabilistic structure: it penalizes confident wrong predictions more harshly than uncertain ones.
+
+The name "C51" comes from "Categorical with 51 atoms." The choice of 51 atoms and the $[V_{\min}, V_{\max}]$ range are hyperparameters; the original paper used $V_{\min} = -10$, $V_{\max} = 10$ for Atari games.
+
+#### How the components compose
+
+Each of the six components addresses a distinct failure mode of vanilla DQN, which is why they combine well — they are largely orthogonal improvements. However, some interactions are worth noting when implementing them together:
+
+- **Distributional RL + prioritized replay**: the TD error $|\delta|$ used as priority in standard prioritized replay is undefined for distributional agents (there's no single scalar TD error). Rainbow uses the **KL divergence** between the predicted and target distributions as the priority instead.
+- **Distributional RL + multi-step returns**: the $n$-step return distribution is computed by applying the $r + \gamma(\cdot)$ shift to the distribution $n$ times, accumulating the real rewards.
+- **Noisy nets + prioritized replay**: noisy nets change which transitions are generated (state-dependent exploration), while prioritized replay changes which transitions are *replayed*. They operate at different points in the learning pipeline and don't interfere.
+
+The full Rainbow agent demonstrated state-of-the-art performance on the Atari benchmark, substantially outperforming any individual component. Hessel et al.'s ablation study found that removing distributional RL caused the largest performance drop, followed by prioritized replay and multi-step returns.
 
 ### 4.5 Approaches to Generalization
 
@@ -676,7 +810,7 @@ These applications highlight a recurring theme: successful RL in practice typica
 
 ---
 
-## 7. The Big Picture: A Practical Roadmap
+## 7. The Big Picture: Choosing Methods in Practice
 
 The obstacles to practical RL — exploration, generalization, sample efficiency, partial observability — are interrelated, and no single algorithm addresses all of them. Here is a summary of when to reach for which tool:
 
@@ -693,7 +827,7 @@ The obstacles to practical RL — exploration, generalization, sample efficiency
 
 The algorithms covered in these two documents span the full arc from classical dynamic programming to modern deep RL. DQN and its extensions (Section 4.4) demonstrate that the foundational ideas — Q-learning, experience replay, temporal difference bootstrapping — scale to high-dimensional problems when combined with the right stabilization techniques.
 
-The other major branch of modern deep RL — **policy gradient methods** and **actor-critic architectures** — is not covered here but deserves a brief orientation. Where the value-based methods in these notes learn $Q^*$ or $V^*$ and derive a policy from them, policy gradient methods parameterize the policy directly as $\pi_\theta(a \mid s)$ and optimize $\theta$ by gradient ascent on the expected return. This is essential for **continuous action spaces** (e.g., robotic torque control), where $\arg\max_a Q(s, a)$ has no closed form, and for problems requiring **stochastic policies** (e.g., rock-paper-scissors). Actor-critic methods combine both ideas: a critic learns a value function, and an actor uses it to compute low-variance policy gradients. Key algorithms include REINFORCE (Williams, 1992), A3C (Mnih et al., 2016), PPO (Schulman et al., 2017), and SAC (Haarnoja et al., 2018). These methods build on the same TD and value-function foundations established in the companion document.
+The other major branch of modern deep RL — **policy gradient methods** and **actor-critic architectures** — is covered in the third companion document, *Policy Gradient Methods: From REINFORCE to PPO and SAC*. Where the value-based methods in these notes learn $Q^*$ or $V^*$ and derive a policy from them, policy gradient methods parameterize the policy directly as $\pi_\theta(a \mid s)$ and optimize $\theta$ by gradient ascent on the expected return. This is essential for **continuous action spaces** (e.g., robotic torque control), where $\arg\max_a Q(s, a)$ has no closed form, and for problems requiring **stochastic policies** (e.g., rock-paper-scissors). Actor-critic methods combine both ideas: a critic learns a value function, and an actor uses it to compute low-variance policy gradients. Key algorithms include REINFORCE (Williams, 1992), A2C/A3C (Mnih et al., 2016), PPO (Schulman et al., 2017), and SAC (Haarnoja et al., 2018). That document develops the full progression from the policy gradient theorem through variance reduction, trust regions, and maximum entropy RL — building on the same TD and value-function foundations established in these two companion documents.
 
 The theoretical challenges identified throughout — convergence with function approximation, the exploration-exploitation tradeoff, partial observability — remain among the most active research areas in machine learning.
 

@@ -31,7 +31,7 @@
   - [6. Temporal Difference Learning](#6-temporal-difference-learning)
     - [6.1 TD(0): One-Step Temporal Differences](#61-td0-one-step-temporal-differences)
     - [6.2 The Adaptive Heuristic Critic](#62-the-adaptive-heuristic-critic)
-    - [6.3 TD($\\lambda$): Multi-Step Temporal Differences](#63-tdlambda-multi-step-temporal-differences)
+    - [6.3 TD($\lambda$): Multi-Step Temporal Differences](#63-tdlambda-multi-step-temporal-differences)
     - [6.4 On-Policy vs. Off-Policy Learning](#64-on-policy-vs-off-policy-learning)
   - [7. The Big Picture: Connecting the Algorithms](#7-the-big-picture-connecting-the-algorithms)
   - [Sources and Further Reading](#sources-and-further-reading)
@@ -324,9 +324,9 @@ Policy iteration takes a different approach: instead of working with the value f
 
 The **policy evaluation** step fixes the policy and asks: "how good is each state under this fixed behavior?" Since the policy is fixed, there is no "max" — the Bellman equation becomes a system of linear equations in $|S|$ unknowns, which can be solved directly (e.g., by Gaussian elimination in $O(|S|^3)$ time).
 
-The **policy improvement** step asks, for each state: "is there an action better than the one the current policy prescribes?" If switching to a different action increases the expected return, the policy is updated. The **policy improvement theorem** guarantees that the new policy $\pi'$ is strictly better than $\pi$ (has higher $V$ at every state), unless $\pi$ is already optimal.
+The **policy improvement** step asks, for each state: "is there an action better than the one the current policy prescribes?" If switching to a different action increases the expected return, the policy is updated. The **policy improvement theorem** guarantees that the new policy $\pi'$ satisfies $V^{\pi'}(s) \geq V^\pi(s)$ for every state $s$. If $\pi'$ differs from $\pi$, then $V^{\pi'}(s) > V^\pi(s)$ for at least one state — so each strict improvement step yields a genuinely better policy until $\pi$ is already optimal.
 
-**Why does it terminate?** There are at most $|A|^{|S|}$ distinct deterministic policies. Each improvement step strictly increases the value function (unless already optimal). Since the number of policies is finite and each is strictly better than its predecessor, the algorithm must terminate.
+**Why does it terminate?** There are at most $|A|^{|S|}$ distinct deterministic policies. Each iteration either stops because $\pi' = \pi$, or else produces a policy $\pi'$ with $V^{\pi'}(s) \geq V^\pi(s)$ for all $s$ and strict inequality for at least one $s$. The latter cannot happen forever: every time the policy changes, the value vector moves strictly "upward" in at least one coordinate while never moving downward in any coordinate, and only finitely many policies exist, so after finitely many improvement steps the algorithm must reach a policy with $\pi' = \pi$ — which is optimal.
 
 **Complexity.** Per-iteration cost is $O(|A| \cdot |S|^2 + |S|^3)$ — the $|S|^3$ comes from solving the linear system in policy evaluation. This is more expensive per iteration than value iteration. However, policy iteration typically converges in far fewer iterations. In practice, neither algorithm dominates the other universally.
 
@@ -391,7 +391,7 @@ This recursive equation is the foundation of the learning rule. The agent mainta
 
 $$\hat{Q}(s, a) \leftarrow r + \gamma \max_{a' \in A} \hat{Q}(s', a')$$
 
-The right-hand side is the agent's best current estimate of what $Q^*(s, a)$ should be: the observed immediate reward $r$, plus the discounted value of the best action from the next state $s'$ (estimated using the current $\hat{Q}$ table).
+The right-hand side is the agent's best current estimate of what $Q^*(s, a)$ should be: the observed immediate reward $r$, plus the discounted value of the best action from the next state $s'$ (estimated using the current $\hat{Q}$ table). In this deterministic setting the update **replaces** the old entry with the one-step target (equivalently, learning rate $\alpha = 1$). Section 5.5 introduces a learning rate $\alpha < 1$ when transitions and rewards are stochastic — the same TD-error form you will see in code, with averaging over noisy samples.
 
 **Algorithm: Q-Learning (Deterministic MDP)**
 
@@ -473,8 +473,6 @@ $$\hat{Q}(\text{bot-left}, \text{right}) \leftarrow 0 + 0.9 \times 90 = 81$$
 The information propagates backward from the goal, one state per episode. After enough episodes, the "frontier" of nonzero Q-values reaches the entire state space, eventually converging to the true $Q^*$ values shown in Section 2.5.
 
 ```python
-import numpy as np
-
 states = ["bot-left", "bot-center", "bot-right", "top-left", "top-center", "G"]
 actions = ["left", "right", "up", "down"]
 gamma = 0.9
@@ -505,27 +503,25 @@ Does Q-learning actually converge to $Q^*$? Yes — under conditions that are su
 
 The proof is elegant and reveals the mechanism that drives convergence.
 
-**Proof.** Define $\Delta_n = \max_{s, a} |\hat{Q}_n(s, a) - Q^*(s, a)|$ as the maximum absolute error across all table entries after $n$ updates. We show that each update can only *reduce* the maximum error (by a factor of $\gamma$).
+**Proof.** Write $\|\hat{Q} - Q^*\|_\infty = \max_{s, a} |\hat{Q}(s, a) - Q^*(s, a)|$ for the largest absolute error in the table (before an update). Fix a timestep at which $(s, a)$ is updated, and let $s' = \delta(s, a)$. Let $\hat{Q}_{\text{new}}$ agree with the current table everywhere except possibly at $(s, a)$.
 
-Consider any entry $\hat{Q}_n(s, a)$ that gets updated on iteration $n+1$. Writing $s' = \delta(s, a)$:
-
-$$|\hat{Q}_{n+1}(s, a) - Q^*(s, a)| = \left| \left(r + \gamma \max_{a'} \hat{Q}_n(s', a')\right) - \left(r + \gamma \max_{a'} Q^*(s', a')\right) \right|$$
+$$|\hat{Q}_{\text{new}}(s, a) - Q^*(s, a)| = \left| \left(r + \gamma \max_{a'} \hat{Q}(s', a')\right) - \left(r + \gamma \max_{a'} Q^*(s', a')\right) \right|$$
 
 The $r$ terms cancel:
 
-$$= \gamma \left| \max_{a'} \hat{Q}_n(s', a') - \max_{a'} Q^*(s', a') \right|$$
+$$= \gamma \left| \max_{a'} \hat{Q}(s', a') - \max_{a'} Q^*(s', a') \right|$$
 
-Now we use the fact that for any two functions $f_1, f_2$: $|\max_x f_1(x) - \max_x f_2(x)| \leq \max_x |f_1(x) - f_2(x)|$. Applying this:
+Now use the bound $|\max_x f_1(x) - \max_x f_2(x)| \leq \max_x |f_1(x) - f_2(x)|$ (the largest gap in function values is at least as large as the gap between their maxima):
 
-$$\leq \gamma \max_{a'} |\hat{Q}_n(s', a') - Q^*(s', a')|$$
+$$\leq \gamma \max_{a'} |\hat{Q}(s', a') - Q^*(s', a')| \;\leq\; \gamma \,\|\hat{Q} - Q^*\|_\infty$$
 
-This is the maximum error over actions at the specific next state $s'$. But $\Delta_n$ is the maximum error over *all* states and *all* actions — which is at least as large as the max at any single state. So:
+So a single Q-learning backup at $(s, a)$ moves that entry to within $\gamma$ times the **pre-update** worst-case error over the *entire* table. The bootstrap term enters with a factor $\gamma < 1$, which is the same contraction mechanism as value iteration (Section 3.1).
 
-$$\leq \gamma \,\Delta_n$$
+**Synchronous mental model.** Suppose, conceptually, that every $(s, a)$ were replaced by its Bellman backup **at once**, using one fixed snapshot of $\hat{Q}$. That full sweep is one application of the Bellman optimality operator on $Q$-vectors; it is a **contraction** with modulus $\gamma$ in the max-norm, so one sweep shrinks $\|\hat{Q} - Q^*\|_\infty$ by at least $\gamma$. Repeating such sweeps would drive the error to zero at a geometric rate — exactly the story of value iteration, but written for $Q$.
 
-So every updated entry has error at most $\gamma \Delta_n$. Crucially, no update can *increase* the maximum error above $\Delta_n$: the updated entry's error is at most $\gamma \Delta_n < \Delta_n$, while un-updated entries retain their old error $\leq \Delta_n$. Therefore, once every state-action pair has been updated at least once (which need not happen in a single synchronous sweep — the agent visits pairs one at a time in arbitrary order), the maximum error across all entries is at most $\gamma \Delta_n$. Since each pair is visited infinitely often, there are infinitely many such complete rounds. After $k$ complete rounds, $\Delta \leq \gamma^k \Delta_0$. Since $\gamma < 1$, this converges to 0. $\blacksquare$
+**Asynchronous Q-learning.** Real agents update one $(s, a)$ per step in an order dictated by exploration. The argument above is still the *local* reason learning is stable: errors in $\max_{a'}\hat{Q}(s',a')$ are damped by $\gamma$ before they feed back into the row being updated. Turning this local fact into a global convergence theorem under **infinite visits** to every pair requires a longer asynchronous or stochastic-approximation proof (Mitchell, Theorem 13.1; see also Watkins and Dayan, 1992). The takeaway is the same: bootstrapping plus $\gamma < 1$ prevents errors from exploding, and persistent exploration ensures every equation implied by the Bellman optimality system is eventually enforced. $\blacksquare$
 
-**What does this tell us?** The discount factor $\gamma$ is literally the convergence rate — smaller $\gamma$ means faster convergence but more myopic behavior. The proof also reveals why Q-learning works even though the table is bootstrapping off its own (inaccurate) estimates: each update mixes an error-prone estimate ($\max_{a'} \hat{Q}(s', a')$, entering with weight $\gamma < 1$) with an error-free observation ($r$, entering with weight $1$). Over time, the ground truth "wins."
+**What does this tell us?** In the synchronous / value-iteration picture above, $\gamma$ is the per-sweep contraction factor: smaller $\gamma$ shrinks error faster geometrically but makes the agent more myopic. The local backup inequality is also the reason Q-learning can bootstrap off its own noisy $\hat{Q}$ without diverging: each update mixes an error-prone term ($\max_{a'} \hat{Q}(s', a')$, scaled by $\gamma < 1$) with an error-free observation ($r$, weight $1$), so ground-truth rewards keep anchoring the table while exploration supplies enough visits for the Bellman equations to take hold everywhere.
 
 Note the convergence condition requires visiting every state-action pair infinitely often. A purely greedy agent that always picks $\arg\max_a \hat{Q}(s, a)$ will generally fail this condition — it will never revisit state-action pairs it currently considers suboptimal. This is why exploration is essential, which we discuss briefly in Section 5.6 and in depth in the companion document.
 
@@ -737,7 +733,7 @@ In practice, overestimation compounds across Bellman backups: inflated values at
 >
 > $$Q_B(s, a) \leftarrow Q_B(s, a) + \alpha \left[ r + \gamma \, Q_A\!\left(s',\; \arg\max_{a'} Q_B(s', a')\right) - Q_B(s, a) \right]$$
 
-The key insight: $Q_A$ selects the action ($\arg\max_{a'} Q_A$), but $Q_B$ evaluates it. Since the noise in $Q_A$ and $Q_B$ is independent (they were updated on different transitions), the action that happens to have high noise in $Q_A$ is unlikely to also have high noise in $Q_B$. The overestimation bias is eliminated in expectation.
+The key insight: $Q_A$ selects the action ($\arg\max_{a'} Q_A$), but $Q_B$ evaluates it. Since the noise in $Q_A$ and $Q_B$ is imperfectly correlated (they are updated from different experience), the action that happens to look best under $Q_A$ is unlikely to *also* be overestimated by $Q_B$ by the same lucky draw. In expectation this **greatly reduces** the positive bias of the vanilla $\max$-then-bootstrap target; in finite samples some bias can remain, but the pathology that drives runaway overestimation in deep Q-learning is much less severe.
 
 For action selection during the episode, the agent can use either table or their average: $\arg\max_a [Q_A(s, a) + Q_B(s, a)]$.
 
@@ -813,6 +809,8 @@ When a reward is received, it doesn't just update the immediately preceding stat
 The parameter $\lambda$ controls the trace decay rate. With $\lambda = 0$, only the current state has nonzero eligibility (pure TD(0)). With $\lambda = 1$, the trace decays only by $\gamma$, and rewards propagate far into the past.
 
 To see eligibility traces in action, consider a simple five-state chain where the agent receives a reward only at the terminal state. With TD(0), only the state immediately before the terminal gets updated per episode. With TD($\lambda$), the reward propagates backward through all recently visited states in a single episode:
+
+The snippet below is **pedagogical**: it replays a fixed trajectory so you can watch $\delta_t$ credit past states in one pass. Production TD($\lambda$) implementations use **online** eligibility traces (often with replacing traces and sparse updates) so that each step costs $O(1)$ in the number of nonzero traces rather than a full sweep over $S$.
 
 ```python
 import numpy as np
