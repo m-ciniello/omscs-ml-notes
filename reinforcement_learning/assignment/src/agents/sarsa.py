@@ -1,19 +1,6 @@
-"""SARSA — on-policy TD(0) control.
-
-Update rule:
-    Q(s,a) <- Q(s,a) + α [ r + γ Q(s', a') - Q(s,a) ]
-where a' is the action ε-greedily chosen at s'. The next action is *kept*
-and used as the first action of the next transition, which is what makes
-SARSA on-policy — it learns the Q-values of the ε-greedy policy it is
-actually executing.
-
-Hyperparameters:
-    alpha                   constant learning rate
-    epsilon_start/end       linear ε schedule bounds
-    epsilon_decay_episodes  length of the linear decay (flat thereafter)
-    max_steps_per_episode   safety cap (Blackjack episodes are short;
-                            gridworld needs a cap during pure exploration)
-"""
+"""SARSA — on-policy TD(0): Q(s,a) <- Q(s,a) + α[r + γ Q(s', a') - Q(s,a)],
+with a' drawn from the *same* ε-greedy policy (and reused as the next
+step's action). That reuse is what makes the update on-policy."""
 
 from __future__ import annotations
 
@@ -21,7 +8,6 @@ import time
 
 import numpy as np
 
-from src.agents.base import BaseAgent, RunResult
 from src.agents.tabular import (
     QTable,
     epsilon_greedy,
@@ -30,7 +16,7 @@ from src.agents.tabular import (
 )
 
 
-class SARSA(BaseAgent):
+class SARSA:
     name = "sarsa"
 
     def __init__(
@@ -56,7 +42,7 @@ class SARSA(BaseAgent):
         eval_episodes: int,
         gamma: float,
         seed: int,
-    ) -> RunResult:
+    ) -> dict:
         rng = np.random.default_rng(seed)
         qtable = QTable(n_actions=env.N_ACTIONS)
 
@@ -113,17 +99,17 @@ class SARSA(BaseAgent):
             max_steps_per_episode=self.max_steps_per_episode,
         )
 
-        return RunResult(
-            train_returns=train_returns,
-            train_steps=train_steps,
-            eval_returns=eval_returns,
-            eval_steps=eval_steps,
-            history={
+        return {
+            "train_returns": train_returns,
+            "train_steps": train_steps,
+            "eval_returns": eval_returns,
+            "eval_steps": eval_steps,
+            "history": {
                 "epsilon_per_episode": epsilon_history,
                 "n_visited_states": qtable.n_visited_states(),
                 "train_wall_seconds": train_wall,
             },
-            policy=qtable.policy_dict(),
-            Q=qtable.to_dict(),
-            wall_clock_seconds=time.perf_counter() - t0,
-        )
+            "policy": qtable.policy_dict(),
+            "Q": qtable.to_dict(),
+            "wall_clock_seconds": time.perf_counter() - t0,
+        }

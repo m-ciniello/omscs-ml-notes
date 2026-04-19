@@ -1,43 +1,20 @@
-"""CartPole-v1 wrapped with binned state discretization.
+"""Gymnasium CartPole-v1 wrapped with binned state discretization.
 
-The assignment asks for a second environment with different structure from
-Blackjack. CartPole gives us exactly that: continuous 4-D observations, a
-1-step reward of +1 per survived step, and truncation at 500 steps. To keep
-the same tabular agents working, we discretize the observation into integer
-bin tuples — the same state representation the rest of the codebase expects.
-
-Why binned (not tile coding)?
-    - Simplest discretization that produces a genuine Markov-ish state for
-      coarse bins. Enough to demonstrate SARSA / Q-Learning learning curves,
-      sample complexity, and gamma effects — the phenomena the report
-      actually needs to discuss.
-    - Tile coding would be strictly more powerful but adds function-approx
-      machinery we don't want to explain alongside the tabular story. We'll
-      cross the function-approx bridge with DQN in Phase 4.
-
-No MDP model side (`all_states` / `transitions`) is exposed. CartPole's
-physics integration is nontrivial, and an *estimated* MDP model from rollouts
-would be a different project. The DP comparison on this env is therefore
-intentionally out of scope — this is the "rollout-only" env that contrasts
-with Blackjack's analytical MDP.
-
-Default discretization: n_bins = (3, 3, 6, 6) = 324 non-terminal states.
-    - cart_position:         3 bins over [-2.4, 2.4]
-    - cart_velocity:         3 bins over [-3.0, 3.0]
-    - pole_angle:            6 bins over [-0.21, 0.21]   (±12°; termination
-                                                          bound is ±0.2095)
-    - pole_angular_velocity: 6 bins over [-3.5, 3.5]
-
-Angle + angular velocity dominate the control problem (cart position and
-velocity are secondary), which is why those two get finer bins by default.
-Bounds are picked to exceed the practical range of stable trajectories but
-not so wide that most bins are unused; slight over-clipping of extreme
-values is fine because those transitions are rare and end the episode.
+For DP on CartPole, see `cartpole_mdp.py` (builds a tabular MDP from
+rollouts). Default binning (3,3,8,12) = 864 non-terminal states — angle and
+angular velocity get finer bins because they dominate the control problem.
+This matches the FAQ starter grid and is the grid `src/configs.py` uses
+for all single-point CartPole experiments. Bounds match the FAQ clamps
+([-2.4, 2.4], [-3, 3], [-0.2, 0.2], [-3.5, 3.5]); rare out-of-bounds
+values are clipped to the nearest edge (those transitions typically
+terminate the episode anyway).
 """
 
 from __future__ import annotations
 
 from typing import Any
+
+import numpy as np
 
 
 State = tuple  # tuple of bin indices, one per observation dim
@@ -45,10 +22,10 @@ State = tuple  # tuple of bin indices, one per observation dim
 _DEFAULT_BOUNDS = (
     (-2.4, 2.4),    # cart_position
     (-3.0, 3.0),    # cart_velocity
-    (-0.21, 0.21),  # pole_angle (radians)
+    (-0.2, 0.2),    # pole_angle (radians)
     (-3.5, 3.5),    # pole_angular_velocity
 )
-_DEFAULT_N_BINS = (3, 3, 6, 6)
+_DEFAULT_N_BINS = (3, 3, 8, 12)
 
 
 def _discretize(
@@ -56,14 +33,8 @@ def _discretize(
     bounds: tuple[tuple[float, float], ...],
     n_bins: tuple[int, ...],
 ) -> State:
-    """Map a 4-D continuous obs to a tuple of bin indices.
-
-    Values outside `bounds` are clipped to the nearest edge. Bin 0 covers
-    [lo, lo + w), bin 1 covers [lo + w, lo + 2w), ..., bin n-1 covers
-    [lo + (n-1)w, hi] (i.e. the upper edge lands in the last bin). A
-    dimension with n_bins == 1 collapses to a single bucket regardless of
-    value.
-    """
+    """Map a 4-D continuous obs to a tuple of bin indices. Out-of-range
+    values clip to the nearest edge; n_bins == 1 collapses that dim."""
     state = []
     for x, (lo, hi), n in zip(obs, bounds, n_bins):
         if n <= 1:
@@ -79,16 +50,8 @@ def _discretize(
 
 
 class DiscretizedCartPole:
-    """Gymnasium CartPole-v1 with binned state discretization.
-
-    Exposes the same minimal interface used by RandomAgent, SARSA, Q-Learning:
-        N_ACTIONS:              class attribute, 2
-        reset(seed=None):       -> State
-        step(action):           -> (State, reward, done, info)
-
-    The Gym env is imported lazily so the module can be imported without
-    Gymnasium installed (mirrors Blackjack's pattern).
-    """
+    """CartPole-v1 with binned state. Interface: N_ACTIONS, reset(seed)->State,
+    step(a)->(State, reward, done, info). Gym is imported lazily."""
 
     N_ACTIONS = 2
     ACTION_NAMES = ("left", "right")
@@ -111,8 +74,6 @@ class DiscretizedCartPole:
         self._rollout_seed = seed
         self._state: State | None = None
 
-    # ------------------------------------------------------------------
-
     def reset(self, seed: int | None = None) -> State:
         if self._gym_env is None:
             import gymnasium as gym
@@ -134,12 +95,38 @@ class DiscretizedCartPole:
         self._state = _discretize(obs, self.bounds, self.n_bins)
         return self._state, float(reward), done, info
 
-    # ------------------------------------------------------------------
-    # Introspection (handy for reporting / plots)
-    # ------------------------------------------------------------------
-
     def n_total_states(self) -> int:
         total = 1
         for n in self.n_bins:
             total *= n
         return total
+
+
+class ContinuousCartPole:
+    """CartPole-v1 passthrough: raw 4-D float obs for DQN/Rainbow."""
+
+    N_ACTIONS = 2
+    ACTION_NAMES = ("left", "right")
+    STATE_DIM = 4
+
+    def __init__(self, *, seed: int | None = None):
+        self._gym_env = None
+        self._rollout_seed = seed
+
+    def reset(self, seed: int | None = None):
+        if self._gym_env is None:
+            import gymnasium as gym
+            self._gym_env = gym.make("CartPole-v1")
+        reset_seed = seed if seed is not None else self._rollout_seed
+        obs, _ = self._gym_env.reset(seed=reset_seed)
+        self._rollout_seed = None
+        return np.asarray(obs, dtype=np.float32)
+
+    def step(self, action: int):
+        if self._gym_env is None:
+            raise RuntimeError(
+                "ContinuousCartPole.step called before reset(). Call reset() first."
+            )
+        obs, reward, terminated, truncated, info = self._gym_env.step(int(action))
+        done = bool(terminated or truncated)
+        return np.asarray(obs, dtype=np.float32), float(reward), done, info

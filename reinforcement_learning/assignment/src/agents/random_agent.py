@@ -1,11 +1,4 @@
-"""Uniform-random action agent.
-
-Serves two purposes:
-1. Phase 0 smoke test: exercises the full runner + aggregator pipeline
-   end-to-end before any real algorithms are wired up.
-2. Baseline: sanity-check that learning agents actually learn something
-   better than random on every problem we try.
-"""
+"""Uniform-random baseline — sanity check that learning agents beat random."""
 
 from __future__ import annotations
 
@@ -13,12 +6,8 @@ import time
 
 import numpy as np
 
-from src.agents.base import BaseAgent, RunResult
 
-
-class RandomAgent(BaseAgent):
-    """Picks each action uniformly at random. No learning."""
-
+class RandomAgent:
     name = "random"
 
     def __init__(self, max_steps_per_episode: int = 500):
@@ -32,7 +21,7 @@ class RandomAgent(BaseAgent):
         eval_episodes: int,
         gamma: float,
         seed: int,
-    ) -> RunResult:
+    ) -> dict:
         rng = np.random.default_rng(seed)
         t0 = time.perf_counter()
 
@@ -50,16 +39,16 @@ class RandomAgent(BaseAgent):
             eval_returns.append(ret)
             eval_steps.append(steps)
 
-        return RunResult(
-            train_returns=train_returns,
-            train_steps=train_steps,
-            eval_returns=eval_returns,
-            eval_steps=eval_steps,
-            history={},
-            policy=None,
-            Q=None,
-            wall_clock_seconds=time.perf_counter() - t0,
-        )
+        return {
+            "train_returns": train_returns,
+            "train_steps": train_steps,
+            "eval_returns": eval_returns,
+            "eval_steps": eval_steps,
+            "history": {},
+            "policy": None,
+            "Q": None,
+            "wall_clock_seconds": time.perf_counter() - t0,
+        }
 
     def _rollout(self, env, rng) -> tuple[float, int]:
         env.reset()

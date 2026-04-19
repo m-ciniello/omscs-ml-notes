@@ -1,29 +1,14 @@
-"""Value Iteration.
+"""Value Iteration: in-place (Gauss-Seidel) Bellman-optimality sweeps.
 
-Classic synchronous Bellman-optimality update, in-place (Gauss-Seidel). Solves
+Env must expose the MDP-model side (`all_states`, `transitions`,
+`is_terminal`, `N_ACTIONS`) for the sweeps, and the rollout side
+(`reset`, `step`) for greedy-policy evaluation after solving.
 
-    V*(s) = max_a  sum_{s',r} T(s,a,s',r) [ r + gamma V*(s') ]
-
-by repeated fixed-point application. Contraction with factor gamma under the
-sup-norm, so convergence is guaranteed for gamma < 1 (Sutton & Barto §4.4).
-
-The env passed to `run` must implement the **MDP-model** side of the env
-contract:
-
-- `all_states()` → iterable of hashable states
-- `is_terminal(state)` → bool
-- `transitions(state, action)` → list[(prob, next_state, reward)]
-- `N_ACTIONS` → int (we assume actions are 0..N_ACTIONS-1)
-
-plus the **rollout** side (`reset()`, `step(a)`) so we can evaluate the
-greedy policy by simulation after solving.
-
-History recorded per sweep:
-  - sweep_deltas: max |V_new(s) - V_old(s)| over all states (Bellman residual)
-  - sweep_wall_times: wall-clock seconds for the sweep
-  - greedy_policy_changes: how many states changed their greedy action this
-    sweep (value convergence usually runs ahead of policy convergence, and
-    plotting both is a standard DP diagnostic)
+Per-sweep history (for the convergence plots):
+- `sweep_deltas`: Bellman residual (max |ΔV|)
+- `sweep_wall_times`: seconds per sweep
+- `policy_change_counts`: #states whose greedy action flipped this sweep
+  (value convergence runs ahead of policy convergence — standard diagnostic)
 """
 
 from __future__ import annotations
@@ -33,12 +18,8 @@ from typing import Any
 
 import numpy as np
 
-from src.agents.base import BaseAgent, RunResult
 
-
-class ValueIteration(BaseAgent):
-    """Synchronous in-place value iteration."""
-
+class ValueIteration:
     name = "vi"
 
     def __init__(
@@ -46,12 +27,6 @@ class ValueIteration(BaseAgent):
         theta: float = 1e-6,
         max_sweeps: int = 1000,
     ):
-        """
-        Args:
-            theta: Bellman-residual threshold for early stopping.
-            max_sweeps: hard cap on sweeps — prevents runaway loops if the
-                MDP is pathological or gamma is too close to 1.
-        """
         self.theta = theta
         self.max_sweeps = max_sweeps
 
@@ -63,16 +38,13 @@ class ValueIteration(BaseAgent):
         eval_episodes: int,
         gamma: float,
         seed: int,
-    ) -> RunResult:
+    ) -> dict:
         _require_mdp_interface(env)
         t0 = time.perf_counter()
 
         states = list(env.all_states())
         V: dict[Any, float] = {s: 0.0 for s in states}
-        # Default action 0 for all states. Terminal-state entries are never
-        # updated (terminals have no meaningful action) but we keep a
-        # consistent default to match PI's initial policy and make output
-        # comparisons clean.
+        # default action 0 everywhere (incl. terminals) so PI's init matches
         prev_greedy: dict[Any, int] = {s: 0 for s in states}
 
         sweep_deltas: list[float] = []
@@ -118,38 +90,34 @@ class ValueIteration(BaseAgent):
             "final_delta": sweep_deltas[-1],
         }
 
-        return RunResult(
-            train_returns=[],
-            train_steps=[],
-            eval_returns=eval_returns,
-            eval_steps=eval_steps,
-            history=history,
-            policy=policy,
-            Q=Q,
-            wall_clock_seconds=time.perf_counter() - t0,
-        )
+        return {
+            "train_returns": [],
+            "train_steps": [],
+            "eval_returns": eval_returns,
+            "eval_steps": eval_steps,
+            "history": history,
+            "policy": policy,
+            "Q": Q,
+            "wall_clock_seconds": time.perf_counter() - t0,
+        }
 
 
-# ---------------------------------------------------------------------------
-# Shared DP utilities (also used by PolicyIteration)
-# ---------------------------------------------------------------------------
+# --- Shared DP utilities (also used by PolicyIteration) ---
 
 def _require_mdp_interface(env) -> None:
-    """Fail fast with a clear error if the env isn't a full MDP model."""
+    """Fail fast if env isn't an MDP model (used by both VI and PI)."""
     for method in ("all_states", "transitions", "is_terminal"):
         if not hasattr(env, method):
             raise TypeError(
-                f"DP agents require the env to expose `{method}` "
-                f"(MDP-model interface). Env {type(env).__name__} does not."
+                f"DP agents require env to expose `{method}`; "
+                f"{type(env).__name__} does not."
             )
     if not hasattr(env, "N_ACTIONS"):
-        raise TypeError(
-            f"Env {type(env).__name__} must expose `N_ACTIONS`."
-        )
+        raise TypeError(f"Env {type(env).__name__} must expose `N_ACTIONS`.")
 
 
 def _best_action_value(env, s, V, gamma: float) -> tuple[float, int]:
-    """Compute max_a Q(s,a) and argmax_a Q(s,a)."""
+    """(max_a Q(s,a), argmax_a Q(s,a))."""
     best_value = -float("inf")
     best_action = 0
     for a in range(env.N_ACTIONS):
@@ -163,7 +131,7 @@ def _best_action_value(env, s, V, gamma: float) -> tuple[float, int]:
 
 
 def _compute_Q(env, V: dict, gamma: float) -> dict:
-    """Extract Q from V after solving. Nice for analysis / plotting."""
+    """Extract Q from V after solving."""
     Q: dict = {}
     for s in V:
         Q[s] = [0.0] * env.N_ACTIONS
@@ -184,25 +152,25 @@ def _rollout_policy(
     seed: int,
     max_steps: int = 1000,
 ) -> tuple[list[float], list[int]]:
-    """Run `n_rollouts` greedy-policy episodes, returning (returns, steps)."""
+    """Run `n_rollouts` greedy-policy episodes; returns (returns, steps)."""
     rng = np.random.default_rng(seed + 10_000)
     returns = []
     steps = []
     for ep in range(n_rollouts):
-        # Some envs accept a per-reset seed; pass a derived one for determinism.
+        # pass a derived per-reset seed when the env supports it (determinism)
         try:
             s = env.reset(seed=int(rng.integers(0, 2**31 - 1)))
         except TypeError:
             s = env.reset()
         total = 0.0
+        ep_steps = max_steps
         for t in range(max_steps):
             a = policy.get(s, 0)
             s, r, done, _ = env.step(a)
             total += r
             if done:
-                steps.append(t + 1)
+                ep_steps = t + 1
                 break
-        else:
-            steps.append(max_steps)
+        steps.append(ep_steps)
         returns.append(total)
     return returns, steps

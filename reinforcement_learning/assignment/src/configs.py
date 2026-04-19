@@ -1,36 +1,15 @@
-"""Single source of truth for experiments in this assignment.
+"""Single source of truth for experiments.
 
-Every experiment is a named entry in the `EXPERIMENTS` registry below.
-Reproducing a result means running the registered experiment by name;
-the runner reads the spec here, builds the env + agent, runs across seeds,
-and writes a config snapshot alongside every result dump.
+Every experiment is a named entry in the EXPERIMENTS registry. Reproducing
+a result means running the registered experiment by name; the runner
+snapshots the spec verbatim next to every result dump.
 
-This module is intentionally pure data. Factory logic (how to build an
-env or agent from a spec) lives in `src/envs/__init__.py` and
-`src/agents/__init__.py`.
+Naming:
+    <env>_<agent>_<variant>              # single-point
+    <env>_<agent>_<hp>_sweep_<value>     # shared-prefix sweep variants
 
-Organisation:
-    - Spec dataclasses (EnvSpec, AgentSpec, ExperimentSpec)
-    - Registry + lookup helpers (register, get, list_experiments)
-    - Sweep generator (register_sweep) — the main ergonomic affordance
-      for hyperparameter studies
-    - Registered experiments, grouped by phase
-
-Naming convention for experiments:
-    <env>_<agent>_<variant>              # single-point configs
-    <env>_<agent>_<hp>_sweep_<value>     # sweep variants, same prefix
-                                         # identifies a sweep for grouping
-
-Tags supplement names for cross-cutting filtering. Every sweep variant
-carries the tags "sweep" and "sweep:<path>" so they can be identified
-regardless of name.
-
-Results directory layout:
-    Each spec carries `results_path_parts` (a path relative to results/).
-    - Standalone runs: ("<name>",)              -> results/<name>/
-    - Sweep variants:  ("<prefix>", "<frag>")   -> results/<prefix>/<frag>/
-    If empty (the default for manually-registered specs), the runner falls
-    back to ("<name>",) so existing single-point specs don't need edits.
+Sweep variants live under `results/<prefix>/<frag>/`; single-point specs
+use `results/<name>/`. All driven by ExperimentSpec.results_path_parts.
 """
 
 from __future__ import annotations
@@ -40,42 +19,27 @@ from dataclasses import dataclass, field, asdict
 from typing import Any
 
 
-# ---------------------------------------------------------------------------
-# Spec dataclasses
-# ---------------------------------------------------------------------------
+# --- Spec dataclasses ---
 
 @dataclass(frozen=True)
 class EnvSpec:
-    """How to build an environment."""
     name: str
     kwargs: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
 class AgentSpec:
-    """How to build an agent."""
     name: str
     hyperparams: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
 class ExperimentSpec:
-    """A full experiment: env + agent + training budget + seeds.
+    """env + agent + training budget + seeds.
 
-    Attributes:
-        name: unique identifier, used as the results subdirectory name.
-        env: environment spec.
-        agent: agent spec.
-        n_episodes: training budget for model-free agents. Ignored by DP.
-        eval_episodes: how many rollouts to average for final-performance stats.
-        seeds: one run per seed; all reported metrics are aggregated across seeds.
-        gamma: discount factor (shared across agent and env where relevant).
-        tags: free-form labels for filtering / grouping in analysis.
-        description: human-readable one-liner summarising the experiment.
-        results_path_parts: path components (relative to results/) where this
-            experiment's outputs live. If empty, the runner falls back to
-            ("<name>",). Sweep variants set this to ("<prefix>", "<frag>")
-            so all variants of a sweep nest under a shared parent directory.
+    `results_path_parts` drives the on-disk location: empty -> results/<name>/,
+    else results/<parts...>/. Sweep variants use ("<prefix>", "<frag>") so
+    every variant of a sweep nests under a shared parent.
     """
     name: str
     env: EnvSpec
@@ -92,15 +56,12 @@ class ExperimentSpec:
         return asdict(self)
 
 
-# ---------------------------------------------------------------------------
-# Registry + lookup
-# ---------------------------------------------------------------------------
+# --- Registry + lookup ---
 
 EXPERIMENTS: dict[str, ExperimentSpec] = {}
 
 
 def register(exp: ExperimentSpec) -> ExperimentSpec:
-    """Add an experiment to the global registry. Duplicate names are errors."""
     if exp.name in EXPERIMENTS:
         raise ValueError(f"Experiment {exp.name!r} already registered")
     EXPERIMENTS[exp.name] = exp
@@ -108,7 +69,6 @@ def register(exp: ExperimentSpec) -> ExperimentSpec:
 
 
 def get(name: str) -> ExperimentSpec:
-    """Look up an experiment spec by name with a helpful error on misses."""
     if name not in EXPERIMENTS:
         raise KeyError(
             f"No experiment named {name!r}. "
@@ -122,16 +82,7 @@ def list_experiments(
     tags: set[str] | None = None,
     exclude_tags: set[str] | None = None,
 ) -> list[str]:
-    """List registered experiment names matching given criteria.
-
-    Args:
-        name_prefix: keep only names starting with this prefix.
-        tags: keep only experiments whose tags are a superset of this set.
-        exclude_tags: drop experiments carrying any of these tags.
-
-    Returns:
-        Sorted list of matching experiment names.
-    """
+    """Filtered + sorted list of registered experiment names."""
     out: list[str] = []
     for name, spec in EXPERIMENTS.items():
         if name_prefix is not None and not name.startswith(name_prefix):
@@ -145,9 +96,7 @@ def list_experiments(
     return sorted(out)
 
 
-# ---------------------------------------------------------------------------
-# Sweep generator
-# ---------------------------------------------------------------------------
+# --- Sweep generator ---
 
 def register_sweep(
     *,
@@ -158,30 +107,10 @@ def register_sweep(
     extra_tags: tuple[str, ...] = (),
     description: str | None = None,
 ) -> list[ExperimentSpec]:
-    """Register one variant per sweep value.
-
-    Each variant is a copy of `base` with the given sweep_path overridden
-    and a unique name `{name_prefix}_{value_str}`. All variants share the
-    tags `("sweep", f"sweep:{sweep_path}", name_prefix, ...base.tags)`,
-    which lets the compare tooling collect a full sweep by tag.
-
-    Args:
-        name_prefix: common prefix for every variant's name, also added as a
-            tag so the full sweep can be looked up by a single identifier.
-        base: template ExperimentSpec. Its `.name` is ignored (each variant
-            gets its own generated name) but everything else is copied.
-        sweep_path: dotted path into the spec identifying which field to
-            override. Supported paths:
-                - "gamma" / "n_episodes" / "eval_episodes"  (ExperimentSpec field)
-                - "agent.hyperparams.<key>"                  (nested hyperparam)
-        values: list of values to try. Each must be JSON-serialisable.
-        extra_tags: optional additional tags to apply to every variant.
-        description: optional override; defaults to describing the sweep.
-
-    Returns:
-        List of registered ExperimentSpec objects (one per value).
-    """
-    sweep_tags = tuple(dict.fromkeys(  # dedup while preserving order
+    """Register one variant per sweep value. Each variant gets a unique name
+    `{name_prefix}_{value_str}`, the shared tags ("sweep", f"sweep:{sweep_path}",
+    name_prefix, ...base.tags), and lives under results/<prefix>/<frag>/."""
+    sweep_tags = tuple(dict.fromkeys(  # preserve order, dedup
         base.tags + extra_tags + ("sweep", f"sweep:{sweep_path}", name_prefix)
     ))
     if description is None:
@@ -208,26 +137,45 @@ def register_sweep(
     return variants
 
 
-# ---------------------------------------------------------------------------
-# Internals for register_sweep
-# ---------------------------------------------------------------------------
-
 def _fmt_value(v: Any) -> str:
-    """Format a sweep value as a safe identifier fragment.
-
-    Examples:
-        0.95       -> "0p95"
-        1.0        -> "1p0"
-        1e-09      -> "1e-09"        (scientific notation has no dots)
-        200        -> "200"
-        "relu"     -> "relu"
-    """
+    """Safe identifier fragment for a sweep value.
+    0.95 -> "0p95", 1e-09 -> "1e-09", (3,3,8,12) -> "3x3x8x12"."""
     if isinstance(v, float):
-        s = repr(v)  # preserves precision; "0.95" not "0.949999..."
+        s = repr(v)
         if "e" in s or "E" in s:
             return s
         return s.replace(".", "p").replace("-", "m")
+    if isinstance(v, (tuple, list)):
+        return "x".join(_fmt_value(x) for x in v)
     return str(v)
+
+
+def override_at_path(spec: ExperimentSpec, path: str, value: Any) -> ExperimentSpec:
+    """Return a copy of `spec` with the dotted `path` replaced by `value`.
+    Paths: top-level fields (gamma, n_episodes, eval_episodes, seeds),
+    agent.hyperparams.<key>, or env.kwargs.<key>."""
+    parts = path.split(".")
+
+    if len(parts) == 3 and parts[0] == "agent" and parts[1] == "hyperparams":
+        new_hp = {**spec.agent.hyperparams, parts[2]: value}
+        return dataclasses.replace(
+            spec, agent=dataclasses.replace(spec.agent, hyperparams=new_hp)
+        )
+
+    if len(parts) == 3 and parts[0] == "env" and parts[1] == "kwargs":
+        new_kw = {**spec.env.kwargs, parts[2]: value}
+        return dataclasses.replace(
+            spec, env=dataclasses.replace(spec.env, kwargs=new_kw)
+        )
+
+    if len(parts) == 1 and parts[0] in {"gamma", "n_episodes", "eval_episodes", "seeds"}:
+        return dataclasses.replace(spec, **{parts[0]: value})
+
+    raise ValueError(
+        f"Unsupported override path {path!r}. Use 'gamma', 'n_episodes', "
+        f"'eval_episodes', 'seeds', 'agent.hyperparams.<key>', "
+        f"or 'env.kwargs.<key>'."
+    )
 
 
 def _override_at_path(
@@ -240,128 +188,22 @@ def _override_at_path(
     new_description: str,
     new_results_path_parts: tuple[str, ...],
 ) -> ExperimentSpec:
-    """Return a copy of base with value applied at sweep_path."""
-    parts = sweep_path.split(".")
-
-    # Case 1: "agent.hyperparams.<key>"
-    if len(parts) == 3 and parts[0] == "agent" and parts[1] == "hyperparams":
-        key = parts[2]
-        new_hp = dict(base.agent.hyperparams)
-        new_hp[key] = value
-        new_agent = dataclasses.replace(base.agent, hyperparams=new_hp)
-        return dataclasses.replace(
-            base,
-            name=new_name,
-            agent=new_agent,
-            tags=new_tags,
-            description=new_description,
-            results_path_parts=new_results_path_parts,
-        )
-
-    # Case 2: top-level ExperimentSpec field ("gamma", "n_episodes", ...)
-    if len(parts) == 1:
-        field_name = parts[0]
-        if field_name not in {"gamma", "n_episodes", "eval_episodes", "seeds"}:
-            raise ValueError(
-                f"sweep_path={sweep_path!r} refers to an ExperimentSpec field "
-                f"that isn't safe to sweep over. Allowed: gamma, n_episodes, "
-                f"eval_episodes, seeds."
-            )
-        return dataclasses.replace(
-            base,
-            name=new_name,
-            tags=new_tags,
-            description=new_description,
-            results_path_parts=new_results_path_parts,
-            **{field_name: value},
-        )
-
-    raise ValueError(
-        f"Unsupported sweep_path {sweep_path!r}. Use 'gamma' or "
-        f"'agent.hyperparams.<key>'."
+    """Sweep-variant override: apply `value` at `sweep_path` and overwrite
+    identity metadata (name, tags, description, results_path_parts).
+    """
+    spec = override_at_path(base, sweep_path, value)
+    return dataclasses.replace(
+        spec,
+        name=new_name,
+        tags=new_tags,
+        description=new_description,
+        results_path_parts=new_results_path_parts,
     )
 
 
 # ===========================================================================
 # Registered experiments
 # ===========================================================================
-
-# --- Phase 0: smoke tests ---------------------------------------------------
-
-register(ExperimentSpec(
-    name="smoke_gridworld_random",
-    env=EnvSpec(name="gridworld", kwargs={"rows": 3, "cols": 3}),
-    agent=AgentSpec(name="random", hyperparams={}),
-    n_episodes=50,
-    eval_episodes=20,
-    seeds=(0, 1, 2),
-    tags=("smoke", "gridworld", "random"),
-    description="End-to-end harness smoke test on a 3x3 gridworld with a random agent.",
-))
-
-register(ExperimentSpec(
-    name="smoke_gridworld_vi",
-    env=EnvSpec(name="gridworld", kwargs={"rows": 5, "cols": 5}),
-    agent=AgentSpec(name="vi", hyperparams={"theta": 1e-8, "max_sweeps": 200}),
-    n_episodes=0,
-    eval_episodes=50,
-    seeds=(0, 1, 2),
-    gamma=0.95,
-    tags=("smoke", "gridworld", "vi", "dp"),
-    description="Sanity check: VI should solve 5x5 gridworld to optimality.",
-))
-
-register(ExperimentSpec(
-    name="smoke_gridworld_pi",
-    env=EnvSpec(name="gridworld", kwargs={"rows": 5, "cols": 5}),
-    agent=AgentSpec(name="pi", hyperparams={
-        "theta": 1e-8,
-        "eval_max_sweeps": 200,
-        "max_outer_iters": 50,
-    }),
-    n_episodes=0,
-    eval_episodes=50,
-    seeds=(0, 1, 2),
-    gamma=0.95,
-    tags=("smoke", "gridworld", "pi", "dp"),
-    description="Sanity check: PI should match VI on 5x5 gridworld.",
-))
-
-register(ExperimentSpec(
-    name="smoke_gridworld_sarsa",
-    env=EnvSpec(name="gridworld", kwargs={"rows": 5, "cols": 5}),
-    agent=AgentSpec(name="sarsa", hyperparams={
-        "alpha": 0.1,
-        "epsilon_start": 1.0,
-        "epsilon_end": 0.01,
-        "epsilon_decay_episodes": 1_000,
-        "max_steps_per_episode": 200,
-    }),
-    n_episodes=2_000,
-    eval_episodes=50,
-    seeds=(0, 1, 2),
-    gamma=0.95,
-    tags=("smoke", "gridworld", "sarsa", "tabular"),
-    description="Sanity check: SARSA should approach VI's optimal (-7) on 5x5 gridworld.",
-))
-
-register(ExperimentSpec(
-    name="smoke_gridworld_qlearning",
-    env=EnvSpec(name="gridworld", kwargs={"rows": 5, "cols": 5}),
-    agent=AgentSpec(name="qlearning", hyperparams={
-        "alpha": 0.1,
-        "epsilon_start": 1.0,
-        "epsilon_end": 0.01,
-        "epsilon_decay_episodes": 1_000,
-        "max_steps_per_episode": 200,
-    }),
-    n_episodes=2_000,
-    eval_episodes=50,
-    seeds=(0, 1, 2),
-    gamma=0.95,
-    tags=("smoke", "gridworld", "qlearning", "tabular"),
-    description="Sanity check: Q-learning should match VI's optimal (-7) on 5x5 gridworld.",
-))
 
 # --- Phase 1: Blackjack DP --------------------------------------------------
 # Each algorithm has a "default" reference run (tight theta, gamma=1) plus
@@ -488,30 +330,14 @@ register(dataclasses.replace(_BLACKJACK_QLEARNING_BASE, name="blackjack_qlearnin
          description="Q-learning on Blackjack; off-policy analogue of "
                      "blackjack_sarsa_default with an identical HP configuration."))
 
-# A shorter ε-decay base used only for the sample-complexity (n_episodes)
-# sweep. Fixing decay at 10k means every variant — even the smallest —
-# completes its exploration schedule well before training ends, so the
-# resulting eval-return curve is a clean function of training budget
-# rather than a confound of "ran out of time mid-decay."
-_BLACKJACK_TABULAR_BUDGET_HP: dict[str, float | int] = {
-    **_BLACKJACK_TABULAR_HP_BASE,
-    "epsilon_decay_episodes": 10_000,
-}
-
-_BLACKJACK_SARSA_BUDGET_BASE = dataclasses.replace(
-    _BLACKJACK_SARSA_BASE,
-    agent=AgentSpec(name="sarsa", hyperparams=dict(_BLACKJACK_TABULAR_BUDGET_HP)),
-)
-_BLACKJACK_QLEARNING_BUDGET_BASE = dataclasses.replace(
-    _BLACKJACK_QLEARNING_BASE,
-    agent=AgentSpec(name="qlearning", hyperparams=dict(_BLACKJACK_TABULAR_BUDGET_HP)),
-)
-
 # --- Phase 2b: tabular HP sweeps -------------------------------------------
+# Two HPs per tabular algorithm on Blackjack (α and ε-decay horizon), which
+# is the FAQ minimum. The n_episodes sweep that used to live here was
+# dropped: training budget is not a hyperparameter in the rubric sense,
+# and the default runs' learning curves already illustrate convergence.
 
 _ALPHA_VALUES = [0.01, 0.05, 0.1, 0.2]
 _EPS_DECAY_VALUES = [10_000, 50_000, 100_000, 200_000]
-_NEPISODES_VALUES = [20_000, 100_000, 500_000]
 
 register_sweep(
     name_prefix="blackjack_sarsa_alpha_sweep",
@@ -545,24 +371,6 @@ register_sweep(
     description="Q-learning on Blackjack: how long should ε decay run?",
 )
 
-register_sweep(
-    name_prefix="blackjack_sarsa_nepisodes_sweep",
-    base=_BLACKJACK_SARSA_BUDGET_BASE,
-    sweep_path="n_episodes",
-    values=_NEPISODES_VALUES,
-    description="SARSA on Blackjack: sample-complexity curve. Uses a short "
-                "ε-decay (10k) so every variant finishes its exploration "
-                "schedule before training ends.",
-)
-
-register_sweep(
-    name_prefix="blackjack_qlearning_nepisodes_sweep",
-    base=_BLACKJACK_QLEARNING_BUDGET_BASE,
-    sweep_path="n_episodes",
-    values=_NEPISODES_VALUES,
-    description="Q-learning on Blackjack: sample-complexity curve.",
-)
-
 # --- Phase 3: CartPole (the rollout-only "second environment") --------------
 # CartPole's 4-D continuous observations are binned into 3x3x6x6 = 324
 # states. No analytical MDP is exposed — this env is deliberately the
@@ -576,43 +384,16 @@ register_sweep(
 # over 100 eval episodes, which tabular+binning usually can't hit —
 # that ceiling motivates the DQN work in Phase 4.
 
+# Default binning follows the Spring 2026 FAQ's starter grid: (3, 3, 8, 12).
+# Angle and angular velocity get the finest resolution because they dominate
+# the control problem; cart position / velocity are coarser. 3*3*8*12 = 864
+# non-terminal bins. We sweep over this in the discretization study below.
+_CARTPOLE_DEFAULT_N_BINS = (3, 3, 8, 12)
+
 _CARTPOLE_ENV = EnvSpec(
     name="cartpole",
-    kwargs={
-        # Default (3, 3, 6, 6) binning lives on the env side; we override
-        # here only where an experiment needs different granularity.
-    },
+    kwargs={"n_bins": _CARTPOLE_DEFAULT_N_BINS},
 )
-
-# Smoke tests: very short runs that should still clearly beat random.
-register(ExperimentSpec(
-    name="smoke_cartpole_random",
-    env=_CARTPOLE_ENV,
-    agent=AgentSpec(name="random", hyperparams={"max_steps_per_episode": 500}),
-    n_episodes=100,
-    eval_episodes=50,
-    seeds=(0, 1, 2),
-    tags=("smoke", "cartpole", "random"),
-    description="Random-policy baseline on CartPole; expected eval return ~20-40.",
-))
-
-register(ExperimentSpec(
-    name="smoke_cartpole_qlearning",
-    env=_CARTPOLE_ENV,
-    agent=AgentSpec(name="qlearning", hyperparams={
-        "alpha": 0.1,
-        "epsilon_start": 1.0,
-        "epsilon_end": 0.05,
-        "epsilon_decay_episodes": 1_000,
-        "max_steps_per_episode": 500,
-    }),
-    n_episodes=2_000,
-    eval_episodes=50,
-    seeds=(0, 1, 2),
-    gamma=0.99,
-    tags=("smoke", "cartpole", "qlearning", "tabular"),
-    description="Smoke: Q-learning on discretized CartPole; should clearly beat random.",
-))
 
 # Defaults: longer training for real eval numbers.
 _CARTPOLE_TABULAR_HP_BASE: dict[str, float | int] = {
@@ -646,8 +427,352 @@ _CARTPOLE_QLEARNING_BASE = ExperimentSpec(
 )
 
 register(dataclasses.replace(_CARTPOLE_SARSA_BASE, name="cartpole_sarsa_default",
-         description="SARSA on discretized CartPole-v1 with 3x3x6x6 binning. "
-                     "CartPole-v1 solved = 475; tabular aims for >= 150."))
+         description="SARSA on discretized CartPole-v1 with (3,3,8,12) binning "
+                     "(FAQ starter grid; 864 bins). CartPole-v1 'solved' = 475; "
+                     "tabular aims for >= 150 mean return."))
 register(dataclasses.replace(_CARTPOLE_QLEARNING_BASE, name="cartpole_qlearning_default",
-         description="Q-learning on discretized CartPole-v1; off-policy "
-                     "analogue of cartpole_sarsa_default."))
+         description="Q-learning on discretized CartPole-v1 with (3,3,8,12) "
+                     "binning; off-policy analogue of cartpole_sarsa_default."))
+
+# --- CartPole HP sweeps (tabular SARSA / Q-Learning) --------------------------
+# Per the FAQ: >=2 validated HPs with 5 seeds per agent, plus an n_bins sweep
+# for the "assess discretization" question. Three dims each: alpha, gamma, n_bins.
+
+# alpha sweep -----------------------------------------------------------------
+register_sweep(
+    name_prefix="cartpole_sarsa_alpha_sweep",
+    base=_CARTPOLE_SARSA_BASE,
+    sweep_path="agent.hyperparams.alpha",
+    values=[0.05, 0.1, 0.2, 0.5],
+    extra_tags=("hp_sweep", "alpha"),
+    description="SARSA on CartPole: step-size sweep. Smaller alpha => "
+                "more stable but slower; larger alpha => faster but noisier.",
+)
+register_sweep(
+    name_prefix="cartpole_qlearning_alpha_sweep",
+    base=_CARTPOLE_QLEARNING_BASE,
+    sweep_path="agent.hyperparams.alpha",
+    values=[0.05, 0.1, 0.2, 0.5],
+    extra_tags=("hp_sweep", "alpha"),
+    description="Q-Learning on CartPole: step-size sweep (off-policy twin of "
+                "cartpole_sarsa_alpha_sweep).",
+)
+
+# gamma sweep -----------------------------------------------------------------
+register_sweep(
+    name_prefix="cartpole_sarsa_gamma_sweep",
+    base=_CARTPOLE_SARSA_BASE,
+    sweep_path="gamma",
+    values=[0.9, 0.95, 0.99, 1.0],
+    extra_tags=("hp_sweep", "gamma"),
+    description="SARSA on CartPole: discount sweep. CartPole's long horizon "
+                "(up to 500 steps) makes gamma a first-class hyperparameter "
+                "here, unlike Blackjack where gamma barely matters.",
+)
+register_sweep(
+    name_prefix="cartpole_qlearning_gamma_sweep",
+    base=_CARTPOLE_QLEARNING_BASE,
+    sweep_path="gamma",
+    values=[0.9, 0.95, 0.99, 1.0],
+    extra_tags=("hp_sweep", "gamma"),
+    description="Q-Learning on CartPole: discount sweep (off-policy twin of "
+                "cartpole_sarsa_gamma_sweep).",
+)
+
+# n_bins sweep ----------------------------------------------------------------
+# Grids span ~1.5 orders of magnitude in state count:
+#   (1, 1, 6, 6)    =   36 states (cart state ignored entirely)
+#   (3, 3, 6, 6)    =  324 states
+#   (3, 3, 8, 12)   =  864 states  <- FAQ-recommended baseline
+#   (5, 5, 12, 16)  = 4800 states  <- fine-grained
+_CARTPOLE_NBIN_GRIDS = [
+    (1, 1, 6, 6),
+    (3, 3, 6, 6),
+    (3, 3, 8, 12),
+    (5, 5, 12, 16),
+]
+register_sweep(
+    name_prefix="cartpole_sarsa_nbins_sweep",
+    base=_CARTPOLE_SARSA_BASE,
+    sweep_path="env.kwargs.n_bins",
+    values=_CARTPOLE_NBIN_GRIDS,
+    extra_tags=("hp_sweep", "discretization"),
+    description="SARSA on CartPole: discretization sweep from very coarse "
+                "(36 bins) to fine (4800 bins). Expected to show a bias-"
+                "variance trade-off: coarser grids train fast but cap "
+                "policy quality; finer grids need more samples to visit.",
+)
+register_sweep(
+    name_prefix="cartpole_qlearning_nbins_sweep",
+    base=_CARTPOLE_QLEARNING_BASE,
+    sweep_path="env.kwargs.n_bins",
+    values=_CARTPOLE_NBIN_GRIDS,
+    extra_tags=("hp_sweep", "discretization"),
+    description="Q-Learning on CartPole: discretization sweep (off-policy "
+                "twin of cartpole_sarsa_nbins_sweep).",
+)
+
+# --- Phase 3b: DP on CartPole with an estimated MDP ---------------------------
+# CartPole's ODE has no clean tabular transition model, so we estimate T̂, R̂
+# from random rollouts (FAQ-sanctioned) and run VI/PI on that. Evaluation
+# still uses the real DiscretizedCartPole.
+
+_CARTPOLE_EST_ENV = EnvSpec(
+    name="cartpole_estimated",
+    kwargs={
+        "n_bins": _CARTPOLE_DEFAULT_N_BINS,      # FAQ default (3,3,8,12)
+        "n_sampling_episodes": 5_000,            # ~100k transitions with random policy
+        "sampling_policy": "random",
+        "max_steps_per_episode": 500,
+        # sampling_seed=None in the class means "use the runner's per-seed
+        # seed", so each of our 5 seeds estimates its own MDP from a
+        # different random rollout stream. That gives genuine variance in
+        # the DP-derived policy as a function of model-estimation noise.
+    },
+)
+
+_CARTPOLE_VI_BASE = ExperimentSpec(
+    name="cartpole_vi_base",
+    env=_CARTPOLE_EST_ENV,
+    agent=AgentSpec(name="vi", hyperparams={
+        "theta": 1e-4,           # looser than Blackjack's 1e-6 because
+                                 # gamma=0.99 + survival rewards make VI
+                                 # slow to reach 1e-6
+        "max_sweeps": 3000,      # headroom for (5,5,12,16)
+    }),
+    n_episodes=0,                # VI/PI don't train via episodes
+    eval_episodes=100,
+    seeds=(0, 1, 2, 3, 4),
+    gamma=0.99,
+    tags=("cartpole", "vi", "dp", "estimated_mdp"),
+)
+
+_CARTPOLE_PI_BASE = ExperimentSpec(
+    name="cartpole_pi_base",
+    env=_CARTPOLE_EST_ENV,
+    agent=AgentSpec(name="pi", hyperparams={
+        "theta": 1e-4,
+        "eval_max_sweeps": 1000,
+        "max_outer_iters": 50,
+    }),
+    n_episodes=0,
+    eval_episodes=100,
+    seeds=(0, 1, 2, 3, 4),
+    gamma=0.99,
+    tags=("cartpole", "pi", "dp", "estimated_mdp"),
+)
+
+register(dataclasses.replace(_CARTPOLE_VI_BASE, name="cartpole_vi_default",
+         description="Value iteration on an empirically-estimated CartPole "
+                     "MDP (5k random-policy rollouts). Evaluated on real "
+                     "CartPole dynamics. FAQ-default (3,3,8,12) binning."))
+register(dataclasses.replace(_CARTPOLE_PI_BASE, name="cartpole_pi_default",
+         description="Policy iteration on the same empirically-estimated "
+                     "CartPole MDP. Paired with cartpole_vi_default for a "
+                     "direct VI-vs-PI convergence comparison."))
+
+# Discretization sweep — the CartPole-specific DP study the rubric asks for.
+register_sweep(
+    name_prefix="cartpole_vi_nbins_sweep",
+    base=_CARTPOLE_VI_BASE,
+    sweep_path="env.kwargs.n_bins",
+    values=_CARTPOLE_NBIN_GRIDS,
+    extra_tags=("hp_sweep", "discretization"),
+    description="VI on estimated CartPole MDP: discretization sweep. "
+                "Coarser grids sample better (more visits per state) but "
+                "alias distinct states; finer grids are more expressive "
+                "but under-sampled. The sweet spot is empirical.",
+)
+register_sweep(
+    name_prefix="cartpole_pi_nbins_sweep",
+    base=_CARTPOLE_PI_BASE,
+    sweep_path="env.kwargs.n_bins",
+    values=_CARTPOLE_NBIN_GRIDS,
+    extra_tags=("hp_sweep", "discretization"),
+    description="PI twin of cartpole_vi_nbins_sweep. Also exposes the "
+                "VI-vs-PI convergence-speed comparison across grid sizes.",
+)
+
+# Sampling-budget sweep — how much data does the model-based path need?
+_CARTPOLE_SAMPLE_BUDGETS = [500, 2000, 5000, 10_000]
+register_sweep(
+    name_prefix="cartpole_vi_samples_sweep",
+    base=_CARTPOLE_VI_BASE,
+    sweep_path="env.kwargs.n_sampling_episodes",
+    values=_CARTPOLE_SAMPLE_BUDGETS,
+    extra_tags=("hp_sweep", "sample_complexity"),
+    description="VI on estimated CartPole MDP: sampling-budget sweep. "
+                "Shows how policy quality improves as the estimated T,R "
+                "gets more accurate. Complements the tabular RL sample-"
+                "complexity story from Blackjack.",
+)
+
+# --- Phase 3c: exploration-policy study for MDP estimation --------------------
+# Random sampling under-covers the upright-pole manifold on fine grids
+# (rollouts die in ~25 steps). ε-greedy on a trained SARSA policy shifts
+# sampling density toward states a good controller actually visits. Pilot
+# runs showed ε ∈ [0.3, 0.7] is the interesting region.
+
+_CARTPOLE_EPS_GRID = [0.1, 0.3, 0.5, 0.7]
+
+def _vi_trained_sampling_base(
+    n_bins: tuple[int, int, int, int],
+    source_experiment: str,
+    name_suffix: str,
+) -> ExperimentSpec:
+    env = EnvSpec(
+        name="cartpole_estimated",
+        kwargs={
+            "n_bins": n_bins,
+            "n_sampling_episodes": 5_000,
+            "sampling_policy": "epsilon_greedy",
+            "sampling_source_experiment": source_experiment,
+            "sampling_epsilon": 0.5,  # overwritten by the sweep
+            "max_steps_per_episode": 500,
+        },
+    )
+    return dataclasses.replace(_CARTPOLE_VI_BASE,
+                               name=f"cartpole_vi_trained_eps_{name_suffix}",
+                               env=env,
+                               tags=_CARTPOLE_VI_BASE.tags + ("trained_sampling",))
+
+_VI_TRAINED_3X3X8X12 = _vi_trained_sampling_base(
+    n_bins=(3, 3, 8, 12),
+    source_experiment="cartpole_sarsa_nbins_sweep_3x3x8x12",
+    name_suffix="3x3x8x12",
+)
+_VI_TRAINED_5X5X12X16 = _vi_trained_sampling_base(
+    n_bins=(5, 5, 12, 16),
+    source_experiment="cartpole_sarsa_nbins_sweep_5x5x12x16",
+    name_suffix="5x5x12x16",
+)
+
+register_sweep(
+    name_prefix="cartpole_vi_trained_eps_3x3x8x12",
+    base=_VI_TRAINED_3X3X8X12,
+    sweep_path="env.kwargs.sampling_epsilon",
+    values=_CARTPOLE_EPS_GRID,
+    extra_tags=("hp_sweep", "exploration_policy"),
+    description="VI on estimated CartPole MDP at (3,3,8,12), sampling "
+                "transitions via ε-greedy on a trained SARSA policy. Sweep "
+                "over ε tests how reliant the model-estimation is on the "
+                "sampling policy quality vs. raw exploration.",
+)
+register_sweep(
+    name_prefix="cartpole_vi_trained_eps_5x5x12x16",
+    base=_VI_TRAINED_5X5X12X16,
+    sweep_path="env.kwargs.sampling_epsilon",
+    values=_CARTPOLE_EPS_GRID,
+    extra_tags=("hp_sweep", "exploration_policy"),
+    description="Same ε sweep at the finest grid (5,5,12,16), where random "
+                "sampling already works surprisingly well. Tests whether "
+                "trained-policy sampling is uniformly beneficial or "
+                "grid-dependent.",
+)
+
+
+# --- Phase 4: DQN + Rainbow-medium ablation (EC) ------------------------------
+# 6 configs: baseline + {Double, Dueling, PER, N-step} + full Rainbow.
+# HPs are shared; only component toggles change (Hessel et al. 2018
+# clean-sweep design). C51/NoisyNets are intentionally out of scope.
+
+_DQN_SHARED_HP: dict[str, Any] = {
+    "hidden": 128,
+    "lr": 1e-3,
+    "buffer_capacity": 10_000,
+    "batch_size": 64,
+    "warmup_steps": 500,
+    "train_freq": 1,
+    "target_update_freq": 500,
+    "grad_clip": 10.0,
+    "eps_start": 1.0,
+    "eps_end": 0.05,
+    "eps_decay_steps": 10_000,
+    # PER defaults (only read when per=True)
+    "per_alpha": 0.6,
+    "per_beta_start": 0.4,
+    "per_beta_end": 1.0,
+    "per_beta_steps": 20_000,
+}
+
+_DQN_BASE = ExperimentSpec(
+    name="dqn_ablation_baseline",
+    env=EnvSpec(name="cartpole_continuous"),
+    agent=AgentSpec(name="dqn", hyperparams=dict(_DQN_SHARED_HP)),
+    n_episodes=300,
+    eval_episodes=20,
+    seeds=(0, 1, 2, 3, 4),
+    gamma=0.99,
+    tags=("dqn", "rainbow_ablation", "baseline"),
+    description="Vanilla DQN baseline on CartPole-v1 (continuous state, MLP Q-net). "
+                "No Double / Dueling / PER / N-step. Reference bar for the ablation.",
+    results_path_parts=("dqn_ablation", "baseline"),
+)
+
+
+def _dqn_variant(
+    *,
+    suffix: str,
+    extra_hp: dict[str, Any],
+    tag: str,
+    description: str,
+) -> None:
+    """Register one Rainbow ablation variant. Shares _DQN_SHARED_HP."""
+    hp = dict(_DQN_SHARED_HP)
+    hp.update(extra_hp)
+    register(dataclasses.replace(
+        _DQN_BASE,
+        name=f"dqn_ablation_{suffix}",
+        agent=AgentSpec(name="dqn", hyperparams=hp),
+        tags=("dqn", "rainbow_ablation", tag),
+        description=description,
+        results_path_parts=("dqn_ablation", suffix),
+    ))
+
+
+register(_DQN_BASE)
+
+_dqn_variant(
+    suffix="double",
+    extra_hp={"double": True},
+    tag="double",
+    description="DQN + Double-DQN: decouples action-selection (online net) "
+                "from value-estimation (target net). Expected to reduce the "
+                "positive bias of max-over-target that vanilla DQN suffers from.",
+)
+
+_dqn_variant(
+    suffix="dueling",
+    extra_hp={"dueling": True},
+    tag="dueling",
+    description="DQN + Dueling network: V(s) + A(s,·) with mean-centered "
+                "advantages. Mostly architectural — pays off more in "
+                "environments where many actions have similar values.",
+)
+
+_dqn_variant(
+    suffix="per",
+    extra_hp={"per": True},
+    tag="per",
+    description="DQN + Prioritized Experience Replay (proportional, sum-tree). "
+                "Samples transitions with high TD-error more often; β anneals "
+                "from 0.4 to 1.0 over 20k gradient steps to correct IS bias.",
+)
+
+_dqn_variant(
+    suffix="nstep",
+    extra_hp={"nstep": 3},
+    tag="nstep",
+    description="DQN + 3-step TD targets. Trades a bit of bias (off-policy "
+                "error from using the behaviour policy's multi-step returns) "
+                "for lower variance and faster credit assignment.",
+)
+
+_dqn_variant(
+    suffix="rainbow",
+    extra_hp={"double": True, "dueling": True, "per": True, "nstep": 3},
+    tag="rainbow_full",
+    description="Rainbow-medium: Double + Dueling + PER + 3-step. The all-in "
+                "variant. Comparing this against the four single-component "
+                "variants isolates each component's marginal contribution.",
+)

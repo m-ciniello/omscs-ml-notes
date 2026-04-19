@@ -1,43 +1,14 @@
-"""Multi-seed experiment runner.
+"""Multi-seed experiment runner: take a name, run every seed, write to disk.
 
-One function does one thing: given an experiment name, run it across all
-seeds and dump the results to disk. No aggregation, no plotting — just
-"turn the crank and write files."
+Per-experiment on-disk layout:
 
-On-disk layout for a standalone experiment `foo`:
+    results/<name>/
+        config.json, git_sha.txt
+        seed_<i>/
+            result.pkl       # full RunResult dict (source of truth)
+            summary.json     # human-readable scalar sidecar
 
-```
-results/
-  foo/
-    config.json           # snapshot of ExperimentSpec.to_dict()
-    git_sha.txt           # commit SHA at run time (if available)
-    seed_0/
-      result.pkl          # full RunResult (policy, Q, history, etc.)
-      summary.json        # human-readable scalar metrics
-    seed_1/
-      ...
-```
-
-On-disk layout for a sweep `bar_sweep` over values [v1, v2, ...]:
-
-```
-results/
-  bar_sweep/
-    sweep_manifest.json   # describes the sweep (path, variants, values)
-    v1/
-      config.json
-      git_sha.txt
-      seed_0/ ...
-    v2/
-      ...
-```
-
-The path is determined by `ExperimentSpec.results_path_parts`. If empty
-(the default), we fall back to `(spec.name,)` so manually-registered
-single-point specs don't need edits.
-
-The `result.pkl` is the source of truth. `summary.json` is a convenience
-sidecar for grepping / quick inspection.
+Sweep variants live under a shared parent (see `ExperimentSpec.results_path_parts`).
 """
 
 from __future__ import annotations
@@ -54,13 +25,9 @@ from typing import Any
 import numpy as np
 
 from src.agents import build_agent
-from src.configs import EXPERIMENTS, ExperimentSpec, get
+from src.configs import ExperimentSpec, get
 from src.envs import build_env
 
-
-# ---------------------------------------------------------------------------
-# Paths
-# ---------------------------------------------------------------------------
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 DEFAULT_RESULTS_ROOT = REPO_ROOT / "results"
@@ -70,47 +37,26 @@ def experiment_dir(
     name_or_spec: str | ExperimentSpec,
     results_root: Path = DEFAULT_RESULTS_ROOT,
 ) -> Path:
-    """Resolve the results directory for an experiment.
-
-    Uses `spec.results_path_parts` when set (sweep variants live under a
-    shared parent), otherwise falls back to `(spec.name,)`. This is the
-    single place that logic lives — everywhere else that needs to find an
-    experiment's results on disk should call this helper.
-    """
+    """Resolve the on-disk results directory for an experiment."""
     spec = get(name_or_spec) if isinstance(name_or_spec, str) else name_or_spec
     parts = spec.results_path_parts or (spec.name,)
     return Path(results_root, *parts)
 
 
-# ---------------------------------------------------------------------------
-# Public entry points
-# ---------------------------------------------------------------------------
-
-def run_experiment(
-    name: str,
+def run_spec(
+    spec: ExperimentSpec,
     *,
     results_root: Path = DEFAULT_RESULTS_ROOT,
     overwrite: bool = False,
     verbose: bool = True,
 ) -> Path:
-    """Run every seed for the named experiment; return the experiment directory.
-
-    Args:
-        name: key into the EXPERIMENTS registry in `src/configs.py`.
-        results_root: directory to dump per-seed results. Default `results/`.
-        overwrite: if False, seeds whose `result.pkl` already exists are skipped.
-        verbose: print a one-line status update per seed.
-
-    Returns:
-        The path to the experiment's results directory.
-    """
-    spec = get(name)
+    """Run every seed for a spec. Returns the experiment directory.
+    If overwrite=False, seeds whose result.pkl already exists are skipped."""
     exp_dir = experiment_dir(spec, results_root=results_root)
     exp_dir.mkdir(parents=True, exist_ok=True)
 
     _write_config_snapshot(exp_dir, spec)
     _write_git_sha(exp_dir)
-    _maybe_write_sweep_manifest(spec, results_root=results_root)
 
     if verbose:
         print(f"[run] {spec.name}  (seeds={list(spec.seeds)}, "
@@ -130,6 +76,18 @@ def run_experiment(
     return exp_dir
 
 
+def run_experiment(
+    name: str,
+    *,
+    results_root: Path = DEFAULT_RESULTS_ROOT,
+    overwrite: bool = False,
+    verbose: bool = True,
+) -> Path:
+    """Look `name` up in the registry and run it."""
+    return run_spec(get(name), results_root=results_root,
+                    overwrite=overwrite, verbose=verbose)
+
+
 def run_experiments(
     names: list[str],
     *,
@@ -137,17 +95,12 @@ def run_experiments(
     overwrite: bool = False,
     verbose: bool = True,
 ) -> list[Path]:
-    """Run multiple experiments sequentially. Simple convenience wrapper."""
     return [
         run_experiment(n, results_root=results_root, overwrite=overwrite,
                        verbose=verbose)
         for n in names
     ]
 
-
-# ---------------------------------------------------------------------------
-# Internals
-# ---------------------------------------------------------------------------
 
 def _run_single_seed(
     spec: ExperimentSpec,
@@ -156,7 +109,6 @@ def _run_single_seed(
     *,
     verbose: bool = True,
 ) -> None:
-    """Run one (experiment, seed) pair and write result.pkl + summary.json."""
     _seed_everything(seed)
 
     env = build_env(spec.env, seed=seed)
@@ -171,9 +123,6 @@ def _run_single_seed(
         seed=seed,
     )
     wall = time.perf_counter() - t0
-
-    # Agents typically report their own wall clock; fall back to the outer
-    # measurement if they don't.
     result.setdefault("wall_clock_seconds", wall)
 
     with open(seed_dir / "result.pkl", "wb") as f:
@@ -189,11 +138,7 @@ def _run_single_seed(
 
 
 def _summarise(result: dict) -> dict[str, Any]:
-    """Extract JSON-able scalar metrics from a RunResult.
-
-    Keeps a human-readable sidecar next to the pickle so the directory tree
-    can be skimmed without writing any Python.
-    """
+    """JSON-able scalar metrics from a RunResult dict."""
     summary: dict[str, Any] = {
         "wall_clock_seconds": float(result.get("wall_clock_seconds", 0.0)),
     }
@@ -213,31 +158,25 @@ def _summarise(result: dict) -> dict[str, Any]:
 
 
 def _seed_everything(seed: int) -> None:
-    """Seed every randomness source we might use.
-
-    Torch is imported lazily so we don't pay the import cost for non-DQN
-    experiments.
-    """
+    """Seed random, numpy, and (lazily) torch."""
     random.seed(seed)
     np.random.seed(seed)
     try:
         import torch
 
         torch.manual_seed(seed)
-        if torch.cuda.is_available():  # pragma: no cover - no CUDA in sandbox
+        if torch.cuda.is_available():  # pragma: no cover
             torch.cuda.manual_seed_all(seed)
     except ImportError:
         pass
 
 
 def _write_config_snapshot(exp_dir: Path, spec: ExperimentSpec) -> None:
-    """Save the experiment spec verbatim so later runs can diff against it."""
     with open(exp_dir / "config.json", "w") as f:
         json.dump(asdict(spec), f, indent=2, default=str)
 
 
 def _write_git_sha(exp_dir: Path) -> None:
-    """Record the current git SHA for reproducibility (best-effort)."""
     try:
         sha = subprocess.check_output(
             ["git", "rev-parse", "HEAD"],
@@ -248,48 +187,3 @@ def _write_git_sha(exp_dir: Path) -> None:
             f.write(sha + "\n")
     except (subprocess.CalledProcessError, FileNotFoundError):
         pass
-
-
-def _maybe_write_sweep_manifest(
-    spec: ExperimentSpec,
-    *,
-    results_root: Path,
-) -> None:
-    """If spec is a sweep variant, write a manifest at the sweep parent dir.
-
-    A "sweep variant" is identified by having `len(results_path_parts) >= 2`:
-    the first component is the sweep's shared parent directory. The manifest
-    enumerates every registered variant that shares that parent and lists
-    the sweep paths they vary, so the sweep-level folder is self-describing.
-
-    Idempotent: rewrites the manifest every call, which is cheap and keeps
-    it current as new variants are registered.
-    """
-    parts = spec.results_path_parts
-    if len(parts) < 2:
-        return
-    sweep_parent_name = parts[0]
-    parent_dir = results_root / sweep_parent_name
-
-    variants: list[dict[str, Any]] = []
-    sweep_paths: set[str] = set()
-    for other in EXPERIMENTS.values():
-        other_parts = other.results_path_parts
-        if len(other_parts) >= 2 and other_parts[0] == sweep_parent_name:
-            variants.append({
-                "name": other.name,
-                "value_fragment": other_parts[1],
-            })
-            for tag in other.tags:
-                if tag.startswith("sweep:"):
-                    sweep_paths.add(tag.split("sweep:", 1)[1])
-
-    manifest = {
-        "sweep_name": sweep_parent_name,
-        "sweep_paths": sorted(sweep_paths),
-        "variants": sorted(variants, key=lambda v: v["name"]),
-        "description": spec.description,
-    }
-    parent_dir.mkdir(parents=True, exist_ok=True)
-    with open(parent_dir / "sweep_manifest.json", "w") as f:
-        json.dump(manifest, f, indent=2)

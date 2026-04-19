@@ -14,11 +14,10 @@ env/
 # macOS
 .DS_Store
 
-# Experiment outputs (keep directory structure via .gitkeep)
-results/*
-!results/.gitkeep
-figures/*
-!figures/.gitkeep
+# Experiment outputs (directories are recreated on demand by the runner
+# and by make_figures.py, so we don't need .gitkeep sentinels).
+results/
+figures/
 
 # Batch-run log files
 .logs/

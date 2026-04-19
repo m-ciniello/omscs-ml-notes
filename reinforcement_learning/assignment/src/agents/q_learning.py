@@ -1,16 +1,7 @@
-"""Q-Learning — off-policy TD(0) control.
-
-Update rule:
-    Q(s,a) <- Q(s,a) + α [ r + γ max_a' Q(s', a') - Q(s,a) ]
-
-The target uses the *greedy* action at s' regardless of what ε-greedy
-exploration actually takes next. This is what makes Q-learning off-policy:
-it learns the optimal Q-values while following an ε-greedy behaviour policy.
-
-Hyperparameters are identical to SARSA — see `src/agents/sarsa.py` for
-documentation. This file intentionally mirrors SARSA's structure line-for-line
-so the only meaningful diff is the TD target.
-"""
+"""Q-Learning — off-policy TD(0): Q(s,a) <- Q(s,a) + α[r + γ max_a' Q(s',a') - Q(s,a)].
+Target uses the greedy action at s' regardless of the ε-greedy behaviour
+policy, so Q converges toward Q* while exploring. Mirrors SARSA line-for-line
+except for the TD target."""
 
 from __future__ import annotations
 
@@ -18,7 +9,6 @@ import time
 
 import numpy as np
 
-from src.agents.base import BaseAgent, RunResult
 from src.agents.tabular import (
     QTable,
     epsilon_greedy,
@@ -27,7 +17,7 @@ from src.agents.tabular import (
 )
 
 
-class QLearning(BaseAgent):
+class QLearning:
     name = "qlearning"
 
     def __init__(
@@ -53,7 +43,7 @@ class QLearning(BaseAgent):
         eval_episodes: int,
         gamma: float,
         seed: int,
-    ) -> RunResult:
+    ) -> dict:
         rng = np.random.default_rng(seed)
         qtable = QTable(n_actions=env.N_ACTIONS)
 
@@ -106,17 +96,17 @@ class QLearning(BaseAgent):
             max_steps_per_episode=self.max_steps_per_episode,
         )
 
-        return RunResult(
-            train_returns=train_returns,
-            train_steps=train_steps,
-            eval_returns=eval_returns,
-            eval_steps=eval_steps,
-            history={
+        return {
+            "train_returns": train_returns,
+            "train_steps": train_steps,
+            "eval_returns": eval_returns,
+            "eval_steps": eval_steps,
+            "history": {
                 "epsilon_per_episode": epsilon_history,
                 "n_visited_states": qtable.n_visited_states(),
                 "train_wall_seconds": train_wall,
             },
-            policy=qtable.policy_dict(),
-            Q=qtable.to_dict(),
-            wall_clock_seconds=time.perf_counter() - t0,
-        )
+            "policy": qtable.policy_dict(),
+            "Q": qtable.to_dict(),
+            "wall_clock_seconds": time.perf_counter() - t0,
+        }
