@@ -38,10 +38,10 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 
-# Run experiments by name-prefix and (optionally) print a sweep summary
-python scripts/run_sweep.py --prefix blackjack_vi_
-python scripts/run_sweep.py --prefix cartpole_qlearning_nbins_sweep \
-    --sweep-path env.kwargs.n_bins
+# Run experiments by name-prefix; a per-experiment results table is printed at the end
+python scripts/run.py --prefix blackjack_vi_
+python scripts/run.py --prefix cartpole_qlearning_nbins_sweep
+python scripts/run.py --prefix blackjack_vi --no-run  # just re-print existing results
 
 # Run the full campaign in dependency order
 bash scripts/run_all_experiments.sh

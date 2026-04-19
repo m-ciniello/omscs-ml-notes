@@ -45,7 +45,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 from src.configs import _fmt_value
-from src.experiments.aggregate import load_runs
+from src.experiments.runner import load_runs
 
 FIGURES_DIR = REPO_ROOT / "figures"
 FIGURES_DIR.mkdir(exist_ok=True)

@@ -1,9 +1,12 @@
-"""Multi-seed experiment runner: take a name, run every seed, write to disk.
+"""Multi-seed experiment runner and result loaders.
+
+Writes each spec's per-seed results to disk, and exposes small helpers for
+reading them back from figure/analysis scripts.
 
 Per-experiment on-disk layout:
 
     results/<name>/
-        config.json, git_sha.txt
+        config.json
         seed_<i>/
             result.pkl       # full RunResult dict (source of truth)
             summary.json     # human-readable scalar sidecar
@@ -16,11 +19,10 @@ from __future__ import annotations
 import json
 import pickle
 import random
-import subprocess
 import time
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import numpy as np
 
@@ -56,7 +58,6 @@ def run_spec(
     exp_dir.mkdir(parents=True, exist_ok=True)
 
     _write_config_snapshot(exp_dir, spec)
-    _write_git_sha(exp_dir)
 
     if verbose:
         print(f"[run] {spec.name}  (seeds={list(spec.seeds)}, "
@@ -74,32 +75,6 @@ def run_spec(
         _run_single_seed(spec, seed, seed_dir, verbose=verbose)
 
     return exp_dir
-
-
-def run_experiment(
-    name: str,
-    *,
-    results_root: Path = DEFAULT_RESULTS_ROOT,
-    overwrite: bool = False,
-    verbose: bool = True,
-) -> Path:
-    """Look `name` up in the registry and run it."""
-    return run_spec(get(name), results_root=results_root,
-                    overwrite=overwrite, verbose=verbose)
-
-
-def run_experiments(
-    names: list[str],
-    *,
-    results_root: Path = DEFAULT_RESULTS_ROOT,
-    overwrite: bool = False,
-    verbose: bool = True,
-) -> list[Path]:
-    return [
-        run_experiment(n, results_root=results_root, overwrite=overwrite,
-                       verbose=verbose)
-        for n in names
-    ]
 
 
 def _run_single_seed(
@@ -176,14 +151,37 @@ def _write_config_snapshot(exp_dir: Path, spec: ExperimentSpec) -> None:
         json.dump(asdict(spec), f, indent=2, default=str)
 
 
-def _write_git_sha(exp_dir: Path) -> None:
-    try:
-        sha = subprocess.check_output(
-            ["git", "rev-parse", "HEAD"],
-            cwd=REPO_ROOT,
-            stderr=subprocess.DEVNULL,
-        ).decode().strip()
-        with open(exp_dir / "git_sha.txt", "w") as f:
-            f.write(sha + "\n")
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        pass
+class SeedRun(NamedTuple):
+    """One seed's payload: (seed, full RunResult dict, summary.json dict)."""
+    seed: int
+    result: dict
+    summary: dict
+
+
+def load_runs(
+    name_or_spec: str | ExperimentSpec,
+    results_root: Path = DEFAULT_RESULTS_ROOT,
+) -> list[SeedRun]:
+    """Load every seed's result for an experiment (sorted by seed).
+
+    Stat aggregation (mean / CI / IQR) is done at the call site because the
+    exact shape differs per figure; a generic helper didn't pull its weight.
+    """
+    exp_dir = experiment_dir(name_or_spec, results_root=results_root)
+    if not exp_dir.is_dir():
+        raise FileNotFoundError(
+            f"No results directory at {exp_dir}. Run the experiment first."
+        )
+    runs: list[SeedRun] = []
+    for seed_dir in sorted(exp_dir.glob("seed_*")):
+        seed = int(seed_dir.name.removeprefix("seed_"))
+        with open(seed_dir / "result.pkl", "rb") as f:
+            result = pickle.load(f)
+        with open(seed_dir / "summary.json") as f:
+            summary = json.load(f)
+        runs.append(SeedRun(seed=seed, result=result, summary=summary))
+    if not runs:
+        raise FileNotFoundError(
+            f"Results directory {exp_dir} exists but contains no seed runs."
+        )
+    return runs

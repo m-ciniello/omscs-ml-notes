@@ -48,7 +48,6 @@ class ExperimentSpec:
     eval_episodes: int = 100
     seeds: tuple[int, ...] = (0, 1, 2, 3, 4)
     gamma: float = 0.99
-    tags: tuple[str, ...] = ()
     description: str = ""
     results_path_parts: tuple[str, ...] = ()
 
@@ -77,22 +76,12 @@ def get(name: str) -> ExperimentSpec:
     return EXPERIMENTS[name]
 
 
-def list_experiments(
-    name_prefix: str | None = None,
-    tags: set[str] | None = None,
-    exclude_tags: set[str] | None = None,
-) -> list[str]:
-    """Filtered + sorted list of registered experiment names."""
-    out: list[str] = []
-    for name, spec in EXPERIMENTS.items():
-        if name_prefix is not None and not name.startswith(name_prefix):
-            continue
-        spec_tags = set(spec.tags)
-        if tags is not None and not tags.issubset(spec_tags):
-            continue
-        if exclude_tags is not None and spec_tags & exclude_tags:
-            continue
-        out.append(name)
+def list_experiments(name_prefix: str | None = None) -> list[str]:
+    """Sorted list of registered experiment names, optionally prefix-filtered."""
+    out = [
+        name for name in EXPERIMENTS
+        if name_prefix is None or name.startswith(name_prefix)
+    ]
     return sorted(out)
 
 
@@ -104,15 +93,10 @@ def register_sweep(
     base: ExperimentSpec,
     sweep_path: str,
     values: list,
-    extra_tags: tuple[str, ...] = (),
     description: str | None = None,
 ) -> list[ExperimentSpec]:
     """Register one variant per sweep value. Each variant gets a unique name
-    `{name_prefix}_{value_str}`, the shared tags ("sweep", f"sweep:{sweep_path}",
-    name_prefix, ...base.tags), and lives under results/<prefix>/<frag>/."""
-    sweep_tags = tuple(dict.fromkeys(  # preserve order, dedup
-        base.tags + extra_tags + ("sweep", f"sweep:{sweep_path}", name_prefix)
-    ))
+    `{name_prefix}_{value_str}` and lives under results/<prefix>/<frag>/."""
     if description is None:
         description = (
             f"Sweep over {sweep_path} in {list(values)!r}. "
@@ -128,7 +112,6 @@ def register_sweep(
             sweep_path=sweep_path,
             value=value,
             new_name=variant_name,
-            new_tags=sweep_tags,
             new_description=description,
             new_results_path_parts=(name_prefix, value_frag),
         )
@@ -184,18 +167,16 @@ def _override_at_path(
     sweep_path: str,
     value: Any,
     new_name: str,
-    new_tags: tuple[str, ...],
     new_description: str,
     new_results_path_parts: tuple[str, ...],
 ) -> ExperimentSpec:
     """Sweep-variant override: apply `value` at `sweep_path` and overwrite
-    identity metadata (name, tags, description, results_path_parts).
+    identity metadata (name, description, results_path_parts).
     """
     spec = override_at_path(base, sweep_path, value)
     return dataclasses.replace(
         spec,
         name=new_name,
-        tags=new_tags,
         description=new_description,
         results_path_parts=new_results_path_parts,
     )
@@ -218,7 +199,6 @@ _BLACKJACK_VI_BASE = ExperimentSpec(
     eval_episodes=20_000,
     seeds=(0, 1, 2, 3, 4),
     gamma=1.0,
-    tags=("blackjack", "vi", "dp"),
 )
 
 _BLACKJACK_PI_BASE = ExperimentSpec(
@@ -233,7 +213,6 @@ _BLACKJACK_PI_BASE = ExperimentSpec(
     eval_episodes=20_000,
     seeds=(0, 1, 2, 3, 4),
     gamma=1.0,
-    tags=("blackjack", "pi", "dp"),
 )
 
 # Default single-point runs (pinned at "best" settings — tight theta, gamma=1).
@@ -309,7 +288,6 @@ _BLACKJACK_SARSA_BASE = ExperimentSpec(
     eval_episodes=20_000,
     seeds=(0, 1, 2, 3, 4),
     gamma=1.0,
-    tags=("blackjack", "sarsa", "tabular"),
 )
 
 _BLACKJACK_QLEARNING_BASE = ExperimentSpec(
@@ -320,7 +298,6 @@ _BLACKJACK_QLEARNING_BASE = ExperimentSpec(
     eval_episodes=20_000,
     seeds=(0, 1, 2, 3, 4),
     gamma=1.0,
-    tags=("blackjack", "qlearning", "tabular"),
 )
 
 register(dataclasses.replace(_BLACKJACK_SARSA_BASE, name="blackjack_sarsa_default",
@@ -412,7 +389,6 @@ _CARTPOLE_SARSA_BASE = ExperimentSpec(
     eval_episodes=100,
     seeds=(0, 1, 2, 3, 4),
     gamma=0.99,
-    tags=("cartpole", "sarsa", "tabular"),
 )
 
 _CARTPOLE_QLEARNING_BASE = ExperimentSpec(
@@ -423,7 +399,6 @@ _CARTPOLE_QLEARNING_BASE = ExperimentSpec(
     eval_episodes=100,
     seeds=(0, 1, 2, 3, 4),
     gamma=0.99,
-    tags=("cartpole", "qlearning", "tabular"),
 )
 
 register(dataclasses.replace(_CARTPOLE_SARSA_BASE, name="cartpole_sarsa_default",
@@ -444,7 +419,6 @@ register_sweep(
     base=_CARTPOLE_SARSA_BASE,
     sweep_path="agent.hyperparams.alpha",
     values=[0.05, 0.1, 0.2, 0.5],
-    extra_tags=("hp_sweep", "alpha"),
     description="SARSA on CartPole: step-size sweep. Smaller alpha => "
                 "more stable but slower; larger alpha => faster but noisier.",
 )
@@ -453,7 +427,6 @@ register_sweep(
     base=_CARTPOLE_QLEARNING_BASE,
     sweep_path="agent.hyperparams.alpha",
     values=[0.05, 0.1, 0.2, 0.5],
-    extra_tags=("hp_sweep", "alpha"),
     description="Q-Learning on CartPole: step-size sweep (off-policy twin of "
                 "cartpole_sarsa_alpha_sweep).",
 )
@@ -464,7 +437,6 @@ register_sweep(
     base=_CARTPOLE_SARSA_BASE,
     sweep_path="gamma",
     values=[0.9, 0.95, 0.99, 1.0],
-    extra_tags=("hp_sweep", "gamma"),
     description="SARSA on CartPole: discount sweep. CartPole's long horizon "
                 "(up to 500 steps) makes gamma a first-class hyperparameter "
                 "here, unlike Blackjack where gamma barely matters.",
@@ -474,7 +446,6 @@ register_sweep(
     base=_CARTPOLE_QLEARNING_BASE,
     sweep_path="gamma",
     values=[0.9, 0.95, 0.99, 1.0],
-    extra_tags=("hp_sweep", "gamma"),
     description="Q-Learning on CartPole: discount sweep (off-policy twin of "
                 "cartpole_sarsa_gamma_sweep).",
 )
@@ -496,7 +467,6 @@ register_sweep(
     base=_CARTPOLE_SARSA_BASE,
     sweep_path="env.kwargs.n_bins",
     values=_CARTPOLE_NBIN_GRIDS,
-    extra_tags=("hp_sweep", "discretization"),
     description="SARSA on CartPole: discretization sweep from very coarse "
                 "(36 bins) to fine (4800 bins). Expected to show a bias-"
                 "variance trade-off: coarser grids train fast but cap "
@@ -507,7 +477,6 @@ register_sweep(
     base=_CARTPOLE_QLEARNING_BASE,
     sweep_path="env.kwargs.n_bins",
     values=_CARTPOLE_NBIN_GRIDS,
-    extra_tags=("hp_sweep", "discretization"),
     description="Q-Learning on CartPole: discretization sweep (off-policy "
                 "twin of cartpole_sarsa_nbins_sweep).",
 )
@@ -544,7 +513,6 @@ _CARTPOLE_VI_BASE = ExperimentSpec(
     eval_episodes=100,
     seeds=(0, 1, 2, 3, 4),
     gamma=0.99,
-    tags=("cartpole", "vi", "dp", "estimated_mdp"),
 )
 
 _CARTPOLE_PI_BASE = ExperimentSpec(
@@ -559,7 +527,6 @@ _CARTPOLE_PI_BASE = ExperimentSpec(
     eval_episodes=100,
     seeds=(0, 1, 2, 3, 4),
     gamma=0.99,
-    tags=("cartpole", "pi", "dp", "estimated_mdp"),
 )
 
 register(dataclasses.replace(_CARTPOLE_VI_BASE, name="cartpole_vi_default",
@@ -577,7 +544,6 @@ register_sweep(
     base=_CARTPOLE_VI_BASE,
     sweep_path="env.kwargs.n_bins",
     values=_CARTPOLE_NBIN_GRIDS,
-    extra_tags=("hp_sweep", "discretization"),
     description="VI on estimated CartPole MDP: discretization sweep. "
                 "Coarser grids sample better (more visits per state) but "
                 "alias distinct states; finer grids are more expressive "
@@ -588,7 +554,6 @@ register_sweep(
     base=_CARTPOLE_PI_BASE,
     sweep_path="env.kwargs.n_bins",
     values=_CARTPOLE_NBIN_GRIDS,
-    extra_tags=("hp_sweep", "discretization"),
     description="PI twin of cartpole_vi_nbins_sweep. Also exposes the "
                 "VI-vs-PI convergence-speed comparison across grid sizes.",
 )
@@ -600,7 +565,6 @@ register_sweep(
     base=_CARTPOLE_VI_BASE,
     sweep_path="env.kwargs.n_sampling_episodes",
     values=_CARTPOLE_SAMPLE_BUDGETS,
-    extra_tags=("hp_sweep", "sample_complexity"),
     description="VI on estimated CartPole MDP: sampling-budget sweep. "
                 "Shows how policy quality improves as the estimated T,R "
                 "gets more accurate. Complements the tabular RL sample-"
@@ -633,8 +597,7 @@ def _vi_trained_sampling_base(
     )
     return dataclasses.replace(_CARTPOLE_VI_BASE,
                                name=f"cartpole_vi_trained_eps_{name_suffix}",
-                               env=env,
-                               tags=_CARTPOLE_VI_BASE.tags + ("trained_sampling",))
+                               env=env)
 
 _VI_TRAINED_3X3X8X12 = _vi_trained_sampling_base(
     n_bins=(3, 3, 8, 12),
@@ -652,7 +615,6 @@ register_sweep(
     base=_VI_TRAINED_3X3X8X12,
     sweep_path="env.kwargs.sampling_epsilon",
     values=_CARTPOLE_EPS_GRID,
-    extra_tags=("hp_sweep", "exploration_policy"),
     description="VI on estimated CartPole MDP at (3,3,8,12), sampling "
                 "transitions via ε-greedy on a trained SARSA policy. Sweep "
                 "over ε tests how reliant the model-estimation is on the "
@@ -663,7 +625,6 @@ register_sweep(
     base=_VI_TRAINED_5X5X12X16,
     sweep_path="env.kwargs.sampling_epsilon",
     values=_CARTPOLE_EPS_GRID,
-    extra_tags=("hp_sweep", "exploration_policy"),
     description="Same ε sweep at the finest grid (5,5,12,16), where random "
                 "sampling already works surprisingly well. Tests whether "
                 "trained-policy sampling is uniformly beneficial or "
@@ -703,7 +664,6 @@ _DQN_BASE = ExperimentSpec(
     eval_episodes=20,
     seeds=(0, 1, 2, 3, 4),
     gamma=0.99,
-    tags=("dqn", "rainbow_ablation", "baseline"),
     description="Vanilla DQN baseline on CartPole-v1 (continuous state, MLP Q-net). "
                 "No Double / Dueling / PER / N-step. Reference bar for the ablation.",
     results_path_parts=("dqn_ablation", "baseline"),
@@ -714,7 +674,6 @@ def _dqn_variant(
     *,
     suffix: str,
     extra_hp: dict[str, Any],
-    tag: str,
     description: str,
 ) -> None:
     """Register one Rainbow ablation variant. Shares _DQN_SHARED_HP."""
@@ -724,7 +683,6 @@ def _dqn_variant(
         _DQN_BASE,
         name=f"dqn_ablation_{suffix}",
         agent=AgentSpec(name="dqn", hyperparams=hp),
-        tags=("dqn", "rainbow_ablation", tag),
         description=description,
         results_path_parts=("dqn_ablation", suffix),
     ))
@@ -735,7 +693,6 @@ register(_DQN_BASE)
 _dqn_variant(
     suffix="double",
     extra_hp={"double": True},
-    tag="double",
     description="DQN + Double-DQN: decouples action-selection (online net) "
                 "from value-estimation (target net). Expected to reduce the "
                 "positive bias of max-over-target that vanilla DQN suffers from.",
@@ -744,7 +701,6 @@ _dqn_variant(
 _dqn_variant(
     suffix="dueling",
     extra_hp={"dueling": True},
-    tag="dueling",
     description="DQN + Dueling network: V(s) + A(s,·) with mean-centered "
                 "advantages. Mostly architectural — pays off more in "
                 "environments where many actions have similar values.",
@@ -753,7 +709,6 @@ _dqn_variant(
 _dqn_variant(
     suffix="per",
     extra_hp={"per": True},
-    tag="per",
     description="DQN + Prioritized Experience Replay (proportional, sum-tree). "
                 "Samples transitions with high TD-error more often; β anneals "
                 "from 0.4 to 1.0 over 20k gradient steps to correct IS bias.",
@@ -762,7 +717,6 @@ _dqn_variant(
 _dqn_variant(
     suffix="nstep",
     extra_hp={"nstep": 3},
-    tag="nstep",
     description="DQN + 3-step TD targets. Trades a bit of bias (off-policy "
                 "error from using the behaviour policy's multi-step returns) "
                 "for lower variance and faster credit assignment.",
@@ -771,7 +725,6 @@ _dqn_variant(
 _dqn_variant(
     suffix="rainbow",
     extra_hp={"double": True, "dueling": True, "per": True, "nstep": 3},
-    tag="rainbow_full",
     description="Rainbow-medium: Double + Dueling + PER + 3-step. The all-in "
                 "variant. Comparing this against the four single-component "
                 "variants isolates each component's marginal contribution.",

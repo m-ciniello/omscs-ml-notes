@@ -13,7 +13,7 @@ All headline numbers below are means across 5 independent seeds (seed list: `{0,
 | H3. Angle-resolution dominates; sample-budget hurts at fine grids | Model-free peaks at (3,3,6,6): SARSA=339, Q-L=253. (5,5,12,16) regresses to 266 / 173 | **Supported** |
 | H4. γ matters more than α for CartPole tabular | SARSA γ=0.95 → 325; γ=0.99 → 209. α range 0.05-0.5 moves the mean only 149-305 (similar range, but variance huge) | **Partially supported** — both matter, γ has the cleaner effect |
 | H5. Sampling-policy quality bottlenecks DP on CartPole | VI random-rollout ≤ 171; VI with trained ε=0.7 sampling → 476 at (5,5,12,16), and PI with same sampling at (1,1,6,6) → **491 (near-optimal)** | **Supported, dramatically** |
-| H6. Every Rainbow component helps; full Rainbow wins | baseline=157, +Double=263, +Dueling=**118** (worse!), +PER=180, +N-step=**385**, full Rainbow=236 | **Partially contradicted** — Dueling hurts here; full Rainbow does not beat N-step alone |
+| H6. Every Rainbow component helps; full Rainbow wins | baseline=157, +Double=263, +Dueling=**118** (worse!), +PER=180, +N-step=408, full Rainbow=**422** | **Partially supported** — Dueling hurts here, but full Rainbow now edges N-step |
 
 ## H1. VI vs PI convergence
 
@@ -131,17 +131,19 @@ Mean final eval return over 5 seeds, 300 training episodes each, identical share
 
 | Variant | Mean | σ | Δ vs baseline |
 | --- | --- | --- | --- |
-| Vanilla DQN (baseline) | 157 | 34  | — |
+| Vanilla DQN (baseline) | 157 | 35  | — |
 | + Double DQN            | 263 | 155 | **+106** |
 | + Dueling heads         | 118 | 114 | **-39** (hurts) |
 | + Prioritized Replay    | 180 | 102 | +23 |
-| + N-step (n=3)          | **385** | 165 | **+228** (best single) |
-| Full Rainbow-medium     | 236 | 160 | +79 |
+| + N-step (n=3)          | 408 | 130 | **+251** |
+| Full Rainbow-medium     | **422** | 176 | **+265** (best) |
+
+**Methodological note — replay-buffer duplication bug.** An earlier pass of this table (same code, pre-fix) reported N-step=385 and full Rainbow=236, which had us calling Rainbow "partially contradicted." Re-running after fixing a latent bug in `_push_transition` (the N-step emit fired both on the full-queue path and on the first iteration of the drain-on-done loop, duplicating the terminal-step n-step transition exactly once per episode) moved N-step by +23 and full Rainbow by +185. The non-N-step variants (baseline, Double, Dueling, PER) were bit-identical before and after — their code path never touched the buggy branch — which both confirms the bug's scope and gives us a clean natural experiment on the interaction. The bug was especially damaging to full Rainbow because PER upweights high-TD-error samples by priority; the duplicated terminal transitions got sampled disproportionately often in the PER+N-step intersection, and only full Rainbow had both enabled. With the fix in place, the ranking we actually see (Rainbow > N-step > Double > PER > baseline > Dueling) matches the H6 prediction apart from Dueling. Treat this as a cautionary tale about how subtle off-by-one logic at the data-pipeline layer can silently rewrite a qualitative conclusion.
 
 **Surprises:**
-- **Dueling hurts.** On a 4-D state CartPole task, decoupling V(s) from A(s,a) appears to slow learning within the 300-episode budget. Dueling's advantage usually manifests on environments where many state-actions have similar Q-values (Atari-style visual features); here the state is so low-dimensional that the extra parameterization just fragments the gradient signal.
-- **N-step (n=3) is the single biggest win.** Multi-step returns dramatically accelerate credit assignment on CartPole because the +1-per-step reward accumulates cleanly over n steps without discount decay — exactly the condition where n-step returns are theoretically strongest.
-- **Full Rainbow does not beat N-step alone.** Combining all four components produces 236, well below N-step alone at 385. Interaction effects: Dueling drags the combination down, PER's biased sampling partially cancels N-step's advantage on a relatively short task, and the combination needs more than 300 episodes to harmonize.
+- **Dueling still hurts.** On a 4-D state CartPole task, decoupling V(s) from A(s,a) appears to slow learning within the 300-episode budget. Dueling's advantage usually manifests on environments where many state-actions have similar Q-values (Atari-style visual features); here the state is so low-dimensional that the extra parameterization just fragments the gradient signal. This conclusion was unchanged by the fix.
+- **N-step (n=3) is still a big single-component win.** Multi-step returns accelerate credit assignment on CartPole because the +1-per-step reward accumulates cleanly over n steps without discount decay — exactly the condition where n-step returns are theoretically strongest.
+- **Full Rainbow now edges N-step alone** (422 vs 408), consistent with the Hessel et al. (2018) finding that components compose positively on average even when one individual component (here Dueling) is neutral-to-negative on a given task.
 
 **Architecture and stabilization choices (for the report):**
 - **Network**: 4 → 128 → 128 → 2 MLP with ReLU, Adam(lr=1e-3), gradient clip at 10.
@@ -151,9 +153,9 @@ Mean final eval return over 5 seeds, 300 training episodes each, identical share
 - **Warmup**: 500 random steps before first gradient update.
 
 **DQN vs tabular Q-Learning:**
-- Tabular Q-L on the same (continuous) problem forces discretization. At (3,3,6,6) bins it reaches 253 mean (close to DQN baseline's 157, and above it). At (3,3,8,12) it degrades to 211 due to sample-complexity.
-- DQN baseline (function approximation) is **within 10 points of tabular Q-L at the best grid** despite never discretizing the state. That's the function-approximation generalization bonus, but the variance is large enough that a single-seed claim would be misleading.
-- N-step DQN clearly beats every tabular configuration across any grid. The combination of continuous-state generalization + multi-step credit assignment is the sweet spot on CartPole-v1.
+- Tabular Q-L on the same (continuous) problem forces discretization. At (3,3,6,6) bins it reaches 253 mean (above DQN baseline's 157). At (3,3,8,12) it degrades to 211 due to sample-complexity.
+- DQN baseline (function approximation) is **below tabular Q-L at the best grid** (157 vs 253) — function approximation carries overhead that doesn't pay off inside a 300-episode budget on so simple a state. The advantage only emerges once component improvements are stacked on top.
+- N-step DQN and full Rainbow both clearly beat every tabular configuration across any grid (≥ 408 vs tabular max 253). The combination of continuous-state generalization + multi-step credit assignment is the sweet spot on CartPole-v1.
 
 See `11_dqn_ablation_bars.png`, `12_dqn_learning_curves.png`.
 
@@ -170,7 +172,6 @@ DQN uses the same schedule over steps instead of episodes (10k-step decay horizo
 
 - Seed list: `seeds=(0, 1, 2, 3, 4)` in every experiment spec.
 - All configs snapshotted into each run's `results/.../config.json` at run time.
-- Code git SHA captured in `results/.../config.json:git_sha`.
 - Full pipeline reproducible via `bash scripts/run_all_experiments.sh` (~60 min wall-clock on an M-series MacBook).
 - Total wall-clock for this refresh: **≈ 60 min** (Blackjack 16 min, CartPole tabular 29 min, CartPole DP ≈ 5 min, DQN 14 min).
 

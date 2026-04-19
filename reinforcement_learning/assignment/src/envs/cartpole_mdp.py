@@ -1,11 +1,24 @@
 """CartPole with an empirically-estimated MDP.
 
 CartPole's ODE has no tabular transition model, so we build one from
-rollouts: T̂(s'|s,a) = #(s,a,s')/#(s,a), R̂(s,a) = Σr/#(s,a). The FAQ
-sanctions this path. Evaluation uses the real dynamics, not the estimate.
+rollouts. The FAQ sanctions this path. Evaluation uses the real dynamics,
+not the estimate.
+
+Estimator (maximum-likelihood counts, normalised once at the end):
+
+    T̂(s' | s, a) = count(s, a -> s') / count(s, a)
+    R̂(s, a)      = sum(rewards at (s, a)) / count(s, a)
+    P̂(done | s, a) = count(terminating transitions at (s, a)) / count(s, a)
+
+A transition `(s, a)` is emitted as `(p_term, TERMINAL, R̂)` plus one
+`(count/total, s', R̂)` entry per observed next-state. Terminal absorption
+is modelled explicitly (separate from the next-state histogram) so VI/PI
+can zero out V(TERMINAL) correctly.
 
 Notes:
-- Unvisited (s,a) -> TERMINAL with reward 0 (acts as a no-data prior).
+- Sampling policy is pluggable (`build_action_fn`): uniform-random by
+  default, or epsilon-greedy against a prior experiment's Q-table.
+- Unvisited (s, a) -> TERMINAL with reward 0 (acts as a no-data prior).
   Leaving them as self-loops tends to produce pathological DP values.
 - Each seed builds its own MDP from a fresh sampling stream, so multi-seed
   runs capture model-estimation variance in the DP-derived policy.

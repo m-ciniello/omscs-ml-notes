@@ -24,7 +24,7 @@ assignment/
 │   ├── agents/                     # VI, PI, SARSA, Q-Learning, DQN, random
 │   ├── envs/                       # Blackjack (analytical MDP), CartPole (+ estimated MDP)
 │   └── experiments/                # multi-seed runner + on-disk result loader
-├── scripts/                        # executable entry points (run_sweep, make_figures, run_all_experiments)
+├── scripts/                        # executable entry points (run, make_figures, run_all_experiments)
 ├── results/                        # experiment outputs (one subtree per experiment)
 └── figures/                        # report-ready PNGs, generated from results/
 ```
@@ -112,12 +112,11 @@ Naming convention:
 
 | Module          | Responsibility                                                                                      |
 | --------------- | --------------------------------------------------------------------------------------------------- |
-| `runner.py`     | Given an experiment name, run it across all seeds and write per-seed outputs + config snapshot.     |
-| `aggregate.py`  | Load one experiment's per-seed results (`load_runs`) and its config snapshot (`load_config`). Cross-seed statistics are computed at call sites (they differ per figure). |
+| `runner.py`     | Run experiments across seeds (writes per-seed outputs + config snapshot) and load them back (`load_runs`). Cross-seed statistics are computed at the call site because the exact shape differs per figure. |
 
-Sweep summaries live inline in `scripts/run_sweep.py` (a single ~40-line
-helper reading the summary.json files for every variant and printing
-mean ± 95% CI).
+Results summaries live inline in `scripts/run.py` (a single ~30-line
+helper reading the `summary.json` files for every matching experiment and
+printing a mean ± 95% CI table).
 
 **Runner output layout.** For a standalone experiment `foo` with seeds
 `[0, 1, 2]`:
@@ -125,7 +124,6 @@ mean ± 95% CI).
 ```
 results/foo/
     config.json        # snapshot of ExperimentSpec.to_dict()
-    git_sha.txt
     seed_0/
         result.pkl     # full RunResult dict (source of truth)
         summary.json   # scalar-metrics sidecar (grep-friendly)
@@ -146,7 +144,7 @@ results/bar_sweep/
 
 | Script                  | What it does                                                                       |
 | ----------------------- | ---------------------------------------------------------------------------------- |
-| `run_sweep.py`          | Run every experiment matching a prefix/tag, then print a `--sweep-path` summary.  |
+| `run.py`                | Run every experiment matching a prefix, then print a per-experiment eval stats table (mean ± 95% CI across seeds). |
 | `run_all_experiments.sh`| Runs every registered non-ablation phase in dependency order (Blackjack, then CartPole tabular, then CartPole DP, then DQN). |
 | `make_figures.py`       | Regenerates every report figure from `results/`. Never re-runs experiments.       |
 
@@ -167,10 +165,10 @@ results/bar_sweep/
 - **Duck-typed agent contract.** No base class. The runner documents the
   shape of the returned `dict`; agents produce it. Less indirection for a
   reader tracing code for the first time.
-- **Aggregation stats at the call site.** `aggregate.py` exposes just
-  `load_runs` + `load_config`; every figure does its own mean / CI / IQR
-  because the exact shape differs per figure. A generic cross-seed helper
-  never pulled its weight.
+- **Aggregation stats at the call site.** `runner.py` exposes just
+  `load_runs`; every figure does its own mean / CI / IQR because the exact
+  shape differs per figure. A generic cross-seed helper never pulled its
+  weight.
 - **Analytical MDP for Blackjack, empirical MDP for CartPole.** Same VI/PI
   agent implementation runs on both — the difference is entirely in the
   `env` layer. This is what makes it meaningful to compare VI/PI against

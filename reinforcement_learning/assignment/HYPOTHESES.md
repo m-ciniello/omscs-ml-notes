@@ -71,6 +71,8 @@ The two environments are chosen precisely to probe this axis:
 
 **Evidence:** `dqn_ablation_{baseline, double, dueling, per, nstep, rainbow}` × 5 seeds. All six use the same shared hyperparameters; only the component toggles differ. This is the Hessel et al. (2018) "clean-sweep" ablation pattern applied to a subset.
 
+*Note.* An earlier pass found full Rainbow underperforming N-step alone (236 vs 385); this turned out to be a duplicate-transition bug in the N-step replay pipeline that interacted pathologically with PER. After the fix (documented in `ANALYSIS.md §H6`), Rainbow narrowly wins (422 vs 408), restoring the hypothesised ranking.
+
 **Figures:** `11_dqn_ablation_bars.png`, `12_dqn_learning_curves.png`.
 
 ## Rubric-coverage matrix

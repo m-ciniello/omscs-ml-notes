@@ -6,7 +6,7 @@
 #
 # Uses `;` (not `&&`) between phases so a failure in one phase doesn't
 # prevent later phases from running. Individual experiment failures
-# inside a phase are logged by run_sweep.py and the sweep continues.
+# inside a phase are logged by run.py and the sweep continues.
 
 set -u
 LOG_DIR=".logs"
@@ -30,7 +30,7 @@ phase() {
     echo "=========================================================="  | tee -a "$MASTER_LOG"
     echo "[$(date +%T)] PHASE: $name (prefix=$prefix)"                  | tee -a "$MASTER_LOG"
     echo "=========================================================="  | tee -a "$MASTER_LOG"
-    "$PY" scripts/run_sweep.py --prefix "$prefix" 2>&1 | tee -a "$MASTER_LOG"
+    "$PY" scripts/run.py --prefix "$prefix" 2>&1 | tee -a "$MASTER_LOG"
     echo "[$(date +%T)] PHASE DONE: $name"                              | tee -a "$MASTER_LOG"
 }
 
