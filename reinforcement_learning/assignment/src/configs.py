@@ -226,7 +226,11 @@ register(dataclasses.replace(_BLACKJACK_PI_BASE, name="blackjack_pi_default",
 # Gamma sweep (discount factor). Blackjack is episodic with bounded horizon,
 # so gamma shouldn't change optimal policy for reachable states — but it
 # affects convergence speed and numerical behaviour in interesting ways.
-_GAMMA_VALUES = [0.8, 0.9, 0.95, 0.99, 1.0]
+# We sweep only the endpoints because pilot runs showed the eval return is
+# flat to within-seed noise across γ ∈ [0.8, 1.0] (see ANALYSIS.md §H1); the
+# endpoints are sufficient to illustrate insensitivity without wasting compute
+# on interior points that tell the same story.
+_GAMMA_VALUES = [0.8, 1.0]
 
 register_sweep(
     name_prefix="blackjack_vi_gamma_sweep",
@@ -247,8 +251,10 @@ register_sweep(
 
 # Theta sweep (convergence tolerance). Shows the precision / wall-clock
 # tradeoff: the looser theta, the fewer sweeps, but past a problem-dependent
-# threshold the greedy policy stabilises regardless.
-_THETA_VALUES = [1e-1, 1e-3, 1e-5, 1e-9]
+# threshold the greedy policy stabilises regardless. Endpoints are enough
+# to illustrate the tradeoff (interior points add sweep count monotonically
+# but the greedy policy is identical across the whole range on Blackjack).
+_THETA_VALUES = [1e-1, 1e-9]
 
 register_sweep(
     name_prefix="blackjack_vi_theta_sweep",
@@ -559,7 +565,8 @@ register_sweep(
 )
 
 # Sampling-budget sweep — how much data does the model-based path need?
-_CARTPOLE_SAMPLE_BUDGETS = [500, 2000, 5000, 10_000]
+# 2000 dropped as a redundant interior point (linear between 500 and 5000).
+_CARTPOLE_SAMPLE_BUDGETS = [500, 5000, 10_000]
 register_sweep(
     name_prefix="cartpole_vi_samples_sweep",
     base=_CARTPOLE_VI_BASE,

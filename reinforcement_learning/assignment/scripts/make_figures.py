@@ -412,7 +412,7 @@ def fig_bj_hp_sensitivity() -> None:
 
     # Third panel: γ sweep for VI and PI.
     ax = axes[2]
-    gamma_values = [0.8, 0.9, 0.95, 0.99, 1.0]
+    gamma_values = [0.8, 1.0]
     for agent, color, prefix in [
         ("VI", "C0", "blackjack_vi_gamma_sweep_"),
         ("PI", "C1", "blackjack_pi_gamma_sweep_"),
@@ -595,7 +595,7 @@ def fig_cp_dp_budget_and_eps() -> None:
     # Left: sampling budget at (3,3,8,12). Use a log-scaled numeric x-axis
     # (not integer positions) so the spacing between budgets is meaningful.
     ax = axes[0]
-    budgets = [500, 2000, 5000, 10_000]
+    budgets = [500, 5000, 10_000]
     _, means, errs = collect_sweep_points(
         budgets, lambda b: f"cartpole_vi_samples_sweep_{b}",
         skip_missing=False,

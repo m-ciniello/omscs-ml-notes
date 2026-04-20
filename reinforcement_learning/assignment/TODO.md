@@ -5,12 +5,11 @@ review; keep this file up to date as we find more.
 
 ## Before submission
 
-- [ ] Rerun full campaign after the infra cleanup (`bash scripts/run_all_experiments.sh`, ~60 min).
-- [ ] Reconcile `ANALYSIS.md` numbers against the re-generated `results/`. Known staleness points to check:
-  - DQN ablations: N-step and Full Rainbow eval means in the doc disagree with what's on disk (Rainbow now beats N-step, doc says otherwise).
-  - Blackjack SARSA / Q-learning default rows: doc appears to report optimal-alpha sweep results instead of default-alpha results.
-  - CartPole H3 table footnote: claims VI/PI at `(1,1,6,6)` and `(5,5,12,16)` used trained-SARSA-policy sampling, but those runs use random rollouts per `configs.py`.
-  - CartPole PI at `(1,1,6,6)` with trained-ε=0.7 sampling: doc claims 491 ± 2; no such experiment is registered. The 491 number comes from PI with random sampling at that grid size.
+- [x] Rerun full campaign after the infra cleanup (`bash scripts/run_all_experiments.sh`, ~60 min). *Completed Apr 20, 2026. Log: `.logs/run_all_20260419_192100.log`.*
+- [x] Reconcile `ANALYSIS.md` numbers against the re-generated `results/`. *Completed. All table entries, sweep counts, and per-grid numbers now match the regenerated `results/` directly.*
+- [x] Call out PI's iterative-evaluation design choice in `ANALYSIS.md` (VI-vs-PI section or a methods footnote). *Added as a "Methods note" paragraph inside H1.*
+- [x] Prune redundant sweep points. *Done: Blackjack VI/PI γ/θ sweeps now only keep endpoints; CartPole VI sample-budget sweep dropped the 2000-episode interior point. See `configs.py` docstrings for the rationale.*
+- [x] Report DQN ablation variance as "fraction of seeds that hit the 500-step cap" alongside mean ± σ. *CartPole-v1 returns are bimodal so mean ± σ is misleading on its own. Added to H6 table and prose.*
 
 ## Nice-to-have / post-submission
 

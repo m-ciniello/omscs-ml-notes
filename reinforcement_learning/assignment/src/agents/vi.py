@@ -39,7 +39,6 @@ class ValueIteration:
         gamma: float,
         seed: int,
     ) -> dict:
-        _require_mdp_interface(env)
         t0 = time.perf_counter()
 
         states = list(env.all_states())
@@ -104,45 +103,29 @@ class ValueIteration:
 
 # --- Shared DP utilities (also used by PolicyIteration) ---
 
-def _require_mdp_interface(env) -> None:
-    """Fail fast if env isn't an MDP model (used by both VI and PI)."""
-    for method in ("all_states", "transitions", "is_terminal"):
-        if not hasattr(env, method):
-            raise TypeError(
-                f"DP agents require env to expose `{method}`; "
-                f"{type(env).__name__} does not."
-            )
-    if not hasattr(env, "N_ACTIONS"):
-        raise TypeError(f"Env {type(env).__name__} must expose `N_ACTIONS`.")
+def _q_values(env, s, V: dict, gamma: float) -> list[float]:
+    """Bellman backup: Q(s, a) = Σ_{s'} T(s'|s,a) [R + γ V(s')] for each a."""
+    q = [0.0] * env.N_ACTIONS
+    for a in range(env.N_ACTIONS):
+        for p, s_next, r in env.transitions(s, a):
+            q[a] += p * (r + gamma * V[s_next])
+    return q
 
 
 def _best_action_value(env, s, V, gamma: float) -> tuple[float, int]:
     """(max_a Q(s,a), argmax_a Q(s,a))."""
-    best_value = -float("inf")
-    best_action = 0
-    for a in range(env.N_ACTIONS):
-        q = 0.0
-        for p, s_next, r in env.transitions(s, a):
-            q += p * (r + gamma * V[s_next])
-        if q > best_value:
-            best_value = q
-            best_action = a
-    return best_value, best_action
+    q = _q_values(env, s, V, gamma)
+    best_action = max(range(len(q)), key=q.__getitem__)
+    return q[best_action], best_action
 
 
 def _compute_Q(env, V: dict, gamma: float) -> dict:
     """Extract Q from V after solving."""
-    Q: dict = {}
-    for s in V:
-        Q[s] = [0.0] * env.N_ACTIONS
-        if env.is_terminal(s):
-            continue
-        for a in range(env.N_ACTIONS):
-            q = 0.0
-            for p, s_next, r in env.transitions(s, a):
-                q += p * (r + gamma * V[s_next])
-            Q[s][a] = q
-    return Q
+    return {
+        s: [0.0] * env.N_ACTIONS if env.is_terminal(s)
+           else _q_values(env, s, V, gamma)
+        for s in V
+    }
 
 
 def _rollout_policy(

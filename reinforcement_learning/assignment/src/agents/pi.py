@@ -11,7 +11,6 @@ from typing import Any
 from src.agents.vi import (
     _best_action_value,
     _compute_Q,
-    _require_mdp_interface,
     _rollout_policy,
 )
 
@@ -38,7 +37,6 @@ class PolicyIteration:
         gamma: float,
         seed: int,
     ) -> dict:
-        _require_mdp_interface(env)
         t0 = time.perf_counter()
 
         states = list(env.all_states())

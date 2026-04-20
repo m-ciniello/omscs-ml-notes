@@ -36,10 +36,10 @@ phase() {
 
 echo "[$(date +%T)] START run_all" | tee -a "$MASTER_LOG"
 
-phase "blackjack (DP + tabular, 38 exps)"       "blackjack_"
+phase "blackjack (DP + tabular, 28 exps)"       "blackjack_"
 phase "cartpole SARSA (13 exps)"                 "cartpole_sarsa_"
 phase "cartpole Q-learning (13 exps)"            "cartpole_qlearning_"
-phase "cartpole VI on estimated MDP (17 exps)"   "cartpole_vi_"
+phase "cartpole VI on estimated MDP (16 exps)"   "cartpole_vi_"
 phase "cartpole PI on estimated MDP (5 exps)"    "cartpole_pi_"
 phase "DQN Rainbow-medium ablation (6 exps)"     "dqn_ablation_"
 
