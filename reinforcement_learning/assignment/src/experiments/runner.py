@@ -53,10 +53,28 @@ def run_spec(
     verbose: bool = True,
 ) -> Path:
     """Run every seed for a spec. Returns the experiment directory.
-    If overwrite=False, seeds whose result.pkl already exists are skipped."""
-    exp_dir = experiment_dir(spec, results_root=results_root)
-    exp_dir.mkdir(parents=True, exist_ok=True)
 
+    If any seed already has a `result.pkl` on disk we raise `FileExistsError`
+    rather than silently skipping — the caller is expected to `rm -rf` the
+    experiment (or pass `overwrite=True`) before rerunning. This avoids ever
+    serving stale numbers from a previous code/config state.
+    """
+    exp_dir = experiment_dir(spec, results_root=results_root)
+
+    # Pre-flight: refuse to touch anything on disk (including config.json)
+    # until we know every seed slot is free. Avoids leaving a mismatched
+    # snapshot next to stale per-seed pickles when the user forgot to rm.
+    if not overwrite:
+        for seed in spec.seeds:
+            result_path = exp_dir / f"seed_{seed}" / "result.pkl"
+            if result_path.exists():
+                raise FileExistsError(
+                    f"{result_path} already exists. Delete the experiment "
+                    f"directory (rm -rf {exp_dir}) or pass --overwrite to "
+                    f"rerun."
+                )
+
+    exp_dir.mkdir(parents=True, exist_ok=True)
     _write_config_snapshot(exp_dir, spec)
 
     if verbose:
@@ -65,13 +83,7 @@ def run_spec(
 
     for seed in spec.seeds:
         seed_dir = exp_dir / f"seed_{seed}"
-        result_path = seed_dir / "result.pkl"
-        if result_path.exists() and not overwrite:
-            if verbose:
-                print(f"  seed {seed}: cached, skipping "
-                      f"(use overwrite=True to rerun)")
-            continue
-        seed_dir.mkdir(exist_ok=True)
+        seed_dir.mkdir(parents=True, exist_ok=True)
         _run_single_seed(spec, seed, seed_dir, verbose=verbose)
 
     return exp_dir

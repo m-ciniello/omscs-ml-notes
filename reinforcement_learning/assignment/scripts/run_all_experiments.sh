@@ -4,9 +4,14 @@
 # Order matters for one pair: cartpole_sarsa must finish before
 # cartpole_vi_trained_eps_* (those load SARSA Q-tables as the sampling policy).
 #
-# Uses `;` (not `&&`) between phases so a failure in one phase doesn't
-# prevent later phases from running. Individual experiment failures
-# inside a phase are logged by run.py and the sweep continues.
+# Failure semantics:
+#   - A pre-existing `result.pkl` in any matching experiment will raise a
+#     FileExistsError inside the running phase and halt it immediately.
+#     Either `rm -rf results/` beforehand or pass `--overwrite` (edit the
+#     phase() call below) to force a rerun.
+#   - Phases are independent: the master log's `tee` pipeline swallows the
+#     exit status of an upstream failure, so later phases still fire even
+#     if an earlier one halted. Inspect the master log per phase.
 
 set -u
 LOG_DIR=".logs"
@@ -36,7 +41,7 @@ phase() {
 
 echo "[$(date +%T)] START run_all" | tee -a "$MASTER_LOG"
 
-phase "blackjack (DP + tabular, 28 exps)"       "blackjack_"
+phase "blackjack (DP + tabular, 40 exps)"        "blackjack_"
 phase "cartpole SARSA (13 exps)"                 "cartpole_sarsa_"
 phase "cartpole Q-learning (13 exps)"            "cartpole_qlearning_"
 phase "cartpole VI on estimated MDP (16 exps)"   "cartpole_vi_"

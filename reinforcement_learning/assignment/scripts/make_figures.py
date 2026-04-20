@@ -130,8 +130,8 @@ def smoothed_seeds(runs, key: str, window: int) -> np.ndarray:
 def mean_ci(stacked: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Seed-mean + symmetric 95% CI around that mean.
 
-    With only 5 seeds we use 1.96 · SE (treat the CLT as good enough for
-    visualisation — the report text is careful to quote CIs as "approximate").
+    With ~10 seeds we use 1.96 · SE (CLT is acceptable for visualisation;
+    the report quotes CIs as "approximate").
     """
     mean = stacked.mean(axis=0)
     n = stacked.shape[0]
@@ -274,7 +274,7 @@ def fig_bj_dp_convergence() -> None:
     ax.legend(lines1 + lines2, labels1 + labels2, loc="upper right")
     ax.set_title("Policy Iteration")
 
-    fig.suptitle("Blackjack: DP convergence (5 seeds)", y=1.02)
+    fig.suptitle("Blackjack: DP convergence (10 seeds)", y=1.02)
     save(fig, "01_bj_dp_convergence.png")
 
 
@@ -354,7 +354,7 @@ def fig_bj_tabular_curves() -> None:
 
     ax.set_xlabel(f"Training episode (rolling mean, window={window})")
     ax.set_ylabel("Training return")
-    ax.set_title("Blackjack tabular learning curves (5 seeds, 95% CI)")
+    ax.set_title("Blackjack tabular learning curves (10 seeds, 95% CI)")
     ax.legend(loc="lower right")
     save(fig, "03_bj_tabular_curves.png")
 
@@ -410,9 +410,12 @@ def fig_bj_hp_sensitivity() -> None:
         if panel_idx == 0:
             ax.legend(loc="lower right")
 
-    # Third panel: γ sweep for VI and PI.
+    # Third panel: DP γ sweep at the reference θ=1e-9. This is the
+    # `blackjack_{vi,pi}_gamma_sweep_*` 1-D sweep — on Blackjack the
+    # optimal policy is γ-invariant (rewards are terminal), so eval
+    # return should be roughly flat while convergence count moves.
     ax = axes[2]
-    gamma_values = [0.8, 1.0]
+    gamma_values = [0.5, 0.8, 0.9, 0.95, 1.0]
     for agent, color, prefix in [
         ("VI", "C0", "blackjack_vi_gamma_sweep_"),
         ("PI", "C1", "blackjack_pi_gamma_sweep_"),
@@ -422,12 +425,12 @@ def fig_bj_hp_sensitivity() -> None:
         )
         errorbar_sweep(ax, xs, means, errs, color=color, label=agent,
                        xlabels=[f"{v:g}" for v in xs])
-    ax.set_title("DP: Discount γ")
+    ax.set_title("DP: Discount γ (θ=1e-9)")
     ax.set_xlabel("γ")
     ax.legend(loc="lower right")
 
     axes[0].set_ylabel("Final eval return")
-    fig.suptitle("Blackjack: 1-D hyperparameter sweeps (5 seeds each, 95% CI)",
+    fig.suptitle("Blackjack: 1-D hyperparameter sweeps (10 seeds each, 95% CI)",
                  y=1.03)
     fig.tight_layout()
     save(fig, "04_bj_hp_sensitivity.png")
@@ -463,7 +466,7 @@ def fig_bj_agent_comparison() -> None:
     ax.set_xticklabels(names)
     ax.axhline(0, color="black", linewidth=0.6)
     ax.set_ylabel("Final eval return")
-    ax.set_title("Blackjack: agent comparison (5 seeds, 95% CI)")
+    ax.set_title("Blackjack: agent comparison (10 seeds, 95% CI)")
     # Annotate bars
     for bar, m in zip(bars, means):
         ax.text(bar.get_x() + bar.get_width() / 2, m,
@@ -501,7 +504,7 @@ def fig_cp_tabular_curves() -> None:
     ax.set_xlabel(f"Training episode (rolling mean, window={window})")
     ax.set_ylabel("Training return (step count)")
     ax.set_title("CartPole tabular learning curves at default n_bins "
-                 "(5 seeds, 95% CI)")
+                 "(10 seeds, 95% CI)")
     ax.legend(loc="upper left")
     save(fig, "06_cp_tabular_curves.png")
 
@@ -537,7 +540,7 @@ def fig_cp_tabular_hp() -> None:
             ax.legend(loc="lower right")
     axes[0].set_ylabel("Final eval return (mean step count)")
     fig.suptitle("CartPole: tabular 1-D hyperparameter sweeps "
-                 "(5 seeds, 95% CI)", y=1.02)
+                 "(10 seeds, 95% CI)", y=1.02)
     fig.tight_layout()
     save(fig, "07_cp_tabular_hp.png")
 
@@ -584,7 +587,7 @@ def fig_cp_dp_nbins() -> None:
     ax.set_xlabel("n_bins (cart_pos × cart_vel × pole_angle × pole_vel)")
     ax.set_ylabel("Final eval return")
     ax.set_title("CartPole DP on estimated MDP: n_bins + sampling-policy "
-                 "study (5 seeds, 95% CI)")
+                 "study (10 seeds, 95% CI)")
     ax.legend(loc="lower center", ncol=2, fontsize=8)
     save(fig, "08_cp_dp_nbins.png")
 
@@ -637,7 +640,7 @@ def fig_cp_dp_budget_and_eps() -> None:
     ax.set_ylim(bottom=0)
 
     fig.suptitle("CartPole DP: sample-complexity and exploration-policy studies "
-                 "(5 seeds, 95% CI)", y=1.03)
+                 "(10 seeds, 95% CI)", y=1.03)
     fig.tight_layout()
     save(fig, "09_cp_dp_budget_and_eps.png")
 
@@ -675,7 +678,7 @@ def fig_cp_agent_comparison() -> None:
     ax.axhline(500, color="black", linestyle="--", linewidth=1,
                alpha=0.5, label="truncation cap")
     ax.set_ylabel("Final eval return")
-    ax.set_title("CartPole: agent comparison (5 seeds, 95% CI)")
+    ax.set_title("CartPole: agent comparison (10 seeds, 95% CI)")
     ax.legend(loc="upper left")
     for bar, m in zip(bars, means):
         ax.text(bar.get_x() + bar.get_width() / 2, m + 5,
@@ -727,7 +730,7 @@ def fig_dqn_ablation_bars() -> None:
 
     ax.set_ylabel("Final eval return")
     ax.set_title("DQN Rainbow-medium ablation on CartPole-v1 "
-                 "(5 seeds, 95% CI, 300 train episodes)")
+                 "(10 seeds, 95% CI, 300 train episodes)")
     ax.legend(loc="upper left")
     for bar, m in zip(bars, means):
         ax.text(bar.get_x() + bar.get_width() / 2, m + 10,
@@ -784,7 +787,7 @@ def fig_dqn_learning_curves() -> None:
     ax.set_xlabel("Training episode")
     ax.set_ylabel(f"Episode return (rolling mean, w={window})")
     ax.set_title("DQN Rainbow-medium: learning curves by variant "
-                 "(shaded = IQR across 5 seeds)")
+                 "(shaded = IQR across 10 seeds)")
     ax.legend(loc="lower right", fontsize=8)
     ax.set_ylim(bottom=0)
     fig.tight_layout()

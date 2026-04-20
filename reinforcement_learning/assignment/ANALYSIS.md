@@ -2,27 +2,13 @@
 
 This is the interpretation layer between the raw results (`results/`), the figures (`figures/`), and the hypotheses laid out in `HYPOTHESES.md`. It is **not** the full 8-page Overleaf report; it is the compressed evidence-and-takeaways document that the report is built from.
 
-All headline numbers below are means across 5 independent seeds (seed list: `{0, 1, 2, 3, 4}`), unless stated otherwise. Variability is reported as standard deviation across seeds.
-
-## Changes from the previous run
-
-This document was refreshed after the pre-submission infrastructure cleanup (Apr 20, 2026). Two changes to the experiment set affect the narrative below; every other number was regenerated against identical code/seeds and differs only because of minor non-determinism that accumulates across 5k × 5 seeds of rollouts.
-
-- **Blackjack VI/PI γ and θ sweeps pruned to endpoints.** Interior points (γ ∈ {0.9, 0.95, 0.99}, θ ∈ {10⁻³, 10⁻⁵}) were dropped because pilot runs showed eval return is flat to within-seed noise across the range. The endpoints (γ ∈ {0.8, 1.0}, θ ∈ {0.1, 10⁻⁹}) are sufficient to illustrate insensitivity and keep the HP-sensitivity story. See `HYPOTHESES.md` H1.
-- **CartPole VI sample-budget sweep dropped interior point (2000 episodes).** The budget sweep is now {500, 5000, 10000}; 2000 was a redundant near-linear interior point.
-
-Qualitative shifts from the prior run (same code, different stochastic rollouts):
-
-- **CartPole tabular, (5,5,12,16) grid**: SARSA dropped from 266 → 175 and Q-L went 173 → 236, reflecting the high seed-variance the fine grid exhibits (σ ≈ 30-125). This does not change H3's conclusion (model-free peaks at (3,3,6,6)).
-- **CartPole VI on estimated MDP (5,5,12,16)**: random-rollout run came in at 424 (was 365) and VI-trained-ε=0.7 at (5,5,12,16) dropped from 476 → 426. Both still support H5 strongly; the PI (1,1,6,6) = 491 result that anchors H5 was unchanged.
-- **CartPole Q-learning γ sweep**: the best γ flipped from 0.99 → 1.0 (338 vs 288). This strengthens H4's claim that γ is the dominant CartPole-tabular HP.
-- **DQN ablations**: bit-identical to the previous run (same PyTorch seeding path). The update for this section is presentational — we now report "fraction of seeds that hit the 500-step cap" alongside the mean, because CartPole-v1 returns are bimodal (each seed either solves or stalls at ~100-300) and a mean ± std framing makes Rainbow look flakier than it actually is.
+All headline numbers below are means across 5 independent seeds (seed list: `{0, 1, 2, 3, 4}`) **except Blackjack DP (VI / PI), which is run at 10 seeds (`{0, …, 9}`)** after the Phase 1c regrid — each DP cell costs ~1 s so doubling N for tighter CIs is effectively free. Variability is reported as standard deviation across seeds.
 
 ## TL;DR
 
 | Claim | Evidence | Verdict |
 | --- | --- | --- |
-| H1. PI takes fewer *outer* iterations than VI but more *total Bellman backups*, and both produce the same policy | Blackjack: VI=12 sweeps, PI=3 outer / 22 sweeps. CartPole 1x1x6x6: VI=470 sweeps, PI=4 outer / ~980 sweeps | **Supported** |
+| H1. PI takes fewer *outer* iterations than VI but more *total Bellman backups*, and both produce the same policy | Blackjack (γ=1, θ=10⁻⁹): VI=12 sweeps, PI=3 outer / 22 PE-sweeps, eval matches bit-for-bit across all 40 γ×θ grid cells. CartPole (1,1,6,6): VI=470 sweeps, PI=4 outer / ~980 sweeps | **Supported** |
 | H2. Q-Learning beats SARSA on Blackjack because its off-policy target is decoupled from ε-greedy | Best SARSA = -0.048; best Q-L = -0.051; VI optimum = -0.046 | **Contradicted** — SARSA matches or narrowly beats Q-L here |
 | H3. Angle-resolution dominates; sample-budget hurts at fine grids | Model-free peaks at (3,3,6,6): SARSA=346, Q-L=241. (5,5,12,16) regresses to 175 / 236 | **Supported** |
 | H4. γ matters more than α for CartPole tabular | SARSA γ=0.95 → 315; γ=0.99 → 281. Q-L γ=1.0 → 338; γ=0.99 → 288 | **Supported** — γ has the cleaner, larger effect |
@@ -31,20 +17,68 @@ Qualitative shifts from the prior run (same code, different stochastic rollouts)
 
 ## H1. VI vs PI convergence
 
-**Blackjack (analytical MDP, 280 decision states).**
-- Default run: both algorithms converge to a policy with eval return **-0.046 ± 0.008** across 5 seeds — identical digit-for-digit.
-- VI takes **12 Bellman sweeps** to reach ∆V < 10⁻⁹ (final ∆V ≈ 10⁻¹⁰). PI converges in **3 outer iterations** but runs **22 total policy-evaluation sweeps** across those iterations. Per the FAQ's "algorithmic convergence indicator" vs. "task metric" dichotomy: PI wins on the count of outer iterations, VI wins on the count of total backups.
-- **θ sweep (VI)** shows the expected logarithmic relationship: θ=0.1 → 4 sweeps, θ=10⁻⁹ → 12 sweeps. Each factor-10⁴ decrease in tolerance adds ~8 sweeps because VI is a γ-contraction on the value function.
-- **θ sweep (PI)**: outer iterations stay **fixed at 3** regardless of θ ∈ {0.1, 10⁻⁹}; only the total eval-sweep count changes (8 → 22). This is the classic PI property: policy convergence happens in a handful of Howard-improvements; the PE loop dominates compute.
-- **γ sweep**: both algorithms are robust. PI outer-iter count grows from 2 (γ=0.8) to 3 (γ=1.0); VI sweep count from 11 to 12. Blackjack is a **finite-horizon** episodic task (each episode ends in a terminal state in ≤ 2-3 decisions) — γ barely matters for the optimum here. Eval return at γ=0.8 (−0.0454) is indistinguishable from γ=1.0 (−0.0458).
+**Blackjack (analytical MDP, 280 decision states): γ × θ grid, 10 seeds per cell.**
 
-**Methods note on PI's policy-evaluation step.** We use iterative Bellman-expectation sweeps to high precision (θ=1e-9), i.e. *modified policy iteration*, rather than a direct linear solve of `(I − γT^π)V = R^π`. This is a deliberate choice: it keeps the code structure symmetric with VI for convergence-trace plots, avoids materialising `|S|×|S|` matrices for dict-keyed states, and is the standard practical variant taught in Sutton & Barto Ch. 4.
+20 cells per algorithm × 2 algorithms = 40 seeded points. Rather than dump 40 rows, we split the grid along its two natural axes: eval return (which is nearly constant across the grid) and convergence *count* (which is where γ and θ actually differ).
 
-**CartPole (empirical MDP via rollouts).** Harder test because transition estimates are sparse and stochastic.
-- At (1,1,6,6) — the coarsest grid — VI converges in **~470 sweeps**, PI in **4 outer iterations / ~980 total sweeps**. The ratio is preserved.
-- At (5,5,12,16), VI converges in **918 sweeps** (final ∆V ≈ 10⁻⁴, the θ threshold); PI takes **9-12 outer iterations / ~4100 total sweeps**. More states → more sweeps proportionally.
+**Eval return is flat across the grid.** Within every γ-row, all 5 θ values produce bit-for-bit identical per-seed eval returns; across γ, only γ=0.5 nudges the mean by −0.0007 (≈ 0.1 σ). VI and PI match to four decimals on the mean and bit-for-bit per seed at every one of the 40 (γ, θ) cells.
 
-Interpretation: PI is better when the final policy is cheap to describe and PE can be truncated; VI is better when states are plentiful and high-precision value convergence is cheap per sweep. On Blackjack both finish in < 1s; on CartPole (estimated MDP) both still complete in <2s regardless of grid. The *real* CartPole bottleneck is MDP estimation, not DP — see H5.
+| γ   | Eval return (VI = PI, any θ) |
+| --- | --- |
+| 0.5 | −0.0440 ± 0.007 |
+| 0.8 | −0.0433 ± 0.006 |
+| 0.9 | −0.0435 ± 0.007 |
+| 1.0 | −0.0435 ± 0.007 |
+
+**VI — sweeps to converge (σ = 0 across 10 seeds in every cell).** Grows log-linearly as θ → 0 and mildly as γ → 1:
+
+| γ \ θ | 10⁻¹ | 10⁻³ | 10⁻⁵ | 10⁻⁷ | 10⁻⁹ |
+| --- | --- | --- | --- | --- | --- |
+| 0.5 |  3 | 6 | 7 |  9 | 10 |
+| 0.8 |  4 | 6 | 8 | 10 | 11 |
+| 0.9 |  4 | 7 | 9 | 10 | 11 |
+| 1.0 |  4 | 7 | 9 | 10 | **12** |
+
+**PI — outer iterations / total policy-evaluation sweeps (σ = 0 everywhere).** Outer iters collapse to 2 or 3; the 1/θ dependence lives entirely in the PE column:
+
+| γ \ θ | 10⁻¹ | 10⁻³ | 10⁻⁵ | 10⁻⁷ | 10⁻⁹ |
+| --- | --- | --- | --- | --- | --- |
+| 0.5 | 2 / 5  | 2 / 7  | 2 / 9  | 2 / 10 | 2 / 11 |
+| 0.8 | 2 / 6  | 2 / 8  | 2 / 10 | 2 / 11 | 2 / 13 |
+| 0.9 | 2 / 6  | 2 / 8  | 2 / 10 | 2 / 11 | 2 / 13 |
+| 1.0 | 3 / 8  | 3 / 13 | 3 / 17 | 3 / 20 | **3 / 22** |
+
+*Bold cells are the `blackjack_{vi,pi}_default` reference point (γ=1.0, θ=10⁻⁹). Per-cell raw data lives in `results/blackjack_{vi,pi}_grid_g*/…/per_seed.csv`.*
+
+**Pareto corners of the grid.**
+
+- *Cheapest converger* — (γ=0.5, θ=10⁻¹): VI in 3 sweeps, PI in 2 outer / 5 PE-sweeps. Still lands on the same policy (eval −0.0440, indistinguishable from the reference).
+- *Tightest reference* — (γ=1.0, θ=10⁻⁹) = `*_default`: VI in 12 sweeps, PI in 3 outer / 22 PE-sweeps. 4× the VI cost of the cheapest corner, same policy.
+- *γ=1.0 cost anomaly* — the bottom row of the PI grid is the only place where total PE-sweeps nearly double vs the γ ≤ 0.9 rows at matching θ (e.g. 22 vs 13 at θ=10⁻⁹). Each PE restart at γ=1 is non-contractive, so PE has to ride θ all the way down; at γ ≤ 0.9 the inner contraction short-circuits it.
+
+**Why the shapes above look like they do.**
+
+- **VI sweep count ≈ log(1/θ) / log(1/γ)** — the standard contraction bound. Each ×10⁻² drop in θ adds ~2 sweeps, and the γ axis adds at most 2 sweeps from top to bottom because Blackjack's effective horizon caps what the γ-contraction can buy.
+- **PI outer iters collapse to 2–3 regardless of θ.** Howard's result: policy convergence is a combinatorial property (there are only finitely many deterministic policies) and doesn't need value convergence to high precision. The PE loop is what actually consumes compute.
+- **VI ≡ PI at the policy level** — 40 (γ, θ) × 10 seeds = 400 paired runs, all matching bit-for-bit. Expected for deterministic DP on the same MDP, but the cleanest empirical demonstration we have.
+
+**Methods note on PI's policy-evaluation step.** We use iterative Bellman-expectation sweeps to high precision (controlled by θ), i.e. *modified policy iteration*, rather than a direct linear solve of `(I − γT^π)V = R^π`. This is a deliberate choice: it keeps the code structure symmetric with VI for convergence-trace plots, avoids materialising `|S|×|S|` matrices for dict-keyed states, and is the standard practical variant taught in Sutton & Barto Ch. 4. It also makes the θ axis in the grid above meaningful for PI — with a direct solve θ would be irrelevant.
+
+**CartPole (empirical MDP, 5000 random rollouts per seed): n_bins grid.**
+
+| Grid | Eval (VI) | Eval (PI) | VI sweeps | PI outer / total |
+| --- | --- | --- | --- | --- |
+| (1,1,6,6)   | 491 ± 2  | 491 ± 2  | 470 | 4 / ~980   |
+| (3,3,6,6)   | 395 ± 15 | 395 ± 9  | 918 | ~5 / ~2550 * |
+| (3,3,8,12)  | 178 ± 18 | 165 ± 9  | 918 | ~7 / ~4000 |
+| (5,5,12,16) | 424 ± 20 | 422 ± 21 | 918 | ~10 / ~4100 |
+
+*One PI seed hit the `max_outer_iters=50` cap on (3,3,6,6); the other four converged in 4-9 outer iterations. Total-eval-sweep count was tight across all seeds because the bulk is spent in the first outer iteration's PE loop.*
+
+- At (1,1,6,6), VI converges in **~470 sweeps**, PI in **4 outer / ~980 total**. Same policy, same return (491 ± 2, near-optimal on CartPole-v1).
+- At (5,5,12,16), VI converges in **918 sweeps** (final ∆V ≈ 10⁻⁴, the θ threshold); PI takes **~10 outer / ~4100 total**. More states → more sweeps proportionally, but the VI/PI sweep-count *ratio* is preserved across grids.
+
+Interpretation across both envs: PI is better when the final policy is cheap to describe and PE can be truncated; VI is better when states are plentiful and high-precision value convergence is cheap per sweep. On Blackjack both finish in < 1 s; on the estimated CartPole MDP both still complete in < 2 s regardless of grid. The *real* CartPole bottleneck is MDP estimation, not DP — see H5.
 
 See `01_bj_dp_convergence.png` (Blackjack trace) and `08_cp_dp_nbins.png` (CartPole grid-resolution).
 
@@ -93,8 +127,8 @@ The FAQ requires **≥ 2 validated HPs per model**. We validated:
 
 | Model | HP 1 | HP 2 | HP 3 (bonus) |
 | --- | --- | --- | --- |
-| VI (Blackjack) | γ ∈ {0.8, 1.0} | θ ∈ {0.1, 10⁻⁹} | — |
-| PI (Blackjack) | γ (same grid) | θ (same grid) | — |
+| VI (Blackjack) | γ ∈ {0.5, 0.8, 0.9, 1.0} | θ ∈ {10⁻¹, 10⁻³, 10⁻⁵, 10⁻⁷, 10⁻⁹} | full γ × θ grid (20 cells) |
+| PI (Blackjack) | γ (same grid) | θ (same grid) | full γ × θ grid (20 cells) |
 | SARSA (Blackjack) | α ∈ {0.01, 0.05, 0.1, 0.2} | ε-decay ∈ {10k, 50k, 100k, 200k} | — |
 | Q-Learning (Blackjack) | α (same grid) | ε-decay (same grid) | — |
 | SARSA (CartPole) | α ∈ {0.05, 0.1, 0.2, 0.5} | γ ∈ {0.9, 0.95, 0.99, 1.0} | n_bins (4 grids) |
@@ -206,10 +240,10 @@ DQN uses the same schedule over steps instead of episodes (10k-step decay horizo
 
 ## Reproducibility
 
-- Seed list: `seeds=(0, 1, 2, 3, 4)` in every experiment spec.
+- Seed list: `seeds=(0, 1, 2, 3, 4)` for every experiment spec **except Blackjack DP (VI / PI), which uses `(0, …, 9)`** — 10 seeds, because per-cell cost is ~1 s and the wider grid benefits from tighter CIs.
 - All configs snapshotted into each run's `results/.../config.json` at run time.
-- Full pipeline reproducible via `bash scripts/run_all_experiments.sh` (~60 min wall-clock on an M-series MacBook).
-- Total wall-clock for this refresh: **≈ 60 min** (Blackjack 14 min, CartPole SARSA 10 min, CartPole Q-learning 9 min, CartPole VI 3 min, CartPole PI 30 s, DQN 15 min).
+- Full pipeline reproducible via `bash scripts/run_all_experiments.sh` (~65 min wall-clock on an M-series MacBook).
+- Total wall-clock for this refresh: **≈ 65 min** (Blackjack DP at 10 seeds: 7 min; Blackjack tabular at 5 seeds: 14 min; CartPole SARSA 10 min, CartPole Q-learning 9 min, CartPole VI 3 min, CartPole PI 30 s, DQN 15 min).
 
 ## What the report still needs (not in this doc)
 

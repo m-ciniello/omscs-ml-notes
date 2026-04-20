@@ -10,7 +10,13 @@ assignment/
 ├── RL_Report_Spring_2026_FAQ_v2.pdf  # clarifications
 ├── requirements.txt                   # pinned dependencies
 ├── src/                               # all source code
-│   ├── configs.py                     # single source of truth for experiments
+│   ├── configs/                       # experiment registry (one module per phase)
+│   │   ├── _registry.py               #   schema + sweep/register machinery
+│   │   ├── blackjack_dp.py            #   Phase 1: VI/PI on analytical Blackjack MDP
+│   │   ├── blackjack_tabular.py       #   Phase 2: SARSA/Q-L on Blackjack
+│   │   ├── cartpole_tabular.py        #   Phase 3: SARSA/Q-L on discretized CartPole
+│   │   ├── cartpole_dp.py             #   Phase 3b: VI/PI on estimated CartPole MDP
+│   │   └── dqn_ablation.py            #   Phase 4: DQN Rainbow-medium ablation
 │   ├── agents/                        # RL algorithms (VI, PI, SARSA, Q-Learning, DQN)
 │   ├── envs/                          # environment wrappers (Blackjack, CartPole)
 │   └── experiments/                   # multi-seed runner + result loader
@@ -22,9 +28,9 @@ assignment/
 
 ## Design principles
 
-- **Config-as-code.** Every experiment is a named entry in `src/configs.py`. Reproducing a result means running the registered experiment by name; no CLI flag soup.
-- **Config-snapshotted results.** Every result directory includes a copy of the exact config used, plus the full RNG seeds and git SHA at run time.
-- **Seed-aggregated metrics.** Every reported number is averaged over ≥ 5 independent seeds with variability bands (IQR or 95% CI) as required by the assignment FAQ.
+- **Config-as-code.** Every experiment is a named entry in the `src/configs/` package (one topic module per phase). Reproducing a result means running the registered experiment by name; no CLI flag soup.
+- **Config-snapshotted results.** Every result directory includes a copy of the exact config used (`config.json`). The runner refuses to overwrite existing `result.pkl` files: rerunning means either `rm -rf results/<experiment>` or passing `--overwrite`, so stale numbers can't silently leak into a report.
+- **Seed-aggregated metrics.** Every reported number is averaged over 10 independent seeds (`seeds=(0, …, 9)`) with variability bands (IQR or 95% CI), exceeding the FAQ minimum of 5.
 - **Figures from disk.** Figure generation is a separate pass over `results/`; it never re-runs experiments. This makes iterating on plot style free.
 - **Minimal dependencies.** Gymnasium for environments, NumPy/PyTorch for computation, matplotlib for plots. No `bettermdptools` — all MDPs are built from scratch.
 
@@ -52,7 +58,7 @@ python scripts/make_figures.py --list           # list available figure keys
 python scripts/make_figures.py --only bj_dp_convergence cp_dp_nbins
 ```
 
-See `src/configs.py` for the full list of registered experiments.
+See `src/configs/` (one module per phase) for the full list of registered experiments; `python scripts/run.py --prefix "" --no-run` prints the full registry.
 
 ## Status
 
@@ -61,4 +67,5 @@ See `src/configs.py` for the full list of registered experiments.
 - [x] Phase 2: tabular model-free (SARSA, Q-Learning)
 - [x] Phase 3: core experiments + HP sweeps + DP-on-estimated-CartPole-MDP + figures
 - [x] Phase 4: DQN + Rainbow ablation study (extra credit)
+- [ ] Rerun full campaign at 10 seeds under the refactored configs package
 - [ ] Phase 5: report + reproducibility sheet

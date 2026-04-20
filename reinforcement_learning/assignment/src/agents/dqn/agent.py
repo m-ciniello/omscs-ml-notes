@@ -1,8 +1,8 @@
 """DQN with optional Double / Dueling / PER / N-step.
 
 Four orthogonal flags (double, dueling, per, nstep) drive the Rainbow-medium
-ablation registered in configs.py. All four on is "Rainbow-medium" (minus
-C51 and NoisyNets, de-scoped up front).
+ablation registered in `src/configs/dqn_ablation.py`. All four on is
+"Rainbow-medium" (minus C51 and NoisyNets, de-scoped up front).
 """
 
 from __future__ import annotations
@@ -25,7 +25,8 @@ from src.agents.dqn.replay import (
 
 class DQNAgent:
     """DQN with optional Double / Dueling / PER / N-step. All HPs default to
-    sensible CartPole values; see configs.py for the ablation variants."""
+    sensible CartPole values; see `src/configs/dqn_ablation.py` for the
+    ablation variants."""
 
     name = "dqn"
 

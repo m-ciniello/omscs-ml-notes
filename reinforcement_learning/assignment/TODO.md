@@ -1,16 +1,17 @@
 # TODO
 
-Running list of follow-ups. Items below are surfaced by the final walkthrough
-review; keep this file up to date as we find more.
+Running list of follow-ups. Keep this file up to date as we find more.
 
 ## Before submission
 
-- [x] Rerun full campaign after the infra cleanup (`bash scripts/run_all_experiments.sh`, ~60 min). *Completed Apr 20, 2026. Log: `.logs/run_all_20260419_192100.log`.*
-- [x] Reconcile `ANALYSIS.md` numbers against the re-generated `results/`. *Completed. All table entries, sweep counts, and per-grid numbers now match the regenerated `results/` directly.*
-- [x] Call out PI's iterative-evaluation design choice in `ANALYSIS.md` (VI-vs-PI section or a methods footnote). *Added as a "Methods note" paragraph inside H1.*
-- [x] Prune redundant sweep points. *Done: Blackjack VI/PI γ/θ sweeps now only keep endpoints; CartPole VI sample-budget sweep dropped the 2000-episode interior point. See `configs.py` docstrings for the rationale.*
-- [x] Report DQN ablation variance as "fraction of seeds that hit the 500-step cap" alongside mean ± σ. *CartPole-v1 returns are bimodal so mean ± σ is misleading on its own. Added to H6 table and prose.*
+- [ ] Rerun full campaign at 10 seeds with the new split-configs layout (`bash scripts/run_all_experiments.sh`, ~100-120 min expected).
+- [ ] Extend `01_bj_dp_convergence.png` (or add a sibling figure) with a **total-Bellman-backups vs γ** panel comparing VI and PI directly. This is the metric that actually answers the rubric's "which method converges faster" question (outer iterations alone trivialise it — PI always wins by Howard's argument). Requires `sweep_deltas` length for VI and sum of PE-sweeps across outer iterations for PI; both are already logged in `result.pkl` per `src/agents/dp.py`. Aggregate across 10 seeds per γ.
+- [ ] Regenerate all figures (`python scripts/make_figures.py`) against the fresh `results/`.
+- [ ] Rewrite `ANALYSIS.md` headline numbers against the regenerated `results/`. All current numbers are from the pre-split, partially 5-seed run and are now stale. Move the Rainbow N-step duplicate-transition bug note from the old H6 draft into `ANALYSIS.md` as a "things that went wrong and how we found them" aside under the DQN section.
+- [ ] Draft the 8-page IEEE report on Overleaf (MDP descriptions, algorithm derivations, discretization strategy, H1–H5 narrative, AI Use Statement, IEEE bibliography).
+- [ ] Prepare `REPRO_RL_<gtid>.pdf` companion sheet with git SHA + READ-ONLY Overleaf link + run instructions.
 
 ## Nice-to-have / post-submission
 
 - [ ] Unit test: compare `Blackjack.transitions(s, a)` against empirical Gym rollout frequencies over ~1e5 trials per (s, a); assert total-variation distance < small threshold. Protects the hand-written analytical MDP from silently drifting away from the `Blackjack-v1` simulator used by SARSA / Q-learning.
+- [ ] Consider a `Study` abstraction for multi-axis experiments (would fold the γ-sweep + θ-sweep pair into one declarative object). Out of scope for this submission; useful for future iterations on the codebase.

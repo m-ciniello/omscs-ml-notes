@@ -3,8 +3,8 @@
 For DP on CartPole, see `cartpole_mdp.py` (builds a tabular MDP from
 rollouts). Default binning (3,3,8,12) = 864 non-terminal states — angle and
 angular velocity get finer bins because they dominate the control problem.
-This matches the FAQ starter grid and is the grid `src/configs.py` uses
-for all single-point CartPole experiments. Bounds match the FAQ clamps
+This matches the FAQ starter grid and is the grid the `src/configs/`
+package uses for all single-point CartPole experiments. Bounds match the FAQ clamps
 ([-2.4, 2.4], [-3, 3], [-0.2, 0.2], [-3.5, 3.5]); rare out-of-bounds
 values are clipped to the nearest edge (those transitions typically
 terminate the episode anyway).
