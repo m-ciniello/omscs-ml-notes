@@ -22,6 +22,18 @@ figures/
 # Batch-run log files
 .logs/
 
+# Development notes and throwaway scripts (not needed for reproduction)
+dev/
+
+# LaTeX build artifacts
+*.aux
+*.log
+*.fdb_latexmk
+*.fls
+*.out
+*.synctex.gz
+.build/
+
 # IDE
 .vscode/
 .idea/

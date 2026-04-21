@@ -50,10 +50,10 @@ solve it. We use two environments that sit at opposite ends of both axes:
 
 \textbf{Blackjack}~\cite{sutton2018} is inherently discrete and stochastic.
 State is a tuple $(\text{player sum}, \text{dealer card}, \text{usable ace})$
-with roughly 280 decision states~\cite{gym_blackjack}. Actions are
+with 360 non-terminal states. Actions are
 $\{\text{hit}, \text{stick}\}$. Reward is terminal: $+1$ for winning, $-1$
 for losing, $0$ for drawing, and is delivered only at episode end.
-Gymnasium's \texttt{Blackjack-v1} only exposes
+Gymnasium's \texttt{Blackjack-v1}~\cite{gym_blackjack} only exposes
 \texttt{step}/\texttt{reset} --- it does not expose $T$ or $R$ --- so
 running VI/PI requires an explicit model. We build the analytical MDP
 from scratch, enumerating hit and stick transitions state-by-state from
@@ -161,7 +161,7 @@ zero non-monotonic fluctuations across all 100 VI runs (10
 configurations $\times$ 10 seeds) and treat PE analogously by
 the same contraction argument.
 
-\textbf{SARSA} updates
+\textbf{SARSA}~\cite{sutton2018} updates
 $Q(s_t, a_t) \leftarrow Q(s_t, a_t) + \alpha[r_{t+1} + \gamma Q(s_{t+1},
 a_{t+1}) - Q(s_t, a_t)]$ using the action $a_{t+1}$ that the agent
 actually takes next. This makes it an \emph{on-policy} method: the
@@ -169,22 +169,23 @@ Q-values SARSA learns reflect the value of the behaviour policy
 \emph{including its own exploration noise}, because every $\varepsilon$-greedy
 random action feeds back into the target.
 
-\textbf{Q-Learning} uses the max-target
+\textbf{Q-Learning}~\cite{sutton2018} uses the max-target
 $Q(s_t, a_t) \leftarrow Q(s_t, a_t) + \alpha[r_{t+1} + \gamma \max_{a'}
 Q(s_{t+1}, a') - Q(s_t, a_t)]$, which ignores the action actually taken
 and instead evaluates the greedy successor. This makes it
 \emph{off-policy}: the agent can explore however it likes, but the
 Q-values converge toward $Q^*$ (the optimum), not $Q^\pi$ for the noisy
-behaviour policy. The practical consequence is that SARSA and Q-Learning diverge whenever exploration
-is \emph{costly} near the optimal path (e.g.\ cliff-walking), where SARSA
-accounts for the risk of random missteps and Q-Learning does not. Both
+behaviour policy. In practice, SARSA and Q-Learning diverge whenever
+exploration is \emph{costly} near the optimal path (e.g.\ cliff-walking,
+\cite[Example 6.6]{sutton2018}), where SARSA accounts for the risk of
+random missteps and Q-Learning does not. Both
 algorithms use $\varepsilon$-greedy exploration with a linearly-annealed
 schedule (specific decay horizons and floor in
 Sec.~\ref{sec:setup}).
 
 \textbf{DQN (extra credit)} replaces the tabular $Q$ with a two-hidden-layer
 MLP, uses an experience-replay buffer and a periodically updated target
-network, and optimizes the Huber loss with Adam~\cite{mnih2015}. Hidden
+network~\cite{mnih2015}, and optimizes the Huber loss with Adam. Hidden
 sizes and optimizer settings are in Sec.~\ref{sec:setup}. Our Rainbow-medium ablation toggles four orthogonal
 components on top of this vanilla DQN: Double DQN (decoupled max
 target~\cite{vanhasselt2016}), Dueling architecture (value/advantage split
@@ -450,8 +451,8 @@ $\gamma \leq 0.9$ to $3$ at $\gamma \geq 0.95$. At $K = 2$, PI
 is \emph{cheaper} than VI
 (ratios $0.75$--$0.77$): PE's one-backup-per-state sweeps offset
 the two extra improvement backups per outer round. At $K = 3$, the
-extra PE round plus third improvement step tips the balance back
-to VI by $17$--$21\%$ at $\theta = 10^{-9}$. PE itself saturates
+extra PE round plus third improvement step tips the balance the
+other way --- PI is $17$--$21\%$ more expensive than VI at $\theta = 10^{-9}$. PE itself saturates
 at $\approx 10$ sweeps regardless of $\gamma$ because Blackjack is
 a proper MDP with short expected horizon; the textbook ``PE
 explodes as $\gamma \to 1$'' pathology applies to continuing tasks,
@@ -502,8 +503,8 @@ closes those gaps to $\sim$$0.005$ and $\sim$$0.010$. Both
 algorithms prefer low $\alpha$ because Blackjack's sparse terminal
 rewards make single-episode targets high-variance --- high
 $\alpha$ overweights those noisy targets, low $\alpha$ averages
-them. The residual sub-$0.005$ gap is a finite-sample floor, not
-a structural one: tuned model-free \emph{approaches} DP on a
+them. The residual $\sim$$0.005$--$0.010$ gap is a finite-sample
+floor, not a structural one: tuned model-free \emph{approaches} DP on a
 clean exact MDP but does not close the gap at $200{,}000$ training
 episodes --- a concrete qualifier on H0. Q-Learning's preference for
 the slowest $\varepsilon$-decay schedule is consistent with the
@@ -722,12 +723,12 @@ trained for a matched 300-episode budget
 (Fig.~\ref{fig:dqn_ablation_bars}):
 \begin{itemize}
 \itemsep0em
-\item baseline DQN: $156.9 \pm 39.4$,
-\item + Double~\cite{vanhasselt2016}: $197.0 \pm 50.8$~~($\Delta = +40$),
-\item + Dueling~\cite{wang2016}: $124.7 \pm 30.1$~~($\Delta = -32$),
-\item + PER~\cite{schaul2016}: $213.7 \pm 70.2$~~($\Delta = +57$),
-\item + $n$-step~\cite{sutton1988}: $441.7 \pm 47.5$~~($\Delta = +285$),
-\item Rainbow-medium (all four): $447.1 \pm 56.4$~~($\Delta = +290$).
+\item baseline DQN: $157.2 \pm 36.0$,
+\item + Double~\cite{vanhasselt2016}: $196.8 \pm 77.9$~~($\Delta = +40$),
+\item + Dueling~\cite{wang2016}: $125.1 \pm 49.6$~~($\Delta = -32$),
+\item + PER~\cite{schaul2016}: $214.1 \pm 61.0$~~($\Delta = +57$),
+\item + $n$-step~\cite{sutton1988}: $441.9 \pm 59.9$~~($\Delta = +285$),
+\item Rainbow-medium (all four): $447.0 \pm 76.2$~~($\Delta = +290$).
 \end{itemize}
 Rainbow-full is indistinguishable from $n$-step alone within 95\% CI.
 Learning curves (Fig.~\ref{fig:dqn_learning_curves}) show DQN-baseline
@@ -750,20 +751,21 @@ The ablation story is sharper than we predicted. $n$-step alone
 captures essentially all of Rainbow's gain
 ($+285$ vs.\ Rainbow-full's $+290$, within noise); PER adds $+57$;
 Double adds $+40$; and Dueling \emph{actively regresses} ($-32$). A
-plausible mechanism: $n = 3$ returns shorten the effective credit-assignment
-horizon, which is the binding variance source early in training when
-CartPole episodes terminate in 10--50 steps, so $n$-step is the only
-intervention in our ablation that directly reduces 1-step bootstrap
-variance. PER reweights which transitions are replayed (variance
+plausible mechanism: $n = 3$ returns bootstrap from $n$ actual rewards
+instead of $1$, propagating reward signal $n \times$ faster and
+directly cutting 1-step bootstrap variance --- the binding variance
+source early in training when CartPole episodes terminate in 10--50
+steps, so $n$-step is the only intervention in our ablation that
+attacks it at the target. PER reweights which transitions are replayed (variance
 reduction on the replay side but not the target); Double refines the
 target's max (bias reduction but leaves bootstrap variance intact);
 Dueling splits a two-action output into value and advantage heads,
 which on a small MLP with well-correlated $Q$-values across actions
 costs gradient signal without buying a variance-reduction benefit ---
 hence the negative $\Delta$. Rainbow-full $\approx$ $n$-step alone
-means the weak ``components compose'' claim
+means the weaker claim that ``components compose''
 (Hessel et al.~\cite{hessel2018}) is \emph{not} supported at our scale.
-H0 does still win in the end: Rainbow-medium reaches $447$, above
+H0 still prevails in the end: Rainbow-medium reaches $447$, above
 the tabular $\sim$$298$ ceiling --- but the representation benefit
 only materializes once $n$-step returns are layered on.
 
@@ -800,9 +802,9 @@ narrowly) --- the envelopes bind at different grids, which is why
 
 \textbf{H1 (Blackjack DP).} Partially supported. Policies match
 to four significant figures at every $\gamma$, as predicted. The
-backup prediction is only right at high $\gamma$: VI cheaper than
-PI by $17$--$21\%$ for $\gamma \geq 0.95$, but PI \emph{cheaper}
-by $\sim 25\%$ for $\gamma \leq 0.9$. The driver is $K$
+backup prediction is only right at high $\gamma$: PI is $17$--$21\%$
+\emph{more} expensive than VI for $\gamma \geq 0.95$, but $23$--$25\%$
+\emph{cheaper} for $\gamma \leq 0.9$. The driver is $K$
 (PI outer iterations: 2 at low $\gamma$, 3 at high), not the
 contraction-rate story --- Blackjack's bounded horizon caps PE
 at $\approx 10$ sweeps regardless of $\gamma$.
