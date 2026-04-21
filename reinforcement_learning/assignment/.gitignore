@@ -14,10 +14,12 @@ env/
 # macOS
 .DS_Store
 
-# Experiment outputs (directories are recreated on demand by the runner
-# and by make_figures.py, so we don't need .gitkeep sentinels).
+# Experiment outputs — keep binary .pkl artifacts out of git (they are
+# large and regeneratable via scripts/run_all_experiments.sh).
 results/
-figures/
+# Figures are small (~1MB total) and committed so graders can view them
+# without running the full campaign.
+# figures/  -- intentionally NOT ignored
 
 # Batch-run log files
 .logs/
