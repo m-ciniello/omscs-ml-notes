@@ -27,8 +27,8 @@ assignment/
 │   ├── run_all_experiments.sh         #   full campaign in dependency order
 │   ├── make_figures.py                #   regenerate figures from results/
 │   └── smoke_test.py                  #   single-seed sanity check across all phases
-├── results/                           # experiment outputs (per-seed, pickled + JSON; gitignored)
-└── figures/                           # report-ready figures (generated from results/; gitignored)
+├── results/                           # experiment outputs (per-seed, pickled + JSON; gitignored, regenerate via run_all_experiments.sh)
+└── figures/                           # report-ready figures (committed for convenience; regenerated from results/ via make_figures.py)
 ```
 
 ## Design principles
@@ -58,6 +58,8 @@ python scripts/smoke_test.py
 bash scripts/run_all_experiments.sh
 
 # 4. Regenerate all report figures from stored results
+#    (Pre-generated figures are already committed under figures/ for
+#    convenience; this step overwrites them from freshly-computed results.)
 python scripts/make_figures.py
 ```
 
