@@ -13,5 +13,6 @@ Running list of follow-ups. Keep this file up to date as we find more.
 
 ## Nice-to-have / post-submission
 
+- [ ] Align figure filename prefixes with document figure order. After swapping the H1 figures in `rl_report.tex`, `figures/02_bj_policy_heatmap.png` now renders as Figure 1 and `figures/01_bj_dp_convergence.png` renders as Figure 2. The PDF output is correct (filenames don't show up in the rendered report), but for repo tidiness rename the files on disk, update `scripts/make_figures.py`, and update the `\includegraphics` paths.
 - [ ] Unit test: compare `Blackjack.transitions(s, a)` against empirical Gym rollout frequencies over ~1e5 trials per (s, a); assert total-variation distance < small threshold. Protects the hand-written analytical MDP from silently drifting away from the `Blackjack-v1` simulator used by SARSA / Q-learning.
 - [ ] Consider a `Study` abstraction for multi-axis experiments (would fold the γ-sweep + θ-sweep pair into one declarative object). Out of scope for this submission; useful for future iterations on the codebase.

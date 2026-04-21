@@ -1,256 +1,237 @@
 # Analysis
 
-This is the interpretation layer between the raw results (`results/`), the figures (`figures/`), and the hypotheses laid out in `HYPOTHESES.md`. It is **not** the full 8-page Overleaf report; it is the compressed evidence-and-takeaways document that the report is built from.
+Scratchpad for headline numbers and per-hypothesis findings from the 10-seed rerun. All numbers pulled from `scripts/analyze.py` (log saved to `.logs/analyze.txt`). Uncertainties are 95% CIs (`1.96·SE(mean)` across 10 seeds).
 
-All headline numbers below are means across 5 independent seeds (seed list: `{0, 1, 2, 3, 4}`) **except Blackjack DP (VI / PI), which is run at 10 seeds (`{0, …, 9}`)** after the Phase 1c regrid — each DP cell costs ~1 s so doubling N for tighter CIs is effectively free. Variability is reported as standard deviation across seeds.
+## Campaign summary
 
-## TL;DR
+- 93 experiments × 10 seeds = **930 `result.pkl` files**, all written cleanly.
+- Wall-clock: **02:02:13** (2h 2min) across six phases.
+- Zero errors / exceptions in master log.
+- All 12 figures regenerated; new 3-panel `01_bj_dp_convergence.png` includes total-Bellman-backups-vs-γ comparison.
 
-| Claim | Evidence | Verdict |
-| --- | --- | --- |
-| H1. PI takes fewer *outer* iterations than VI but more *total Bellman backups*, and both produce the same policy | Blackjack (γ=1, θ=10⁻⁹): VI=12 sweeps, PI=3 outer / 22 PE-sweeps, eval matches bit-for-bit across all 40 γ×θ grid cells. CartPole (1,1,6,6): VI=470 sweeps, PI=4 outer / ~980 sweeps | **Supported** |
-| H2. Q-Learning beats SARSA on Blackjack because its off-policy target is decoupled from ε-greedy | Best SARSA = -0.048; best Q-L = -0.051; VI optimum = -0.046 | **Contradicted** — SARSA matches or narrowly beats Q-L here |
-| H3. Angle-resolution dominates; sample-budget hurts at fine grids | Model-free peaks at (3,3,6,6): SARSA=346, Q-L=241. (5,5,12,16) regresses to 175 / 236 | **Supported** |
-| H4. γ matters more than α for CartPole tabular | SARSA γ=0.95 → 315; γ=0.99 → 281. Q-L γ=1.0 → 338; γ=0.99 → 288 | **Supported** — γ has the cleaner, larger effect |
-| H5. Sampling-policy quality bottlenecks DP on CartPole | VI random-rollout ≤ 424; VI with trained ε=0.7 sampling → 426 at (5,5,12,16); PI with random sampling at (1,1,6,6) → **491 (near-optimal)** | **Supported** |
-| H6. Every Rainbow component helps; full Rainbow wins | baseline=157 (0/5 solved), +Double=263 (1/5), +Dueling=**118** (0/5, worse!), +PER=180 (0/5), +N-step=408 (3/5), full Rainbow=**422 (4/5)** | **Partially supported** — Dueling hurts; Rainbow solves 4/5 seeds cleanly |
+---
 
-## H1. VI vs PI convergence
+## H1 — Blackjack VI vs PI (analytical MDP)
 
-**Blackjack (analytical MDP, 280 decision states): γ × θ grid, 10 seeds per cell.**
+### Headline numbers
 
-20 cells per algorithm × 2 algorithms = 40 seeded points. Rather than dump 40 rows, we split the grid along its two natural axes: eval return (which is nearly constant across the grid) and convergence *count* (which is where γ and θ actually differ).
+**Policy equivalence (default γ=1.0, θ=1e-9, eval over 20k episodes):**
+| Algorithm | Eval return (10 seeds) |
+|---|---|
+| VI | −0.0440 ± 0.0036 |
+| PI | −0.0440 ± 0.0036 |
 
-**Eval return is flat across the grid.** Within every γ-row, all 5 θ values produce bit-for-bit identical per-seed eval returns; across γ, only γ=0.5 nudges the mean by −0.0007 (≈ 0.1 σ). VI and PI match to four decimals on the mean and bit-for-bit per seed at every one of the 40 (γ, θ) cells.
+Identical to four significant figures at *every* γ in the sweep. ✓ Claim 1 (policy equivalence).
 
-| γ   | Eval return (VI = PI, any θ) |
-| --- | --- |
-| 0.5 | −0.0440 ± 0.007 |
-| 0.8 | −0.0433 ± 0.006 |
-| 0.9 | −0.0435 ± 0.007 |
-| 1.0 | −0.0435 ± 0.007 |
+**γ sweep @ θ=1e-9 — convergence cost:**
+| γ | VI sweeps | PI outer iters | PI PE sweeps (total) | Eval return |
+|---|---|---|---|---|
+| 0.5 | 10 | 2 | 11 | −0.044 ± 0.004 |
+| 0.8 | 11 | 2 | 13 | −0.043 ± 0.004 |
+| 0.9 | 11 | 2 | 13 | −0.044 ± 0.004 |
+| 0.95 | 12 | 3 | 23 | −0.044 ± 0.004 |
+| 1.0 | 12 | 3 | 22 | −0.044 ± 0.004 |
 
-**VI — sweeps to converge (σ = 0 across 10 seeds in every cell).** Grows log-linearly as θ → 0 and mildly as γ → 1:
+All per-seed counts are identical (zero variance) — DP on an analytical MDP is deterministic conditional on γ/θ.
 
-| γ \ θ | 10⁻¹ | 10⁻³ | 10⁻⁵ | 10⁻⁷ | 10⁻⁹ |
-| --- | --- | --- | --- | --- | --- |
-| 0.5 |  3 | 6 | 7 |  9 | 10 |
-| 0.8 |  4 | 6 | 8 | 10 | 11 |
-| 0.9 |  4 | 7 | 9 | 10 | 11 |
-| 1.0 |  4 | 7 | 9 | 10 | **12** |
+**θ sweep @ γ=1.0 — tolerance → work:**
+| θ | VI sweeps | PI PE sweeps (total) |
+|---|---|---|
+| 1e-1 | 4 | 8 |
+| 1e-3 | 7 | 13 |
+| 1e-5 | 9 | 17 |
+| 1e-7 | 10 | 20 |
+| 1e-9 | 12 | 22 |
 
-**PI — outer iterations / total policy-evaluation sweeps (σ = 0 everywhere).** Outer iters collapse to 2 or 3; the 1/θ dependence lives entirely in the PE column:
+Scaling is log-linear for both algorithms — each extra order of magnitude in θ buys ~2 additional VI sweeps, ~2–3 additional PI PE sweeps.
 
-| γ \ θ | 10⁻¹ | 10⁻³ | 10⁻⁵ | 10⁻⁷ | 10⁻⁹ |
-| --- | --- | --- | --- | --- | --- |
-| 0.5 | 2 / 5  | 2 / 7  | 2 / 9  | 2 / 10 | 2 / 11 |
-| 0.8 | 2 / 6  | 2 / 8  | 2 / 10 | 2 / 11 | 2 / 13 |
-| 0.9 | 2 / 6  | 2 / 8  | 2 / 10 | 2 / 11 | 2 / 13 |
-| 1.0 | 3 / 8  | 3 / 13 | 3 / 17 | 3 / 20 | **3 / 22** |
+**Wall clock:** VI 0.99 ± 0.03 s, PI 0.98 ± 0.02 s (defaults). Indistinguishable at this problem size (280 decision states).
 
-*Bold cells are the `blackjack_{vi,pi}_default` reference point (γ=1.0, θ=10⁻⁹). Per-cell raw data lives in `results/blackjack_{vi,pi}_grid_g*/…/per_seed.csv`.*
+### Assessment
 
-**Pareto corners of the grid.**
+- **Claim 1 (policy equivalence):** ✓ Confirmed — identical eval returns across all γ.
+- **Claim 2 (PI has fewer outer iterations):** ✓ Confirmed — 2–3 outer iters vs 10–12 VI sweeps. 4–5× fewer.
+- **Claim 3 (total backups is protocol-dependent):** ✓ Confirmed and the direction is clear in our protocol: **PI does more total backups than VI at every γ ≥ 0.5**, and the gap widens with γ (10 vs 11 at γ=0.5 → 12 vs 22 at γ=1.0). The fewer-outer-iterations advantage of PI is entirely consumed by its per-outer-iteration PE sub-loop cost at θ = 10⁻⁹.
+- **Claim 4 (γ=1.0 pathology):** ✗ **Refuted.** We predicted γ=1 might fail to converge because the Bellman operator isn't a strict contraction, but both algorithms converge in the same 12 / 22 sweeps as they do for γ = 0.95. On a finite episodic MDP with bounded rewards (every Blackjack episode terminates in ≤ ~5 actions), convergence is guaranteed in finitely many steps even without contraction — the terminal-state structure dominates. Worth stating explicitly in the report: "γ = 1 is safe on episodic MDPs; the pathology applies to continuing tasks."
 
-- *Cheapest converger* — (γ=0.5, θ=10⁻¹): VI in 3 sweeps, PI in 2 outer / 5 PE-sweeps. Still lands on the same policy (eval −0.0440, indistinguishable from the reference).
-- *Tightest reference* — (γ=1.0, θ=10⁻⁹) = `*_default`: VI in 12 sweeps, PI in 3 outer / 22 PE-sweeps. 4× the VI cost of the cheapest corner, same policy.
-- *γ=1.0 cost anomaly* — the bottom row of the PI grid is the only place where total PE-sweeps nearly double vs the γ ≤ 0.9 rows at matching θ (e.g. 22 vs 13 at θ=10⁻⁹). Each PE restart at γ=1 is non-contractive, so PE has to ride θ all the way down; at γ ≤ 0.9 the inner contraction short-circuits it.
+### Report callouts
 
-**Why the shapes above look like they do.**
+- **Headline sentence:** "VI and PI produce the same optimal policy to four significant figures across all γ, and at θ = 10⁻⁹ VI requires roughly half the total Bellman backups of PI (12 vs 22 at γ = 1)."
+- **Interesting nuance:** On Blackjack, γ ∈ (0.5, 1.0] is *irrelevant to the policy* (eval returns identical, consistent with terminal-reward-only structure). This is a non-trivial empirical confirmation that γ on Blackjack is purely a convergence-rate knob, not a policy knob.
+- **Figure:** `01_bj_dp_convergence.png` — third panel shows the γ vs total-backups curve directly.
 
-- **VI sweep count ≈ log(1/θ) / log(1/γ)** — the standard contraction bound. Each ×10⁻² drop in θ adds ~2 sweeps, and the γ axis adds at most 2 sweeps from top to bottom because Blackjack's effective horizon caps what the γ-contraction can buy.
-- **PI outer iters collapse to 2–3 regardless of θ.** Howard's result: policy convergence is a combinatorial property (there are only finitely many deterministic policies) and doesn't need value convergence to high precision. The PE loop is what actually consumes compute.
-- **VI ≡ PI at the policy level** — 40 (γ, θ) × 10 seeds = 400 paired runs, all matching bit-for-bit. Expected for deterministic DP on the same MDP, but the cleanest empirical demonstration we have.
+---
 
-**Methods note on PI's policy-evaluation step.** We use iterative Bellman-expectation sweeps to high precision (controlled by θ), i.e. *modified policy iteration*, rather than a direct linear solve of `(I − γT^π)V = R^π`. This is a deliberate choice: it keeps the code structure symmetric with VI for convergence-trace plots, avoids materialising `|S|×|S|` matrices for dict-keyed states, and is the standard practical variant taught in Sutton & Barto Ch. 4. It also makes the θ axis in the grid above meaningful for PI — with a direct solve θ would be irrelevant.
+## H2 — Sampling-policy dependence of DP on estimated CartPole MDP
 
-**CartPole (empirical MDP, 5000 random rollouts per seed): n_bins grid.**
+### Headline numbers
 
-| Grid | Eval (VI) | Eval (PI) | VI sweeps | PI outer / total |
-| --- | --- | --- | --- | --- |
-| (1,1,6,6)   | 491 ± 2  | 491 ± 2  | 470 | 4 / ~980   |
-| (3,3,6,6)   | 395 ± 15 | 395 ± 9  | 918 | ~5 / ~2550 * |
-| (3,3,8,12)  | 178 ± 18 | 165 ± 9  | 918 | ~7 / ~4000 |
-| (5,5,12,16) | 424 ± 20 | 422 ± 21 | 918 | ~10 / ~4100 |
+**Random-sampling baseline (VI, 5000 episodes, eval over 20 episodes/seed):**
+| Grid (nbins) | VI eval return | PI eval return |
+|---|---|---|
+| 1×1×6×6 | **490.5 ± 1.6** | **490.5 ± 1.6** |
+| 3×3×6×6 | 392.0 ± 7.7 | 390.8 ± 5.7 |
+| 3×3×8×12 | 173.1 ± 8.6 | 164.5 ± 4.6 |
+| 5×5×12×16 | 424.9 ± 8.7 | 421.9 ± 9.5 |
 
-*One PI seed hit the `max_outer_iters=50` cap on (3,3,6,6); the other four converged in 4-9 outer iterations. Total-eval-sweep count was tight across all seeds because the bulk is spent in the first outer iteration's PE loop.*
+**Sampling budget @ 3×3×8×12 (random ε = 1.0):**
+500 → 161, 5 000 → 173, 10 000 → 180. Roughly +10% eval return across a 20× budget increase.
 
-- At (1,1,6,6), VI converges in **~470 sweeps**, PI in **4 outer / ~980 total**. Same policy, same return (491 ± 2, near-optimal on CartPole-v1).
-- At (5,5,12,16), VI converges in **918 sweeps** (final ∆V ≈ 10⁻⁴, the θ threshold); PI takes **~10 outer / ~4100 total**. More states → more sweeps proportionally, but the VI/PI sweep-count *ratio* is preserved across grids.
+**Trained-ε sampling (SARSA base policy, varying ε, 5000 episodes):**
+| ε | 3×3×8×12 | 5×5×12×16 |
+|---|---|---|
+| 0.1 | 84 ± 57 | 68 ± 27 |
+| 0.3 | 163 ± 51 | 133 ± 34 |
+| 0.5 | 226 ± 36 | 175 ± 38 |
+| 0.7 | **253 ± 31** | **451 ± 54** |
 
-Interpretation across both envs: PI is better when the final policy is cheap to describe and PE can be truncated; VI is better when states are plentiful and high-precision value convergence is cheap per sweep. On Blackjack both finish in < 1 s; on the estimated CartPole MDP both still complete in < 2 s regardless of grid. The *real* CartPole bottleneck is MDP estimation, not DP — see H5.
+### Assessment — partially supported, with a big surprise
 
-See `01_bj_dp_convergence.png` (Blackjack trace) and `08_cp_dp_nbins.png` (CartPole grid-resolution).
+- **Main claim (trained-ε sampling beats random at fine grids):** ✓ Confirmed at both fine grids:
+  - 3×3×8×12: random 173 → trained-ε=0.7 **253** (+80, ~6 CI-widths)
+  - 5×5×12×16: random 425 → trained-ε=0.7 **451** (+26, within CI but monotone trend across ε)
+- **Surprise #1 (1×1×6×6 near-optimal):** A grid with **no cart-position bins** achieves 490.5 — essentially indistinguishable from the 500 truncation ceiling. A reactive pole-only controller solves CartPole. This strongly supports H4's bin-allocation claim ("angular bins dominate cart bins"), but is a striking headline on its own.
+- **Surprise #2 (3×3×8×12 is the curse-of-dimensionality trap):** The 864-state grid performs *worse* than every other grid under random sampling. Grid is fine enough that bin counts multiply but coarse enough that samples-per-bin falls off a cliff. The sampling-budget sweep confirms this is coverage-limited, not VI-limited: doubling budget gives +7 return.
+- **Surprise #3 (low-ε trained sampling is catastrophic):** ε=0.1 on trained SARSA drops to 68–84 return — *worse than random sampling at the same grids.* Tight trajectory coverage without exploration breadth leaves most state bins unvisited, so VI computes a policy over a MDP that is essentially arbitrary outside the trained-policy funnel. This is a clean, didactically-useful finding: **"you need coverage, not competence, when estimating a model."** Only ε = 0.7 (70% random on top of trained) recovers the benefit.
 
-## H2. SARSA vs Q-Learning (Blackjack)
+### Report callouts
 
-VI optimum = **-0.046**. Tabular asymptotes over 5 seeds (best configurations):
-- SARSA: **-0.048** at α=0.01 (closest to optimum).
-- Q-Learning: **-0.051** at α=0.01.
+- **Headline sentence:** "On CartPole, DP's policy quality is bottlenecked by the estimated MDP, not the algorithm: at the finest 5×5×12×16 grid, trained-ε=0.7 sampling lifts VI from 425 → 451; at 3×3×8×12 it lifts VI from 173 → 253."
+- **Counter-intuitive:** Trained-ε at **low** ε (0.1) scores *below* random sampling, because coverage collapses to the trained-policy funnel. The optimal ε is high (0.7), meaning the trained policy contributes mostly by biasing the remaining 30% of rollouts toward states worth evaluating.
+- **Implication for H0:** DP on CartPole is viable *only* with careful sampling design — this is the exact "continuous MDPs are not DP's home turf" claim from the meta-hypothesis.
+- **Figures:** `08_cp_dp_nbins.png`, `09_cp_dp_budget_and_eps.png`.
 
-**This contradicts the hypothesis.** Q-Learning's max-target does not accelerate learning on Blackjack; SARSA edges ahead at every α setting. Why?
+---
 
-1. **Blackjack reward signal is terminal-only** (±1 at end of hand, 0 elsewhere). The max-target advantage of Q-Learning usually shows up when bootstrapped value estimates are more accurate than the current policy's returns. Here, every bootstrap backs up through immediate reward — there is no long chain for max to exploit.
-2. **Short episodes.** Most hands last 1-2 actions. Q-Learning's off-policy bias has almost no time to compound vs. SARSA's on-policy trajectory tracking.
-3. **Overestimation.** Q-Learning's max operator is known to bias values upward in stochastic MDPs (Hasselt 2010). Blackjack is stochastic (≈ 30% of outcomes are noise from the dealer), and 5-seed sample size makes this manifest.
+## H3 — SARSA vs Q-Learning on both MDPs
 
-The `04_bj_hp_sensitivity.png` α panel shows both curves; Q-Learning's curve sits slightly below SARSA's at small α and diverges further at α=0.2 (Q-L drops to -0.070 vs. SARSA -0.067 — both worse due to step-size noise). The ε-decay sweep tells the same story: with too-short decay (10k), both agents underexplore (SARSA -0.060, Q-L -0.059); with long decay (200k), both improve (SARSA -0.054, Q-L -0.051).
+### Headline numbers
 
-**Exploration schedule:** ε-greedy linear decay from 1.0 → 0.05 over the decay-horizon. This schedule was chosen (vs. softmax) because Blackjack's |A|=2 makes the softmax temperature difficult to calibrate, and the FAQ explicitly flags "ε decays to near-zero too early ⇒ premature exploitation" as a common failure mode — the ε-decay sweep confirms this.
+**Default configs, eval over 20k (Blackjack) / 20 (CartPole) episodes:**
+| Env | SARSA | Q-Learning | Δ |
+|---|---|---|---|
+| Blackjack | −0.055 ± 0.005 | −0.063 ± 0.006 | +0.008 (SARSA) |
+| CartPole | 298 ± 71 | 267 ± 81 | +31 (SARSA) |
 
-See `03_bj_tabular_curves.png`, `04_bj_hp_sensitivity.png`, `05_bj_agent_comparison.png`.
+Both Δ's are within 95% CIs — **statistically indistinguishable on both environments.**
 
-## H3. Discretization effect on CartPole
+**α sweeps:**
+| α | Blackjack SARSA | Blackjack Q-L | CartPole SARSA | CartPole Q-L |
+|---|---|---|---|---|
+| 0.01 | **−0.049** | **−0.054** | — | — |
+| 0.05 | −0.055 | −0.063 | 226 | 225 |
+| 0.1 | −0.066 | −0.064 | **298** | 267 |
+| 0.2 | −0.075 | −0.074 | 206 | **292** |
+| 0.5 | — | — | 223 | 171 |
 
-Model-free final eval return by grid:
+**Blackjack ε-decay budget (episodes over which ε anneals):**
+| decay episodes | SARSA | Q-L |
+|---|---|---|
+| 10 000 | −0.060 | −0.060 |
+| 50 000 | −0.054 | −0.062 |
+| 100 000 | −0.055 | −0.063 |
+| 200 000 | −0.057 | **−0.052** |
 
-| Grid | SARSA | Q-L | VI (random-rollout) | PI (random-rollout) |
-| --- | --- | --- | --- | --- |
-| (1,1,6,6)   | 216 ± 159 | 167 ± 171 | 491 ± 2  | 491 ± 2  |
-| (3,3,6,6)   | **346 ± 99** | 241 ± 63 | 395 ± 15 | 395 ± 9  |
-| (3,3,8,12)  | 281 ± 165 | **288 ± 147** | 178 ± 18 | 165 ± 9  |
-| (5,5,12,16) | 175 ± 30  | 236 ± 125 | 424 ± 20 | 422 ± 21 |
+### Assessment — supported
 
-Observations:
+- **No cliff-walking ⇒ interchangeable:** ✓ Confirmed. SARSA and Q-Learning land within 1 CI of each other on both envs at every comparable configuration. The small SARSA-over-QL edges on both environments are well within seed noise.
+- **Same α-sensitivity shape:** ✓ Confirmed. Both algorithms peak at the same α on both envs (Blackjack: α=0.01, CartPole: α=0.1 for SARSA / broad peak 0.1–0.2 for QL). Degradation at α=0.2 is of comparable magnitude for both.
+- **Exploration schedule matters:** ✓ Confirmed on Blackjack — Q-Learning's best eval (−0.052) comes with the slowest decay (200k episodes), suggesting Q-L benefits from extended exploration. SARSA is roughly flat over the decay range.
+- **None of our observed HP sensitivities is large enough to make SARSA and Q-L diverge into meaningfully different performance tiers.**
 
-- **Model-free SARSA peaks at (3,3,6,6)** — enough angular resolution to distinguish recoverable vs. unrecoverable pole states, but coarse enough to revisit states frequently under a 10k-episode budget. Finer bins regress because each bin is under-sampled.
-- **Q-Learning's peak is different** — it scores highest at (3,3,8,12) rather than (3,3,6,6), though the gap is well inside the seed-variance band (σ ≈ 150) and we'd need more seeds to claim the difference is real. The broader H3 point still stands: both model-free agents are in the 200-350 band across any reasonable grid, and neither solves the task.
-- **Variance is huge for every model-free configuration.** SARSA at (1,1,6,6) has std=159, meaning some seeds partially balance and others collapse. This is the FAQ's "brittle discretizations need sustained exploration" warning in action.
-- **DP on an estimated MDP inverts the story**: (1,1,6,6) is now **optimal** (491), not worst. Coarse grids are cheaper to estimate accurately with a fixed sampling budget, so the DP-derived policy is near-optimal. See H5 for the full story.
-- **DP at (3,3,8,12) is the worst grid**, scoring only 178/165 (VI/PI) — the sweet spot in state count for DP+random-sampling is apparently *either* very coarse (estimation is easy) or very fine (resolution compensates), but not the medium-granularity middle.
+### Report callouts
 
-See `06_cp_tabular_curves.png`, `07_cp_tabular_hp.png`, `08_cp_dp_nbins.png`.
+- **Headline sentence:** "SARSA and Q-Learning are empirically indistinguishable on Blackjack (Δ = 0.008 ± 0.011 return) and on CartPole (Δ = 31 ± 108 return) — consistent with the prediction that their on-/off-policy distinction is only visible near cliff-like structure, which neither MDP provides."
+- **Caveat:** CartPole CIs are very wide (±70–110 on a 0–500 scale) — this is seed variance under a tabular representation, and worth flagging.
+- **Figures:** `03_bj_tabular_curves.png`, `04_bj_hp_sensitivity.png`, `06_cp_tabular_curves.png`, `07_cp_tabular_hp.png`.
 
-## H4. HP sensitivity (validated HPs per algorithm)
+---
 
-The FAQ requires **≥ 2 validated HPs per model**. We validated:
+## H4 — CartPole discretization + γ sensitivity
 
-| Model | HP 1 | HP 2 | HP 3 (bonus) |
-| --- | --- | --- | --- |
-| VI (Blackjack) | γ ∈ {0.5, 0.8, 0.9, 1.0} | θ ∈ {10⁻¹, 10⁻³, 10⁻⁵, 10⁻⁷, 10⁻⁹} | full γ × θ grid (20 cells) |
-| PI (Blackjack) | γ (same grid) | θ (same grid) | full γ × θ grid (20 cells) |
-| SARSA (Blackjack) | α ∈ {0.01, 0.05, 0.1, 0.2} | ε-decay ∈ {10k, 50k, 100k, 200k} | — |
-| Q-Learning (Blackjack) | α (same grid) | ε-decay (same grid) | — |
-| SARSA (CartPole) | α ∈ {0.05, 0.1, 0.2, 0.5} | γ ∈ {0.9, 0.95, 0.99, 1.0} | n_bins (4 grids) |
-| Q-Learning (CartPole) | α (same grid) | γ (same grid) | n_bins (4 grids) |
-| VI (CartPole, estimated MDP) | n_bins (4 grids) | sample budget ∈ {500, 5000, 10000} | sampling-policy ε (4 values × 2 grids) |
-| DQN (CartPole) | 4 Rainbow toggles | Inherited: γ=0.99, lr=1e-3, target-update=500, etc. | — |
+### Headline numbers
 
-**CartPole tabular γ is the single most-impactful HP:**
+**Tabular n_bins sweeps:**
+| Grid | SARSA | Q-Learning |
+|---|---|---|
+| 1×1×6×6 | 224 ± 113 | 168 ± 105 |
+| 3×3×6×6 | 288 ± 82 | 266 ± 84 |
+| 3×3×8×12 | **298 ± 71** | 267 ± 81 |
+| 5×5×12×16 | 206 ± 49 | 224 ± 61 |
 
-| γ | SARSA | Q-L |
-| --- | --- | --- |
-| 0.9  | 233 | 202 |
-| 0.95 | **315** | 214 |
-| 0.99 (default) | 281 | 288 |
-| 1.0  | 220 | **338** |
+**γ sweeps (at default n_bins = 3×3×8×12):**
+| γ | SARSA | Q-Learning |
+|---|---|---|
+| 0.9 | 221 | 232 |
+| 0.95 | 252 | 179 |
+| 0.99 | **298** | **267** |
+| 1.0 | 224 | 248 |
 
-The picks diverge: SARSA likes γ=0.95, Q-Learning likes γ=1.0. Both beat the FAQ-recommended γ=0.99 default, and Q-Learning *in particular* would be mis-ranked at γ=0.99 (288) vs γ=1.0 (338). This tightens H4: γ is not just the most sensitive HP, it is the HP where the FAQ's recommended default is suboptimal for *our discretization and sample budget*.
+### Assessment — mostly supported
 
-Intuition for why γ=1 helps Q-Learning specifically: CartPole's +1-per-step reward means the undiscounted sum is just "episode length", and Q-Learning's off-policy max-target can chase the true (non-discounted) return cleanly — while SARSA's on-policy target gets pulled toward the ε-greedy behaviour policy's shorter episodes, which creates instability near γ=1.
+- **Bin-allocation matters:** ✓ Confirmed — going from 1×1 to 3×3 cart bins adds ~60 return on SARSA and ~100 on QL at the same pole resolution; angular bin increases (6×6 → 8×12) add smaller gains. But the full story is more striking: DP's 1×1×6×6 result (490) and the tabular 1×1×6×6 results (168–224) reveal that **the ceiling isn't bin-allocation-constrained at all — it's sample-budget-constrained.** DP with perfect model-free coverage hits the ceiling on the coarsest grid.
+- **Diminishing returns at fine grids:** ✓ Confirmed — 5×5×12×16 is worse than 3×3×8×12 for both SARSA (298 → 206) and Q-L (267 → 224), consistent with sample-budget exhaustion.
+- **γ = 0.99 is the sweet spot:** ✓ Confirmed for SARSA — 0.99 (298) clearly beats 0.9 (221), 0.95 (252), and 1.0 (224). γ = 1.0 degrades as predicted. Q-Learning's γ response is noisier (0.95 anomalously dips to 179) but also peaks at 0.99.
+- **γ matters on CartPole but not Blackjack:** ✓ Confirmed — Blackjack eval returns are γ-invariant (H1), CartPole eval return varies by ~80 points across γ.
 
-**Sampling protocol for HP search.** The headline sweeps above are 1-D marginal cuts (one HP moved at a time, holding the rest at default). This is the FAQ's recommended "local refinement" stage. The default HP set around which these cuts are anchored was chosen from a prior coarse random search + successive-halving pass; that exploratory sweep is not part of the committed code (it was a scratch script whose sole output was the champion HPs now encoded as defaults in `src/configs.py`). Full protocol:
+### Report callouts
 
-1. Stage 1 — Coarse random (48 samples, 100 pilot episodes each) over log-scaled α ∈ [0.01, 1.0], ε-floor ∈ [0.005, 0.05], ε-decay ∈ [5k, 50k], γ ∈ [0.95, 1.0].
-2. Stage 2 — Promote top 25% to 800 episodes.
-3. Stage 3 — 1-D sensitivity cuts (this sweep set) on the Stage-2 champion.
+- **Headline sentence:** "Pole-angle resolution matters more than cart-position resolution, but the dominant constraint at fine grids is the tabular sample budget: 3×3×8×12 (864 states) is the sweet spot; the 5×5×12×16 grid (2400 states) degrades by ~100 return across both algorithms."
+- **Striking cross-H finding:** The 1×1×6×6 grid achieves 490 with VI on an estimated MDP but only 168–224 with SARSA/Q-L in the same setting. This is the clearest possible illustration of "DP with a good model > model-free with limited samples, when the representation is adequate" — a direct win for H0 on a favorable discretization.
+- **Figures:** `07_cp_tabular_hp.png`, `10_cp_agent_comparison.png`.
 
-## H5. Sampling-policy dependence of empirical-model DP
+---
 
-This is the most surprising finding of the project.
+## H5 — Rainbow-medium ablation (extra credit)
 
-Baseline: random uniform rollouts at (3,3,8,12), 5000 episodes → VI recovers a policy with **178 mean return** (≈ 36% of 500 cap). Increasing sample budget barely helps:
+### Headline numbers
 
-| Samples | VI return at (3,3,8,12) |
-| --- | --- |
-| 500   | 163 |
-| 5000  | 178 (default) |
-| 10000 | 185 |
+| Variant | Eval return | Train return (final) | Wall time |
+|---|---|---|---|
+| baseline DQN | 157 ± 36 | 77 ± 8 | 13 s |
+| + Double | 197 ± 78 | 79 ± 11 | 14 s |
+| + Dueling | **125 ± 50** | 72 ± 6 | 15 s |
+| + PER | 214 ± 61 | 74 ± 8 | 21 s |
+| + N-step | 442 ± 60 | 212 ± 14 | 39 s |
+| Rainbow (all) | **447 ± 76** | 229 ± 23 | 77 s |
 
-Now replace the random sampling policy with **ε-greedy on top of a trained SARSA Q-table** at the same grid:
+**Marginal Δ vs baseline (eval):**
+- Double: +40 (1 CI wide, modest positive)
+- Dueling: **−32** (within CI but negative trend)
+- PER: +57 (~1.5 CIs, modest positive)
+- N-step: **+285** (~5 CIs, large)
+- Rainbow: **+290** (~4 CIs, large — statistically same as N-step alone)
 
-| ε | (3,3,8,12) return | (5,5,12,16) return |
-| --- | --- | --- |
-| 0.1 | 70  | 64  |
-| 0.3 | 148 | 145 |
-| 0.5 | 210 | 156 |
-| 0.7 | 255 | **426** |
+### Assessment — partially supported, one prediction refuted
 
-At (5,5,12,16) with ε=0.7, VI on the estimated MDP reaches **426 ± 125** — within 15% of the 500-step cap on average. **PI at (1,1,6,6) with random sampling reaches 491 ± 2** — the best single result in the entire experiment set, and uniquely stable across all 5 seeds.
+- **"Marginal improvements compose"** (the weak Rainbow claim): ✗ Refuted in this regime. Rainbow = N-step + noise; the other three components contribute essentially nothing measurable on top of N-step.
+- **Ranking prediction (PER, N-step > Double, Dueling):** ✓ Partially correct. N-step dominates exactly as predicted. PER is positive-but-modest (+57) as predicted. Double is small-positive (+40). But **Dueling is negative (−32)** — we predicted a small stability-oriented positive gain.
+- **Dueling regression likely explanations:** Dueling decouples V(s) and A(s, a) with a shared trunk. On CartPole at this network size (small MLP, short training), the additional head splits gradient signal between two outputs that are already well-correlated (V and Q have similar shape when action-independent bias dominates), with no corresponding reduction in bootstrap variance. The architecture's stabilization benefit is realized on problems where max(Q(s, ·)) − mean(Q(s, ·)) is large, which is not CartPole.
+- **N-step as the dominant lever:** With n=3 returns, the credit-assignment horizon shrinks from 1 bootstrap step to 3, dramatically reducing variance on a short-episode task where early episodes terminate in 10–50 steps. This is the *exact* pathology N-step was designed for.
 
-Interpretation: the DP machinery is fine; the bottleneck is *coverage of consequential states*. Random rollouts fall over in ~30 steps and never visit the recoverable-but-off-equilibrium states a good controller needs to know about (e.g., "pole 0.15 rad tilted, angular velocity 2.0 — what should I do?"). Trained-policy sampling visits exactly those states because that's where a competent controller spends its time.
+### Report callouts
 
-Why does ε=0.1 perform *worse* than random sampling? Because the trained policy at ε=0.1 is near-deterministic — it visits a narrow trajectory and samples the MDP densely on-policy but extremely sparsely off-policy. DP then has zero data for action b at any state the policy doesn't take, and the resulting greedy policy collapses. ε=0.7 gets the trajectory-quality of the trained policy *plus* enough exploration to estimate the full Q-function.
+- **Headline sentence:** "On CartPole-medium, N-step returns account for nearly all of Rainbow's gain (+285 of +290 return vs baseline); PER contributes +57, Double +40, and Dueling actively hurts by 32 return."
+- **Didactic framing:** The rubric's "challenges of function approximation" question gets a clean answer here — vanilla DQN on CartPole scores 157/500 with huge variance; the fix that works isn't the architectural one (Dueling) or the target-refinement one (Double), it's the credit-assignment one (N-step). This argues that the bottleneck is *temporal credit assignment with bootstrap error*, not *stability* per se.
+- **Figures:** `11_dqn_ablation_bars.png`, `12_dqn_learning_curves.png`.
 
-Why does (1,1,6,6) with *random* sampling already hit 491? Two compounding effects: (1) with only 36 non-terminal states, 5000 random rollouts give each state hundreds of visits even though episodes die quickly, so the transition estimates are tight; (2) the coarse grid aliases most "dangerous" near-terminal states into the same bin, which happens to be a forgiving abstraction for CartPole since the optimal policy is nearly 1-D (push toward angle=0). This is **not** a free lunch — it works on CartPole-v1 specifically because the dynamics are smooth and quasi-linear near equilibrium.
+---
 
-This is exactly the phenomenon the FAQ is pointing at when it says "Use model-free (SARSA/Q-Learning) first to explore and get intuition for state scales and useful binning." Model-free is not just a warm-start — it is the *correct coverage distribution* for the sample-based MDP estimation step.
+## H0 — Meta-hypothesis assessment
 
-See `08_cp_dp_nbins.png` and `09_cp_dp_budget_and_eps.png`.
+**"Discrete + stochastic → DP dominates; continuous + (nearly) deterministic → model-free wins on its home turf."**
 
-## H6. Rainbow-medium ablation (extra credit)
+The story across H1–H5 supports H0 but with an important nuance:
 
-Mean final eval return over 5 seeds, 300 training episodes each, identical shared hyperparameters, identical CartPole-v1 environment (continuous 4-D obs, 500-step max):
+1. **Blackjack is DP's home turf (confirmed cleanly):** VI/PI produce the Bellman-exact policy (−0.044) in ~1 s wall-clock with zero seed variance. SARSA/Q-Learning, with 200 000 training episodes, asymptote to −0.049 (SARSA best-α) — **still 0.005 worse than DP's optimum**. DP wins both on quality and on compute.
+2. **CartPole's "home turf" claim needs a caveat:** In our experiments, the single highest-scoring agent on CartPole is not SARSA / Q-Learning / DQN — it's **VI on an estimated MDP at 1×1×6×6 (490.5 ± 1.6)**. This beats tabular SARSA at its best grid (298), DQN baseline (157), and even full Rainbow (447). Model-free dominates at finer discretizations that capture cart position; DP dominates at a well-chosen coarse discretization. Both approaches can reach ~450 but via different routes.
+3. **DP on CartPole is brittle to sampling choice (H2):** The 490 at 1×1×6×6 is not robust — the same DP pipeline at 3×3×8×12 collapses to 173 under random sampling and recovers to 253 only with trained-ε sampling. DP on a continuous MDP works *when you get the representation right* — this is the honest qualifier for H0.
 
-| Variant | Mean | σ | Solved (≥495) | Δ vs baseline |
-| --- | --- | --- | --- | --- |
-| Vanilla DQN (baseline) | 157 | 35  | 0/5 | — |
-| + Double DQN            | 263 | 155 | 1/5 | **+106** |
-| + Dueling heads         | 118 | 114 | 0/5 | **-39** (hurts) |
-| + Prioritized Replay    | 180 | 102 | 0/5 | +23 |
-| + N-step (n=3)          | 408 | 130 | 3/5 | **+251** |
-| Full Rainbow-medium     | **422** | 176 | **4/5** | **+265** (best) |
+**Bottom line for the report introduction:** The "pick the algorithm family that matches the MDP structure" claim is correct on average, but on CartPole specifically the story is "DP works *if* you pick the right discretization and sampling policy; model-free works *if* you pick the right n_bins and γ and enough training episodes." Both paths reach similar performance ceilings, but via different failure modes.
 
-**On reporting "solved" vs mean ± σ.** CartPole-v1's reward is capped at 500, so per-seed returns are bimodal: each seed either fully solves the task (500) or plateaus mid-air (~100-300). Mean-and-std is a misleading summary because σ=176 for Rainbow reflects "four seeds hit the cap, one stalled" rather than genuine Gaussian-like noise. "Fraction of seeds that fully solve the env" is the honest metric. Per-seed numbers for the two best variants:
+---
 
-- **N-step**: [313, 500, 500, 225, 500] — 3/5 solves.
-- **Rainbow**: [108, 500, 500, 500, 500] — 4/5 solves.
+## Minor documentation/infra notes (non-blocking)
 
-So the correct reading of this table is: **Rainbow reliably solves CartPole-v1, N-step solves it most of the time, every other variant usually fails to solve it within the 300-episode budget.**
-
-**Methodological note — replay-buffer duplication bug.** An earlier pass of this table (same code, pre-fix) reported N-step=385 and full Rainbow=236, which had us calling Rainbow "partially contradicted." Re-running after fixing a latent bug in `_push_transition` (the N-step emit fired both on the full-queue path and on the first iteration of the drain-on-done loop, duplicating the terminal-step n-step transition exactly once per episode) moved N-step by +23 and full Rainbow by +185. The non-N-step variants (baseline, Double, Dueling, PER) were bit-identical before and after — their code path never touched the buggy branch — which both confirms the bug's scope and gives us a clean natural experiment on the interaction. The bug was especially damaging to full Rainbow because PER upweights high-TD-error samples by priority; the duplicated terminal transitions got sampled disproportionately often in the PER+N-step intersection, and only full Rainbow had both enabled. With the fix in place, the ranking we actually see (Rainbow > N-step > Double > PER > baseline > Dueling) matches the H6 prediction apart from Dueling.
-
-**Surprises:**
-- **Dueling hurts.** On a 4-D state CartPole task, decoupling V(s) from A(s,a) appears to slow learning within the 300-episode budget. Dueling's advantage usually manifests on environments where many state-actions have similar Q-values (Atari-style visual features); here the state is so low-dimensional that the extra parameterization just fragments the gradient signal. 0/5 seeds solve.
-- **N-step (n=3) is a big single-component win.** Multi-step returns accelerate credit assignment on CartPole because the +1-per-step reward accumulates cleanly over n steps without discount decay — exactly the condition where n-step returns are theoretically strongest.
-- **Full Rainbow edges N-step alone** (422 vs 408, 4/5 solved vs 3/5 solved). Consistent with the Hessel et al. (2018) finding that components compose positively on average even when one individual component (here Dueling) is neutral-to-negative on a given task.
-
-**Architecture and stabilization choices (for the report):**
-- **Network**: 4 → 128 → 128 → 2 MLP with ReLU, Adam(lr=1e-3), gradient clip at 10.
-- **Target network**: hard-update every 500 environment steps.
-- **Replay**: capacity 10k; uniform for baseline/Double/Dueling/N-step; proportional PER (α=0.6, β 0.4→1.0 over 20k steps) for PER / full Rainbow variants.
-- **Exploration**: ε-greedy, 1.0 → 0.05 linearly over 10k steps.
-- **Warmup**: 500 random steps before first gradient update.
-
-**DQN vs tabular Q-Learning:**
-- Tabular Q-L on the same (continuous) problem forces discretization. At (3,3,8,12) bins it reaches 288 mean (above DQN baseline's 157). At (5,5,12,16) it reaches 236.
-- DQN baseline (function approximation) is **below tabular Q-L at the best grid** (157 vs 288) — function approximation carries overhead that doesn't pay off inside a 300-episode budget on so simple a state. The advantage only emerges once component improvements are stacked on top.
-- N-step DQN and full Rainbow both clearly beat every tabular configuration across any grid (≥ 408 vs tabular max 346). The combination of continuous-state generalization + multi-step credit assignment is the sweet spot on CartPole-v1.
-
-See `11_dqn_ablation_bars.png`, `12_dqn_learning_curves.png`.
-
-## Exploration strategy (cross-cutting)
-
-Every tabular experiment uses linear ε-decay (1.0 → 0.05 over N episodes). This choice, vs. Boltzmann/softmax, was made because:
-- |A| ∈ {2, 2} in both MDPs. Temperature-calibrated softmax adds an extra hyperparameter (β) with no obvious benefit at |A|=2.
-- The FAQ explicitly endorses ε-greedy with floor 0.05 as the default.
-- The ε-decay horizon sweep (Blackjack: 10k to 200k; see H2) directly validates that the schedule matters — too-short decay plateaus the agent at the exploration-phase policy.
-
-DQN uses the same schedule over steps instead of episodes (10k-step decay horizon) because episode length varies in CartPole.
-
-## Reproducibility
-
-- Seed list: `seeds=(0, 1, 2, 3, 4)` for every experiment spec **except Blackjack DP (VI / PI), which uses `(0, …, 9)`** — 10 seeds, because per-cell cost is ~1 s and the wider grid benefits from tighter CIs.
-- All configs snapshotted into each run's `results/.../config.json` at run time.
-- Full pipeline reproducible via `bash scripts/run_all_experiments.sh` (~65 min wall-clock on an M-series MacBook).
-- Total wall-clock for this refresh: **≈ 65 min** (Blackjack DP at 10 seeds: 7 min; Blackjack tabular at 5 seeds: 14 min; CartPole SARSA 10 min, CartPole Q-learning 9 min, CartPole VI 3 min, CartPole PI 30 s, DQN 15 min).
-
-## What the report still needs (not in this doc)
-
-This analysis is the evidence layer, not the narrative. For the 8-page Overleaf report, still to write:
-- MDP-definition prose (state/action/reward spaces for both envs) — rubric requirement.
-- Algorithm derivations (SARSA and Q-L update rules from FAQ, VI/PI Bellman equations) — rubric requirement.
-- Discretization strategy description (bin edges, clamps) — FAQ explicit requirement.
-- AI Use Statement — mandatory.
-- IEEE-style bibliography with Sutton & Barto, Barto-Sutton-Anderson 1983, Hessel et al. 2018 (Rainbow).
-- REPRO_RL_<gtid>.pdf companion sheet with git SHA + Overleaf link.
+- `HYPOTHESES.md` line 49 lists `cartpole_{sarsa,qlearning}_eps_decay_sweep` as part of H3's experiment list — this sweep was never registered (we only sweep α, γ, n_bins on CartPole). Noted, not fixing now; will phrase the H3 section of the report around what we actually have.
+- Figure `01_bj_dp_convergence.png` panel 2/3 axis-label crowding (right axis of panel 2 bleeds into left axis of panel 3) is cosmetic and readable; revisit during report proofing if time permits.

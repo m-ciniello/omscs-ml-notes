@@ -11,7 +11,7 @@ results directory, so it's safe to re-run as often as you want while
 iterating on styling.
 
 Figure index:
-    01_bj_dp_convergence.png        VI/PI convergence traces
+    01_bj_dp_convergence.png        VI/PI convergence traces + total-backups vs γ
     02_bj_policy_heatmap.png        VI-derived hit/stick policy grids
     03_bj_tabular_curves.png        SARSA vs Q-Learning training curves
     04_bj_hp_sensitivity.png        α / γ / ε-decay / n_episodes sweeps
@@ -42,6 +42,7 @@ sys.path.insert(0, str(REPO_ROOT))
 
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 import seaborn as sns
 
 from src.configs import _fmt_value
@@ -227,9 +228,13 @@ def fig_bj_dp_convergence() -> None:
     pi = _safe_load("blackjack_pi_default")
     if vi is None or pi is None:
         return
-    fig, axes = plt.subplots(1, 2, figsize=(10, 4), sharey=True)
 
-    # VI: sweep_deltas vs sweep number (one curve per seed + mean)
+    # Two panels: VI residual trace and PI per-outer-iter work at the
+    # default (γ=1.0, θ=1e-9) configuration. The total-backups-vs-γ
+    # story is covered exhaustively by Table II in the report (with
+    # exact counts and the full θ sweep), so we don't duplicate it here.
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4.2), constrained_layout=True)
+
     ax = axes[0]
     for r in vi:
         deltas = r.result["history"]["sweep_deltas"]
@@ -240,41 +245,34 @@ def fig_bj_dp_convergence() -> None:
     ax.set_yscale("log")
     ax.set_xlabel("Sweep")
     ax.set_ylabel("Bellman residual  max_s |V_new(s) − V_old(s)|")
-    ax.set_title("Value Iteration")
+    ax.set_title("Value Iteration: sweep deltas")
     ax.legend()
 
-    # PI: show two complementary views of "work done" per outer iteration.
-    #   - bars: eval_sweeps_per_outer (the actual cost of each outer iter,
-    #     since each iter runs a full policy-evaluation sub-loop)
-    #   - line: policy_changes_per_outer (how many states flipped actions,
-    #     which is what drives termination — PI stops when this hits 0)
-    # This avoids the log-scale pathology of plotting `bellman_residual_per_outer`
-    # directly, where outer-iter-1 often has residual 0 (V=0 policy=0 is a
-    # self-consistent starting point, so eval converges instantly).
+    # PI panel: bars = eval_sweeps_per_outer (actual per-iter cost),
+    # line = policy_changes_per_outer (what drives termination). Avoids
+    # the log-scale pathology of plotting bellman_residual_per_outer
+    # directly (outer-iter 1 often has residual 0: V=0, π=0 is a
+    # self-consistent starting point and PE converges instantly).
     ax = axes[1]
-
     _, sweeps_mean = pad_and_mean([r.result["history"]["eval_sweeps_per_outer"] for r in pi])
     _, changes_mean = pad_and_mean([r.result["history"]["policy_changes_per_outer"] for r in pi])
     outer = np.arange(1, len(sweeps_mean) + 1)
-
     ax.bar(outer, sweeps_mean, color="C1", alpha=0.7, edgecolor="black",
            linewidth=0.6, label="eval sweeps (mean)")
     ax.set_xlabel("Outer iteration")
     ax.set_ylabel("Eval sweeps per outer iteration")
     ax.set_xticks(outer)
-
     ax2 = ax.twinx()
     ax2.plot(outer, changes_mean, color="C3", linewidth=2, marker="o",
              markersize=6, label="policy changes (mean)")
     ax2.set_ylabel("States flipping action")
     ax2.grid(False)
-
     lines1, labels1 = ax.get_legend_handles_labels()
     lines2, labels2 = ax2.get_legend_handles_labels()
     ax.legend(lines1 + lines2, labels1 + labels2, loc="upper right")
-    ax.set_title("Policy Iteration")
+    ax.set_title("Policy Iteration: per-outer work")
 
-    fig.suptitle("Blackjack: DP convergence (10 seeds)", y=1.02)
+    fig.suptitle("Blackjack: DP convergence at defaults (γ=1.0, θ=1e-9; 10 seeds)")
     save(fig, "01_bj_dp_convergence.png")
 
 
@@ -379,23 +377,56 @@ def _sweep_bar(ax, runs_by_value: dict, title: str, xlabel: str,
 
 
 def fig_bj_hp_sensitivity() -> None:
-    """Two tabular panels (α / ε-decay) + one DP panel (γ).
+    """Four-panel eval-return sweep: DP (γ, θ) then tabular (α, ε-decay).
 
-    γ isn't swept for tabular Blackjack (undiscounted makes sense since the
-    task is a single hand), but is the headline DP study — worth showing on
-    the same figure to anchor the "DP has different HPs than tabular RL" story.
+    All panels share the y-axis (final eval return) so the reader can
+    compare the size of an HP-driven return swing across DP and tabular
+    families on the same scale. Convergence-cost data (sweep counts
+    across the same HPs) lives in Table II of the report; this figure
+    is strictly the performance story.
     """
-    tabular_sweep_config = [
-        ("alpha",       "Learning rate α",
-         [0.01, 0.05, 0.1, 0.2], lambda v: f"{v:g}"),
-        ("eps_decay",   "ε-decay episodes",
-         [10_000, 50_000, 100_000, 200_000], lambda v: f"{v//1000}k"),
-    ]
-    fig, axes = plt.subplots(1, 3, figsize=(13, 4), sharey=True)
+    fig, axes = plt.subplots(1, 4, figsize=(17, 4), sharey=True,
+                             constrained_layout=True)
     axes = np.atleast_1d(axes).flatten()
 
-    for panel_idx, (sweep_key, xlabel, values, value_label) in enumerate(tabular_sweep_config):
-        ax = axes[panel_idx]
+    ax = axes[0]
+    gamma_values = [0.5, 0.8, 0.9, 0.95, 1.0]
+    for agent, color, prefix in [
+        ("VI", "C0", "blackjack_vi_gamma_sweep_"),
+        ("PI", "C1", "blackjack_pi_gamma_sweep_"),
+    ]:
+        xs, means, errs = collect_sweep_points(
+            gamma_values, lambda v, p=prefix: f"{p}{_fmt_value(v)}"
+        )
+        errorbar_sweep(ax, xs, means, errs, color=color, label=agent,
+                       xlabels=[f"{v:g}" for v in xs])
+    ax.set_title("DP: Discount γ  (θ=1e-9)")
+    ax.set_xlabel("γ")
+    ax.legend(loc="lower right")
+
+    ax = axes[1]
+    theta_values = [0.1, 0.001, 1e-5, 1e-7, 1e-9]
+    theta_labels = ["1e-1", "1e-3", "1e-5", "1e-7", "1e-9"]
+    for agent, color, prefix in [
+        ("VI", "C0", "blackjack_vi_theta_sweep_"),
+        ("PI", "C1", "blackjack_pi_theta_sweep_"),
+    ]:
+        xs, means, errs = collect_sweep_points(
+            theta_values, lambda v, p=prefix: f"{p}{_fmt_value(v)}"
+        )
+        errorbar_sweep(ax, xs, means, errs, color=color, label=agent,
+                       xlabels=theta_labels[:len(xs)])
+    ax.set_title("DP: Tolerance θ  (γ=1.0)")
+    ax.set_xlabel("θ")
+
+    tabular_sweep_config = [
+        ("alpha",     "Learning rate α",
+         [0.01, 0.05, 0.1, 0.2], lambda v: f"{v:g}"),
+        ("eps_decay", "ε-decay episodes",
+         [10_000, 50_000, 100_000, 200_000], lambda v: f"{v//1000}k"),
+    ]
+    for offset, (sweep_key, xlabel, values, value_label) in enumerate(tabular_sweep_config):
+        ax = axes[2 + offset]
         for agent, color, prefix in [
             ("SARSA", "C2", f"blackjack_sarsa_{sweep_key}_sweep_"),
             ("Q-Learning", "C3", f"blackjack_qlearning_{sweep_key}_sweep_"),
@@ -407,32 +438,14 @@ def fig_bj_hp_sensitivity() -> None:
                            xlabels=[value_label(v) for v in xs])
         ax.set_title(f"tabular: {xlabel}")
         ax.set_xlabel(xlabel)
-        if panel_idx == 0:
+        if offset == 0:
             ax.legend(loc="lower right")
 
-    # Third panel: DP γ sweep at the reference θ=1e-9. This is the
-    # `blackjack_{vi,pi}_gamma_sweep_*` 1-D sweep — on Blackjack the
-    # optimal policy is γ-invariant (rewards are terminal), so eval
-    # return should be roughly flat while convergence count moves.
-    ax = axes[2]
-    gamma_values = [0.5, 0.8, 0.9, 0.95, 1.0]
-    for agent, color, prefix in [
-        ("VI", "C0", "blackjack_vi_gamma_sweep_"),
-        ("PI", "C1", "blackjack_pi_gamma_sweep_"),
-    ]:
-        xs, means, errs = collect_sweep_points(
-            gamma_values, lambda v, p=prefix: f"{p}{_fmt_value(v)}"
-        )
-        errorbar_sweep(ax, xs, means, errs, color=color, label=agent,
-                       xlabels=[f"{v:g}" for v in xs])
-    ax.set_title("DP: Discount γ (θ=1e-9)")
-    ax.set_xlabel("γ")
-    ax.legend(loc="lower right")
-
     axes[0].set_ylabel("Final eval return")
-    fig.suptitle("Blackjack: 1-D hyperparameter sweeps (10 seeds each, 95% CI)",
-                 y=1.03)
-    fig.tight_layout()
+    fig.suptitle(
+        "Blackjack: 1-D hyperparameter sweeps — final eval return "
+        "(10 seeds, 95% CI)"
+    )
     save(fig, "04_bj_hp_sensitivity.png")
 
 
