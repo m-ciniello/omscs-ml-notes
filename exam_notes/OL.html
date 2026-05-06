@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CS 7641 — Unit 2: Optimization & Bayesian Learning Cheat Sheet</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 11.5px;
+    color: #1a1a1a;
+    background: #fff;
+    padding: 18px 22px;
+    line-height: 1.45;
+  }
+
+  h1 {
+    font-size: 15px;
+    font-weight: 600;
+    border-bottom: 2px solid #1a1a1a;
+    padding-bottom: 4px;
+    margin-bottom: 10px;
+  }
+
+  h2 {
+    font-size: 11.5px;
+    font-weight: 600;
+    background: #1a1a1a;
+    color: #fff;
+    padding: 2px 6px;
+    margin: 10px 0 5px;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+
+  h3 {
+    font-size: 11.5px;
+    font-weight: 600;
+    margin: 7px 0 2px;
+    border-bottom: 0.5px solid #ccc;
+    padding-bottom: 1px;
+  }
+
+  .cols {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  p { margin: 2px 0 4px; }
+
+  ul { margin: 2px 0 4px; padding-left: 15px; }
+  li { margin: 1px 0; }
+
+  .box {
+    background: #f5f5f3;
+    border: 0.5px solid #bbb;
+    border-radius: 4px;
+    padding: 5px 7px;
+    margin: 4px 0;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10.5px;
+    line-height: 1.6;
+    white-space: pre;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10.5px;
+    margin: 3px 0;
+  }
+  td, th {
+    padding: 2px 5px;
+    border: 0.5px solid #ccc;
+    text-align: left;
+  }
+  th {
+    background: #f0f0ee;
+    font-weight: 600;
+  }
+
+  .warn { color: #b91c1c; font-weight: 500; }
+  .ok   { color: #166534; font-weight: 500; }
+
+  hr {
+    border: none;
+    border-top: 1.5px solid #ddd;
+    margin: 10px 0;
+  }
+
+  @media print {
+    body { padding: 12px 16px; }
+    .cols { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<h1>CS 7641 — Unit 2: Optimization, Information Theory &amp; Bayesian Learning &nbsp;<span style="font-size:11px;font-weight:400">Quick Reference</span></h1>
+
+<div class="cols">
+
+<!-- LEFT COLUMN -->
+<div>
+
+  <h2>1 · Randomized Optimization</h2>
+
+  <h3>Setup &amp; When to Use</h3>
+  <ul>
+    <li><b>Goal:</b> argmax_x f(x) ≡ argmin_x loss(x); all algos here are <em>derivative-free</em></li>
+    <li><b>Use when:</b> X is <b>discrete</b> · f is a <b>black box</b> · f is <b>non-differentiable</b> — i.e. gradient methods are unavailable</li>
+    <li><b>Neighbor</b> N(x) = states "one small change" from x (definition is part of problem setup)</li>
+    <li><b>Apps:</b> Neural arch. search (AmoebaNet = GA, DARTS = differentiable relaxation), hyperparam tuning, TSP, scheduling, RL with sparse reward</li>
+    <li class="warn">If f is continuous &amp; differentiable, use gradients — far more sample-efficient (gradient gives d directional pieces of info per eval; neighbor sampling gives 1)</li>
+  </ul>
+  <table>
+    <tr><th>State representation</th><th>Neighbor =</th></tr>
+    <tr><td>Bit string</td><td>flip 1 bit (Hamming-1)</td></tr>
+    <tr><td>Permutation (TSP tour)</td><td>swap 2 cities</td></tr>
+    <tr><td>Graph coloring</td><td>change 1 vertex's color</td></tr>
+    <tr><td>NN architecture</td><td>add / remove / resize 1 layer</td></tr>
+  </table>
+
+  <h3>Randomized Hill Climbing (RHC)</h3>
+  <ul>
+    <li>Sample random neighbor → accept only if it strictly improves objective ("improving-only")</li>
+    <li>Derivative-free; uses objective evaluations only</li>
+    <li>Sampling many neighbors per step ⇒ approaches greedy hill climbing</li>
+    <li class="warn">Stuck at local optima / plateaus (no admissible move ⇒ stalls)</li>
+    <li class="warn">Finite state space does NOT guarantee reaching global optimum</li>
+    <li>Near a local optimum: improving neighbors get rarer ⇒ expected improvement → 0</li>
+    <li><b>Fix:</b> random restarts, sideways moves</li>
+  </ul>
+
+  <h3>Simulated Annealing (SA)</h3>
+  <p><b>Idea:</b> RHC stalls at local optima; SA escapes by <em>occasionally accepting worse moves</em>, with probability decaying over time — explore early, exploit late. <b>Metaphor:</b> heat metal so atoms move freely, then cool slowly to settle into the lowest-energy crystal; cool too fast (quench) ⇒ frozen in a defective local minimum.</p>
+
+  <div class="box">Metropolis acceptance — "uphill" always means candidate is WORSE:
+
+  ΔE > 0 (uphill, worse):    P(accept) = exp(−ΔE / T)
+  ΔE ≤ 0 (downhill, better): accept always (probability 1)
+
+For minimization (cost/loss C):  ΔE = C(candidate) − C(current)
+For maximization (fitness f):    ΔE = f(current) − f(candidate)
+                                 (equivalently: treat −f as a cost)</div>
+  <ul>
+    <li><b>High T</b> → uphill moves likely (exploration); T → ∞ ≈ random walk</li>
+    <li><b>Low T</b> → behaves greedily (exploitation); T → 0 ≈ RHC</li>
+    <li>Acceptance depends on <b>ΔE</b> (difference), not absolute energies</li>
+    <li><b>Bigger downhill = exponentially less likely accepted</b> — algo prefers small detours over big plunges</li>
+    <li>Derivative-free; no gradient/Hessian needed</li>
+    <li class="warn">Beneficial moves are NOT accepted with exp(+ΔE/T) — they're accepted w.p. 1</li>
+    <li class="warn">Track the <em>best ever seen</em>, not just current state — SA can wander away from a great solution</li>
+  </ul>
+
+  <h3>SA Cooling Schedules</h3>
+  <table>
+    <tr><th>Schedule</th><th>Formula</th><th>Notes</th></tr>
+    <tr><td>Logarithmic</td><td>T_t = c / log(1+t)</td><td class="ok">Geman–Geman: converges to global opt w.p. 1; impractically slow</td></tr>
+    <tr><td>Geometric</td><td>T_t = T₀ · α^t &nbsp; (i.e. T_{t+1} = α·T_t), &nbsp; α ≈ 0.9–0.99</td><td>Practical workhorse; loses guarantee but fast</td></tr>
+    <tr><td>Linear</td><td>T_t = T₀ − β·t</td><td>Rare; tends to cool too uniformly</td></tr>
+  </table>
+  <p><b>Tuning:</b> pick T₀ high enough to accept ~80% of worse moves initially; pick α/β to balance speed vs. quenching risk.</p>
+
+  <h3>Genetic Algorithms (GA)</h3>
+  <p><b>Idea:</b> RHC/SA explore one state; GA maintains a <em>population</em> of N candidates and recombines them via <b>crossover</b>. Two parents in different basins can produce a child inheriting good features from each — reaching regions neither parent could find alone.</p>
+  <p><b>One generation:</b></p>
+  <ol style="margin:2px 0 4px;padding-left:18px">
+    <li><b>Selection:</b> sample N parents w/ probability ∝ fitness (roulette wheel)</li>
+    <li><b>Crossover</b> (prob pc): pair parents, swap substrings → children</li>
+    <li><b>Mutation</b> (prob pm per bit): flip random bits for novelty</li>
+    <li><b>Replacement:</b> offspring become next generation (+ optional elitism: force-keep top parents)</li>
+  </ol>
+  <div class="box">Single-point crossover at cut k=3:
+  Parent 1: 1 0 1 | 1 0
+  Parent 2: 0 1 0 | 1 1
+  Child 1:  1 0 1   1 1
+  Child 2:  0 1 0   1 0</div>
+  <p><b>Variants:</b> tournament selection (pick k random, keep best), two-point / uniform crossover, rank selection, elitism. Tournament is most common in practice — less sensitive to fitness scale than roulette.</p>
+
+  <h3>Schema Theorem (Holland)</h3>
+  <p><b>Schema H</b> = pattern w/ fixed bits + wildcards (e.g. <code>1*0*</code>). A length-l bit string is an instance of 2ˡ schemas — search is implicitly parallel over schemas, not just strings.</p>
+  <div class="box">o(H) = order        = # fixed bits             (low o → robust to mutation)
+δ(H) = defining len = leftmost-rightmost fixed-bit gap (small δ → robust to crossover)
+
+Selection (roulette, fitness-proportionate):
+  E[#copies of x] = N · f(x) / Σf
+
+Crossover survival (single-point, prob pc):
+  P(survive) = 1 − pc · δ(H) / (l − 1)
+
+Mutation survival (bitwise, prob pm):
+  P(survive) = (1 − pm)^o(H)
+
+Schema theorem (combined, lower bound):
+  E[m(H,t+1)] ≥ m(H,t) · f̄(H)/f̄ · [1 − pc·δ(H)/(l−1)] · (1−pm)^o(H)
+                         ────────   ──────────────────   ─────────────
+                         selection    crossover survive    mutation survive</div>
+  <ul>
+    <li><b>Selection</b> (helpful): high-fitness schemas multiply by f̄(H)/f̄ each generation</li>
+    <li><b>Crossover destruction</b> (hurts): cut in defining region breaks H ⇒ <em>short</em> schemas (small δ) survive better</li>
+    <li><b>Mutation destruction</b> (hurts): every fixed bit must avoid flipping ⇒ <em>low-order</em> schemas (small o) survive better</li>
+    <li class="ok"><b>Building blocks:</b> short, low-order, high-fitness schemas grow exponentially; GA assembles them via crossover into longer high-fitness schemas</li>
+    <li class="warn">Building-blocks <em>hypothesis</em> is empirically contested (deceptive functions exist where good substructures don't combine well); the theorem <em>inequality</em> itself holds</li>
+  </ul>
+
+  <hr>
+  <h2>2 · Information Theory</h2>
+
+  <h3>Self-Information (the bedrock)</h3>
+  <p><b>How surprising is event x?</b> The unique function that is monotone-decreasing in P(x), zero when P(x)=1, and <em>additive for independent events</em> is the log:</p>
+  <div class="box">I(x) = −log P(x)
+   log₂ → bits     ln → nats     log₁₀ → dits</div>
+  <ul>
+    <li>Rare events ⇒ high surprise; certain events ⇒ 0 surprise</li>
+    <li><b>Independence ⇒ additive:</b> I(x,y) = I(x) + I(y) (this <em>forces</em> the log)</li>
+    <li>Examples (bits): fair coin → 1; loaded die w/ P(6)=0.5 → outcome "6" carries 1 bit (lowest info on that die)</li>
+  </ul>
+
+  <h3>Entropy — average surprise</h3>
+  <div class="box">H(X) = E[I(X)] = −Σₓ P(x) log P(x)</div>
+  <p><b>Three equivalent lenses</b> on the same number:</p>
+  <ul>
+    <li><b>Uncertainty</b> — how unpredictable X is</li>
+    <li><b>Avg info per sample</b> — how much you "learn" each observation</li>
+    <li><b>Compression bound</b> (Shannon) — min avg bits/symbol; lower H ⇒ better compression</li>
+  </ul>
+  <ul>
+    <li><b>Range:</b> 0 (deterministic) ≤ H(X) ≤ log n (uniform = max)</li>
+    <li>Fair coin: H = 1. Fair 6-die: H = log₂6 ≈ 2.585. Loaded die [0.5, 0.1×5]: H ≈ 2.16</li>
+  </ul>
+
+  <h3>Source Coding &amp; Huffman</h3>
+  <p><b>Designing an encoding</b> = picking a map symbol → bit-string. To transmit "ABC," concatenate code(A)·code(B)·code(C); receiver decodes the bit stream back. <b>Goal:</b> minimize avg bits per symbol L = Σ pᵢ·|code(i)|.</p>
+
+  <p><b>Why variable-length wins:</b> fixed-length (A=00, B=01, C=10) costs 2 bits each. But if P(A)=0.5, give A a 1-bit code and let rarer symbols pay more → lower average. <em>Frequent → short, rare → long.</em> The "ideal" length for symbol i is −log₂ pᵢ (its self-information).</p>
+
+  <p><b>Prefix code constraint:</b> no codeword is a prefix of another (e.g. can't have A=0 AND B=01 — receiving <code>01</code> would be ambiguous). Prefix codes are <em>instantaneously decodable</em>: parse a bit-stream symbol-by-symbol with no delimiters. By Kraft's inequality, restricting to prefix codes loses no optimality.</p>
+
+  <p><b>Shannon's source coding theorem</b> — for i.i.d. symbols drawn from distribution P, any uniquely decodable code obeys:</p>
+  <div class="box">H(X)  ≤  L  &lt;  H(X) + 1
+
+X = one random symbol from the alphabet (a single "A", "B", or "C" — NOT a message like "ABC")
+L = expected bits per individual symbol</div>
+  <p>Entropy is the <em>information lower bound</em>: no code averages fewer than H bits to encode <em>each</em> symbol on its own. (For an n-symbol message, total expected bits ≈ n·L ≥ n·H.)</p>
+
+  <p><b>Huffman coding</b> — optimal prefix code, built by repeated merging:</p>
+  <ol style="margin:2px 0 4px;padding-left:18px">
+    <li>Sort symbols by probability</li>
+    <li>Merge the two smallest into a super-symbol with summed probability</li>
+    <li>Repeat until one node (root) remains</li>
+    <li>Assign 0/1 to branches → codeword = path from root to leaf</li>
+  </ol>
+
+  <p><b>Worked example:</b> P(A)=0.5, P(B)=0.2, P(C)=0.2, P(D)=0.1.</p>
+  <div class="box">Sort:  D(0.1)  B(0.2)  C(0.2)  A(0.5)
+
+Merge D+B → DB(0.3);  Merge C+DB → CDB(0.5);  Merge A+CDB → root(1.0)
+
+            ROOT
+           0/  \1
+           A    CDB
+              0/  \1
+              C    DB
+                  0/  \1
+                  D    B
+
+Codes:  A→0,  C→10,  D→110,  B→111
+
+H(X) = −Σ pᵢ log₂ pᵢ ≈ 1.761 bits/symbol   ← Shannon lower bound
+L    = 0.5·1 + 0.2·2 + 0.1·3 + 0.2·3 = 1.80 bits/symbol  ← Huffman
+Overhead = L − H ≈ 0.04 bits/symbol         (well under 1, per Shannon)</div>
+
+  <p class="ok"><b>Why L &gt; H here:</b> the distribution is non-dyadic (e.g. −log₂(0.2) ≈ 2.32 isn't an integer), so Huffman has to round lengths up. <b>Dyadic distributions</b> — every pᵢ a negative power of 2 (½, ¼, ⅛, …) — have integer ideal lengths and Huffman hits L = H exactly. (E.g. P = {0.5, 0.25, 0.25}: H = L = 1.5 bits/symbol.)</p>
+
+  <h3>Joint &amp; Conditional Entropy</h3>
+  <div class="box">Joint:        H(X,Y) = −ΣΣ P(x,y) log P(x,y)
+Conditional:  H(Y|X) = Σₓ P(x) · H(Y | X=x)
+
+Chain rule:   H(X,Y) = H(X) + H(Y|X)</div>
+  <p><b>Read chain rule:</b> total uncertainty about (X,Y) = uncertainty about X + remaining uncertainty about Y after seeing X. Pure accounting identity.</p>
+  <ul>
+    <li class="ok"><b>Conditioning never hurts (on average):</b> H(Y|X) ≤ H(Y), with equality iff X ⊥ Y</li>
+    <li>Beware: for specific x, H(Y|X=x) <em>can</em> exceed H(Y); only the average is bounded</li>
+    <li class="ok"><b>Independence ⇒ additivity:</b> X ⊥ Y ⇒ H(X,Y) = H(X) + H(Y); n iid samples carry <b>n·H(X)</b> bits total (<em>linear</em> in n, not sub-)</li>
+  </ul>
+
+  <h3>Mutual Information</h3>
+  <div class="box">I(X;Y) = H(Y) − H(Y|X)         (uncertainty reduction)
+       = H(X) − H(X|Y)         (symmetric flip)
+       = H(X) + H(Y) − H(X,Y)  (inclusion-exclusion)
+       = D_KL(P(X,Y) ‖ P(X)P(Y))   ← key identity</div>
+  <p><b>Read:</b> "how much does knowing X tell you about Y?" Equivalently, "how far is the joint from independence?" (via the KL identity).</p>
+
+  <p><b>Why all four forms are equal</b> (chain rule + marginalization):</p>
+  <div class="box">Chain rule: H(X,Y) = H(X) + H(Y|X)  ⇒  H(Y|X) = H(X,Y) − H(X)
+
+  H(Y) − H(Y|X) = H(Y) − [H(X,Y) − H(X)]
+               = H(X) + H(Y) − H(X,Y)        ← inclusion-exclusion
+By symmetry (swap X↔Y in chain rule), this also equals H(X) − H(X|Y).
+
+KL form: expand H(X) + H(Y) − H(X,Y) into log-sums, then use
+the marginalization trick  Σᵧ P(x,y) = P(x)  (and likewise for y)
+to fold single sums into the double sum:
+
+  = ΣΣ P(x,y)·log P(x,y) − ΣΣ P(x,y)·log P(x) − ΣΣ P(x,y)·log P(y)
+  = ΣΣ P(x,y) · log [ P(x,y) / (P(x)·P(y)) ]
+  = D_KL( P(X,Y) ‖ P(X)·P(Y) )</div>
+  <ul>
+    <li><b>I(X;Y) ≥ 0</b>; = 0 iff X ⊥ Y</li>
+    <li><b>Symmetric:</b> I(X;Y) = I(Y;X) — a relationship, not a direction</li>
+    <li>Captures <em>any</em> dependence (linear, nonlinear, deterministic) — unlike correlation</li>
+    <li class="ok"><b>= Information Gain:</b> ID3's IG(S,A) is exactly I(A;Y) on the node's data</li>
+    <li>MI invariant to sample size — depends only on probabilities, not counts</li>
+  </ul>
+
+  <h3>KL Divergence</h3>
+  <div class="box">D_KL(P‖Q) = Σₓ P(x) log [P(x)/Q(x)]
+          = E_P[ log P(X)/Q(X) ]
+          = H(P,Q) − H(P)        (cross-entropy − entropy)
+
+Cross-entropy:  H(P,Q) = −Σₓ P(x) log Q(x)</div>
+  <p><b>Operational meaning:</b> extra bits to encode P-samples using Q's codebook (vs. P's optimal codebook) — the "price of model misspecification."</p>
+  <ul>
+    <li><b>D_KL ≥ 0</b>; = 0 iff P = Q (Gibbs' inequality)</li>
+    <li class="warn"><b>NOT symmetric:</b> D_KL(P‖Q) ≠ D_KL(Q‖P) — direction matters</li>
+    <li class="warn"><b>NOT a metric</b> — no triangle inequality. It's a <em>divergence</em>, not a distance</li>
+    <li>D_KL(P‖Q) penalizes Q missing P's mass (mass-covering); D_KL(Q‖P) penalizes Q putting mass where P=0 (mode-seeking) — VI uses the latter</li>
+    <li class="ok"><b>Cross-entropy ≡ classification loss:</b> minimizing H(true, predicted) ≡ minimizing D_KL(true ‖ predicted), since H(true) is fixed</li>
+  </ul>
+
+  <h3>Reading MI as a fraction</h3>
+  <p>I(X;Y) / H(Y) = share of label uncertainty resolved by observing X. If X⊥Y this is 0; if X perfectly determines Y this is 1.</p>
+  <p><b>Trick when computing H(Y|X):</b> for each x, condition on it (P(y|x) = P(y,x)/P(x)) — H(Y|X=x) is the entropy of that <em>conditional</em> distribution, not the joint. Then take the weighted average Σₓ P(x)·H(Y|X=x).</p>
+
+</div>
+
+<!-- RIGHT COLUMN -->
+<div>
+
+  <h2>3 · Adam Family Optimizers</h2>
+
+  <h3>SGD's Two Problems (the motivation)</h3>
+  <p>Plain SGD: θ ← θ − α · g. Two fundamental weaknesses:</p>
+  <ul>
+    <li><b>Ill-conditioning:</b> for L = θ₁² + 100·θ₂² (Hessian eigenvalues 2 &amp; 200 ⇒ condition number 100), SGD zigzags down θ₂'s steep walls while crawling along θ₁'s gentle floor. <em>Same LR for every coordinate</em> — dominated by the worst direction.</li>
+    <li><b>Noisy gradients:</b> stochastic minibatches make g_t bounce around its true mean ⇒ wasted oscillation in any direction.</li>
+  </ul>
+  <p class="ok"><b>Two independent fixes</b>, each its own thread of innovation:</p>
+  <ul>
+    <li><b>Thread 1 — Adaptive LR</b> (AdaGrad → RMSProp): <em>per-coordinate</em> step sizes that adapt to local curvature. Fixes ill-conditioning.</li>
+    <li><b>Thread 2 — Momentum</b> (Heavy-ball → NAG): smooth gradients across steps. Fixes oscillation.</li>
+  </ul>
+  <p><b>Adam = Thread 1 + Thread 2</b>, with bias correction to handle cold start. AdamW fixes a regularization wart in Adam.</p>
+
+  <h3>Thread 1 — AdaGrad &amp; RMSProp (curvature)</h3>
+  <p><b>Big idea:</b> coordinates with consistently large |g| are high-curvature directions; shrink their step. Coordinates with small |g| can take bigger steps. <em>Squared gradients over time proxy diagonal curvature</em>.</p>
+  <div class="box">AdaGrad:  G_t = Σᵢ≤ₜ gᵢ²              (cumulative — never forgets)
+          θ ← θ − α · g_t / (√G_t + ε)
+
+RMSProp:  v_t = ρ·v_{t−1} + (1−ρ)·g_t²   (EMA, ρ≈0.9–0.99)
+          θ ← θ − α · g_t / (√v_t + ε)</div>
+  <ul>
+    <li class="warn"><b>AdaGrad flaw:</b> G_t monotonically grows ⇒ effective LR <em>vanishes</em> late in training</li>
+    <li class="ok"><b>RMSProp fix:</b> EMA forgets old gradients ⇒ tracks <em>nonstationary</em> curvature, no vanishing</li>
+    <li><b>Why √v_t?</b> v ≈ E[g²] (variance); √ converts back to gradient-magnitude scale so 1/√v has units of 1/|g|</li>
+  </ul>
+
+  <h3>The Preconditioning Lens</h3>
+  <p>All of these can be written as <b>θ ← θ − α · P_t · g</b>, where P_t scales each coordinate. The choice of P_t <em>is</em> the algorithm:</p>
+  <table>
+    <tr><th>Optimizer</th><th>Preconditioner P</th><th>Type</th></tr>
+    <tr><td>Plain SGD</td><td>I</td><td>identity</td></tr>
+    <tr><td>Scaled SGD</td><td>c · I</td><td>scalar</td></tr>
+    <tr><td>Newton's method</td><td>H⁻¹ (inverse Hessian)</td><td>full — "ideal", infeasible for NNs</td></tr>
+    <tr><td>AdaGrad</td><td>diag(1 / (√G_t + ε))</td><td>diagonal, adaptive</td></tr>
+    <tr><td>RMSProp</td><td>diag(1 / (√v_t + ε))</td><td>diagonal, adaptive</td></tr>
+    <tr><td>Adam</td><td>diag(1 / (√v̂_t + ε)) on m̂_t</td><td>diagonal, adaptive</td></tr>
+  </table>
+  <p class="ok">Why we care: <b>L2 ≡ weight decay iff P_t = c·I</b> — sets up AdamW (below).</p>
+
+  <h3>Thread 2 — Momentum &amp; NAG (smoothing)</h3>
+  <p><b>Big idea:</b> instead of stepping by the current noisy gradient, step by a <em>smoothed</em> version (EMA of recent gradients). Consistent directions accumulate; alternating ones cancel. <em>Rolling ball with mass</em> — past direction lingers; only sustained forces redirect it.</p>
+  <div class="box">Heavy-ball (EMA-style momentum):
+  v_t = β·v_{t−1} + (1−β)·g_t       (EMA of gradients, β ≈ 0.9)
+  θ ← θ − α · v_t
+
+NAG (Nesterov):
+  v_t = β·v_{t−1} + (1−β)·∇L(θ_t + β·v_{t−1})   ← "look-ahead" gradient
+  θ ← θ − α · v_t</div>
+  <ul>
+    <li><b>Heavy-ball:</b> amplifies consistent directions, damps zigzag in narrow valleys</li>
+    <li><b>NAG:</b> peeks ahead to where momentum will take you, then computes the gradient <em>there</em> — gets to course-correct before committing</li>
+    <li class="ok">NAG: O(1/t²) convergence on <b>smooth convex</b> functions (vs GD's 1/t)</li>
+    <li class="warn"><b>Trap:</b> O(1/t²) does NOT extend to nonconvex deep networks. NAG still helps empirically (saddle-point escape, local geometry), but not for that theoretical reason.</li>
+    <li><b>Both are first-order:</b> just EMAs of gradients. NO Hessian or second-derivative info required.</li>
+  </ul>
+
+  <h3>Adam = Thread 1 + Thread 2</h3>
+  <div class="box">Adam:  m_t = β₁·m_{t−1} + (1−β₁)·g_t   ← momentum (Thread 2)
+       v_t = β₂·v_{t−1} + (1−β₂)·g_t²  ← RMSProp (Thread 1)
+       m̂_t = m_t / (1 − β₁ᵗ)            ← bias correction
+       v̂_t = v_t / (1 − β₂ᵗ)
+       θ ← θ − α · m̂_t / (√v̂_t + ε)
+                ─────         ─────
+              smoothed g    diagonal P_t
+
+Defaults: β₁ = 0.9, β₂ = 0.999, ε = 10⁻⁸</div>
+  <p>So Adam is literally "<b>momentum on the numerator, RMSProp on the denominator, bias correction on both</b>." Each piece earns its place by solving one of SGD's two problems.</p>
+
+  <h3>What Bias Correction Actually Does</h3>
+  <p>At t=1 with m₀=v₀=0: m₁ = (1−β₁)·g ≈ 0.1·g, v₁ = (1−β₂)·g² ≈ 0.001·g² — both shrunk because EMAs start cold. Dividing by (1−βᵗ) un-biases them: m̂₁ = g, v̂₁ = g², so step ≈ α·sign(g).</p>
+  <p class="ok"><b>Net effect:</b> the very first step has full magnitude ≈ α (raw m₁ alone would give ≈ α/30, too small). Later steps shrink as √v̂ catches up to gradient scale.</p>
+
+  <h3>L2 Penalty vs Weight Decay — preconditioner-eye view</h3>
+  <p>L2 reg adds ½λ‖θ‖² to the loss ⇒ modified gradient = ∇L + λθ. Plug into the preconditioned step:</p>
+  <div class="box">θ ← θ − α · P_t · (∇L + λθ)
+   = θ − α·P_t·∇L − α·λ·P_t·θ
+                    ─────────
+                    decay is preconditioned too!</div>
+  <ul>
+    <li><b>SGD (P = c·I):</b> decay = α·λ·c_t·θ ⇒ uniform shrinkage ⇒ <b>L2 ≡ weight decay</b> ✓</li>
+    <li class="warn"><b>Adam (P diagonal, non-scalar):</b> decay = α·λ·P_t·θ ⇒ <em>coordinate-wise</em>. Coords w/ small g get aggressive decay; coords w/ large g barely decay ⇒ <b>L2 ≠ weight decay</b></li>
+    <li><b>Equivalence theorem:</b> L2 ≡ uniform decay <b>iff P_t = c_t · I</b> (scalar × identity)</li>
+  </ul>
+
+  <h3>AdamW: Decouple the Decay</h3>
+  <div class="box">Vanilla Adam + L2 (broken):
+  θ ← θ − α · P_t · (∇L + λθ)        ← decay sandwiched in P_t
+
+AdamW (fixed):
+  θ ← θ − α · P_t · ∇L − α · λ · θ   ← decay applied OUTSIDE P_t</div>
+  <ul>
+    <li class="ok">Decay yanked out of the preconditioner sandwich ⇒ uniform shrinkage restored</li>
+    <li>α and λ become <b>independent knobs</b> (with vanilla Adam they coupled through P_t)</li>
+    <li>Rescale λ when steps-per-epoch changes (more updates/epoch = more total decay)</li>
+    <li class="warn">Exclude biases &amp; LayerNorm/BatchNorm scale-shift from decay (best practice)</li>
+  </ul>
+
+  <hr>
+  <h2>4 · Bayesian Learning</h2>
+
+  <h3>Bayes' Rule — the four ingredients</h3>
+  <p>The principled answer to "I had a belief, then I saw data — how should belief update?" Falls straight out of the chain rule: <code>P(H,D) = P(H|D)·P(D) = P(D|H)·P(H)</code>.</p>
+  <table>
+    <tr><th>Term</th><th>Name</th><th>Role</th></tr>
+    <tr><td>P(h)</td><td><b>Prior</b></td><td>belief about h <em>before</em> data</td></tr>
+    <tr><td>P(D|h)</td><td><b>Likelihood</b></td><td>how plausibly h explains D (the model)</td></tr>
+    <tr><td>P(h|D)</td><td><b>Posterior</b></td><td>updated belief <em>after</em> data</td></tr>
+    <tr><td>P(D)</td><td><b>Evidence</b></td><td>= Σ_h P(D|h)P(h), normalizing constant</td></tr>
+  </table>
+  <p><b>Mantra:</b> posterior ∝ likelihood × prior</p>
+
+  <h3>Three Useful Forms</h3>
+  <div class="box">Full:         P(h|D) = P(D|h)·P(h) / P(D)
+
+Proportional: P(h|D) ∝ P(D|h)·P(h)        ← drop P(D) for argmax/comparing
+
+Odds:         P(h₁|D)/P(h₂|D) = [P(h₁)/P(h₂)] · [P(D|h₁)/P(D|h₂)]
+              posterior odds  = prior odds × Bayes factor (LR)
+              ↑ P(D) cancels in numerator/denominator</div>
+
+  <h3>MLE vs MAP — "regularization is a prior"</h3>
+  <ul>
+    <li><b>MLE:</b> argmax_h P(D|h) — best explanation, ignores prior</li>
+    <li><b>MAP:</b> argmax_h P(D|h) · P(h) — explanation weighted by prior plausibility</li>
+    <li><b>MAP collapses to MLE under uniform prior</b> (constant P(h) doesn't affect the argmax)</li>
+    <li class="ok"><b>Regularization = prior in disguise:</b> L2 ≡ MAP w/ Gaussian prior on weights; L1 ≡ Laplace prior. Reg strength ≡ prior tightness.</li>
+  </ul>
+
+  <h3>Loss Functions = MLE under a Noise Model</h3>
+  <p>Every standard supervised loss is the negative log-likelihood under some assumed noise/emission model. Pick the model ⇒ the loss <em>derives itself</em>.</p>
+  <table>
+    <tr><th>Target / noise model</th><th>P(yᵢ \| xᵢ, h)</th><th>−log-likelihood ⇒ loss</th></tr>
+    <tr><td>Continuous + Gaussian noise<br>y = h(x) + 𝒩(0, σ²)</td><td>(1/√2πσ²) exp(−(yᵢ−h(xᵢ))²/2σ²)</td><td><b>MSE</b>: ½·Σ (yᵢ − h(xᵢ))²</td></tr>
+    <tr><td>Binary + Bernoulli<br>y ∼ Bernoulli(h(x))</td><td>h(xᵢ)<sup>yᵢ</sup>·(1−h(xᵢ))<sup>1−yᵢ</sup></td><td><b>Binary cross-entropy:</b> −Σ [yᵢ log h + (1−yᵢ) log(1−h)]</td></tr>
+    <tr><td>Multiclass + Categorical<br>y ∼ Cat(h(x))</td><td>Π_c h_c(xᵢ)<sup>𝟙[yᵢ=c]</sup></td><td><b>Categorical cross-entropy:</b> −Σᵢ log h_{yᵢ}(xᵢ)</td></tr>
+    <tr><td>Continuous + Laplace noise</td><td>(1/2b)·exp(−\|yᵢ−h(xᵢ)\|/b)</td><td><b>MAE</b>: Σ \|yᵢ − h(xᵢ)\|</td></tr>
+  </table>
+  <ul>
+    <li class="ok"><b>The bridge:</b> "what loss should I use?" reduces to "what's the noise on y given x?"</li>
+    <li class="warn"><b>MSE on {0,1} labels</b> still pushes h toward P(y=1|x) but is misspecified — outputs aren't constrained to [0,1] without sigmoid; gradients are weaker near confident-wrong predictions; converges with more data than cross-entropy</li>
+    <li><b>Soft labels</b> (yᵢ ∈ [0,1] as a probability estimate): cross-entropy still well-defined; equals KL(yᵢ ‖ h(xᵢ)) up to a constant. Used in label smoothing, distillation.</li>
+    <li>Adding L2 regularization to any of these = MAP w/ Gaussian prior on params (closes the loop with the row above)</li>
+  </ul>
+
+  <h3>Common Bayesian Fallacies</h3>
+  <ul>
+    <li class="warn"><b>Prosecutor's fallacy:</b> P(D|h) ≠ P(h|D) — converting requires Bayes' rule + a prior</li>
+    <li class="warn"><b>LR = 1 ≠ favors h₁</b> — data is uninformative; posterior odds = prior odds (no update)</li>
+    <li class="warn"><b>Prior = 0 ⇒ posterior = 0 forever</b> — no data resurrects a zeroed prior; dogmatic priors are unfalsifiable</li>
+    <li class="warn"><b>Likelihood = 0 ⇒ posterior = 0</b> — if your model says D is impossible, the model dies on observing D (motivates Laplace smoothing)</li>
+  </ul>
+
+  <h3>Bayes Decision Rule for Classification</h3>
+  <p>For label y given features x, classify by the posterior:</p>
+  <div class="box">ŷ(x) = argmax_y P(y | x) = argmax_y P(x | y) · P(y)
+                              ─────────   ────
+                              likelihood   prior
+
+P(x) cancels — same denominator for every class, so it drops out of the argmax.</div>
+  <ul>
+    <li><b>Equal priors</b> (binary): predict y=1 iff P(y=1|x) &gt; 0.5 ⇔ P(x|y=1) &gt; P(x|y=0). Classification is then pure likelihood comparison.</li>
+    <li class="ok"><b>Prior monotonicity:</b> with likelihoods fixed, raising P(y=1) raises P(y=1|x) monotonically — the prior shifts the decision threshold toward the favored class.</li>
+    <li class="warn"><b>Class imbalance ≠ uniform priors.</b> The Bayes-optimal classifier <em>wants</em> the true frequencies. Setting priors uniform throws away base-rate info ⇒ over-predicts the minority class. Fix imbalance via resampling, cost-sensitive loss, or threshold tuning — NOT by lying about priors.</li>
+  </ul>
+
+  <h3>LDA / QDA — Gaussian likelihoods</h3>
+  <p><b>LDA</b> = Linear Discriminant Analysis &nbsp;·&nbsp; <b>QDA</b> = Quadratic Discriminant Analysis (named for the boundary shape they produce). Both are <em>generative</em> classifiers: model P(x | y) = 𝒩(μ_y, Σ_y), then apply Bayes. The log-posterior-ratio determines the boundary shape:</p>
+  <div class="box">log [P(y=1|x) / P(y=0|x)]
+  = log[P(x|y=1)/P(x|y=0)] + log[P(y=1)/P(y=0)]
+  = −½(x−μ₁)ᵀ Σ₁⁻¹ (x−μ₁) + ½(x−μ₀)ᵀ Σ₀⁻¹ (x−μ₀) + const
+
+Shared covariance (Σ₀ = Σ₁ = Σ):  quadratic terms cancel ⇒ LINEAR in x  →  LDA
+Different covariances:           quadratic terms survive ⇒ QUADRATIC in x →  QDA</div>
+  <ul>
+    <li class="ok"><b>LDA</b> models a full shared Σ across classes; Gaussian NB w/ shared <em>diagonal</em> Σ is a restricted form of LDA. Logistic regression is the discriminative analog of LDA (same hyperplane boundary, different fitting objective).</li>
+    <li><b>QDA:</b> per-class Σ; boundary is a conic section (parabola/ellipse/hyperbola in 2D)</li>
+  </ul>
+
+  <h3>Bayes-Optimal Classifier — the irreducible floor</h3>
+  <p>The classifier you'd build if you knew the true P(X,Y) — provably the best possible. No model can do better in expectation.</p>
+  <div class="box">Bayes rule:      h*(x) = argmax_y P(Y=y | X=x)
+Bayes boundary:  {x : P(Y=1|X=x) = 0.5}      (binary)
+Bayes error:     E_X[ 1 − max_y P(Y|X=x) ]    (irreducible)</div>
+  <ul>
+    <li><b>Bayes error = 0</b> ⇒ classes perfectly separable; <b>&gt; 0</b> ⇒ inherent overlap (oracle is wrong sometimes)</li>
+    <li><b>Bias-variance:</b> total error = <em>Bayes error</em> + bias² + variance</li>
+    <li>1-NN asymptotic error ≤ <b>2× Bayes error</b> (Cover &amp; Hart)</li>
+  </ul>
+
+  <h3>Noise &amp; the Bayes Boundary</h3>
+  <ul>
+    <li class="warn">Noise <em>always</em> raises Bayes error</li>
+    <li><b>Symmetric label noise</b> (rate η each direction): preserves <em>ranking</em> of P(y|x) ⇒ boundary <em>location</em> unchanged; only Bayes error rises</li>
+    <li class="warn"><b>Asymmetric / feature noise:</b> shifts the boundary AND raises Bayes error</li>
+  </ul>
+
+  <hr>
+  <h2>5 · Bayesian Networks (DAGs)</h2>
+
+  <h3>Why DAGs? The parameter explosion</h3>
+  <p>Joint over n binary variables = 2ⁿ − 1 parameters. n=100 ⇒ 10³⁰. Infeasible to store, learn, or even write down.</p>
+  <p><b>BN exploits structure:</b> most variables are conditionally independent of most others, given a few key parents. The DAG encodes <em>which</em> variables matter for which.</p>
+
+  <h3>Factorization</h3>
+  <div class="box">P(X₁, …, Xₙ) = Πᵢ P(Xᵢ | Pa(Xᵢ))</div>
+  <p>Each variable depends only on its parents. Given parents, X_i is independent of all its non-descendants. <b>Each CPT is a local model</b>; the DAG glues them into a global joint.</p>
+
+  <h3>Canonical Example: Burglary Network</h3>
+  <div class="box">  Burglary    Earthquake     (independent causes)
+       \      /
+        v    v
+        Alarm
+       /    \
+      v      v
+   JohnCalls  MaryCalls
+
+P(B,E,A,J,M) = P(B)·P(E)·P(A|B,E)·P(J|A)·P(M|A)
+
+Param count: 1 + 1 + 4 + 2 + 2 = 10  (vs 31 for full joint)</div>
+
+  <h3>Three Building-Block Patterns</h3>
+  <table>
+    <tr><th>Pattern</th><th>Form</th><th>Default (no cond.)</th><th>Conditioning on B</th></tr>
+    <tr><td>Chain</td><td>A → B → C</td><td>A,C correlated</td><td>BLOCKS &nbsp;(A ⊥ C | B)</td></tr>
+    <tr><td>Fork</td><td>A ← B → C</td><td>A,C correlated (common cause)</td><td>BLOCKS &nbsp;(A ⊥ C | B)</td></tr>
+    <tr><td>Collider</td><td>A → B ← C</td><td><b>A ⊥ C</b> by default</td><td><b>OPENS!</b> ("explaining away")</td></tr>
+  </table>
+  <ul>
+    <li><b>Chain:</b> Smoking → Tar → Cancer. Knowing Tar makes Smoking irrelevant for Cancer prediction.</li>
+    <li><b>Fork:</b> Cold → Cough; Cold → Fever. Cough &amp; Fever correlated through cold; given the cold, independent.</li>
+    <li><b>Collider:</b> Burglary, Earthquake → Alarm. B,E independent in population. Hear Alarm + learn Earthquake → Burglary becomes <em>less</em> likely (the earthquake "explains" the alarm).</li>
+  </ul>
+  <p class="warn">The collider reversal is the most counterintuitive thing in BNs. Conditioning <em>creates</em> dependence between previously-independent parents. Mechanism: a collider's two parents now compete to explain the observed effect.</p>
+
+  <h3>D-Separation Rule</h3>
+  <p>A path X — … — Y is <b>blocked</b> by conditioning set Z if it contains:</p>
+  <ul>
+    <li>A <b>non-collider</b> (chain or fork node) that <em>is</em> in Z, OR</li>
+    <li>A <b>collider</b> such that neither it nor any descendant is in Z</li>
+  </ul>
+  <p><b>X ⊥ Y | Z iff every path between X and Y is blocked.</b></p>
+
+  <h3>Local Markov Property</h3>
+  <p>Each Xᵢ ⊥ non-descendants(Xᵢ) | Pa(Xᵢ) — equivalent to the factorization, easier to apply locally.</p>
+  <p><em>Burglary network example:</em> JohnCalls ⊥ Earthquake | Alarm (Earthquake is a non-descendant of JohnCalls; Alarm is JohnCalls's parent).</p>
+
+  <h3>Ancestral Sampling — drawing from the joint</h3>
+  <p>To draw an i.i.d. sample from P(X₁,…,Xₙ): traverse the DAG in <b>topological order</b> (parents before children); for each node sample <b>Xᵢ ~ P(Xᵢ | Pa(Xᵢ))</b> using the parent values already drawn. The chain rule executed forward.</p>
+  <ul>
+    <li class="ok"><b>Exact i.i.d. draws</b> from the joint — no MCMC, no rejection. One pass per sample.</li>
+    <li>Uses only the <em>forward</em> CPTs P(child | parent); never P(parent | child) or any inverse</li>
+    <li><b>LLN:</b> empirical frequency of any event over n samples → its true probability ⇒ Monte Carlo gives marginals/expectations without analytic integration</li>
+    <li class="warn"><b>Ignoring an edge breaks sampling two ways</b> — e.g. for A → B, drawing B from a fair coin instead of P(B|A) gives (i) wrong marginal P(B=1) ≠ Σₐ P(B=1|a)·P(a), AND (ii) wrong dependence structure: generated A,B end up independent, but the true joint has A,B dependent through the edge. "Independent A,B" ≠ "i.i.d. from the joint P(A,B)".</li>
+  </ul>
+
+  <h3>Other Properties</h3>
+  <ul>
+    <li class="warn"><b>DAG required</b> — directed cycles forbidden (would break factorization)</li>
+    <li>CPTs can be any valid conditional (categorical, Gaussian, logistic, NN, …) — Gaussianity NOT required</li>
+  </ul>
+
+  <h3>Naive Bayes — the simplest BN classifier</h3>
+  <p><b>Structure:</b> class y is the parent of every feature x_j; no edges among features. The DAG <em>is</em> the conditional-independence assumption.</p>
+  <div class="box">         y
+       /  |  \
+      v   v   v
+     x₁  x₂ … x_d
+
+P(y, x) = P(y) · Πⱼ P(xⱼ | y)        ← "naive" CI assumption
+
+Decision rule:  ŷ = argmax_y P(y) · Πⱼ P(xⱼ | y)
+Log-space:      ŷ = argmax_y [ log P(y) + Σⱼ log P(xⱼ | y) ]   ← avoids underflow</div>
+  <ul>
+    <li><b>Why factor:</b> full P(x | y) needs exponentially many params in d; d univariate P(xⱼ | y) is cheap to estimate from limited data</li>
+    <li class="warn"><b>Zero-likelihood trap:</b> if (xⱼ, y) never co-occurred in training, P(xⱼ | y) = 0 zeros the entire product. <b>Laplace smoothing</b> (add 1 to every count; Dirichlet generalizes) prevents this</li>
+    <li class="ok"><b>Robustness paradox:</b> even when CI is wildly violated, NB often classifies correctly. Posterior probabilities get miscalibrated (correlated features double-counted), but the <em>argmax ranking</em> of classes typically survives — and classification only needs the argmax</li>
+    <li><b>Gaussian NB:</b> P(xⱼ | y) = 𝒩(μ_jy, σ²_jy) for continuous features. With <em>shared</em> Σ across classes and uncorrelated features, Gaussian NB ⇒ restricted LDA (cf. §4)</li>
+    <li>NB decision rule uses <em>all</em> features in the product — NOT just the single largest likelihood</li>
+  </ul>
+
+</div>
+</div>
+
+</body>
+</html>

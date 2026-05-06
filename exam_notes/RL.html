@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CS 7641 — Unit 4: Reinforcement Learning &amp; Game Theory Cheat Sheet</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 11.5px;
+    color: #1a1a1a;
+    background: #fff;
+    padding: 18px 22px;
+    line-height: 1.45;
+  }
+
+  h1 {
+    font-size: 15px;
+    font-weight: 600;
+    border-bottom: 2px solid #1a1a1a;
+    padding-bottom: 4px;
+    margin-bottom: 10px;
+  }
+
+  h2 {
+    font-size: 11.5px;
+    font-weight: 600;
+    background: #1a1a1a;
+    color: #fff;
+    padding: 2px 6px;
+    margin: 10px 0 5px;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+
+  h3 {
+    font-size: 11.5px;
+    font-weight: 600;
+    margin: 7px 0 2px;
+    border-bottom: 0.5px solid #ccc;
+    padding-bottom: 1px;
+  }
+
+  .cols {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  p { margin: 2px 0 4px; }
+
+  ul { margin: 2px 0 4px; padding-left: 15px; }
+  li { margin: 1px 0; }
+
+  .box {
+    background: #f5f5f3;
+    border: 0.5px solid #bbb;
+    border-radius: 4px;
+    padding: 5px 7px;
+    margin: 4px 0;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10.5px;
+    line-height: 1.6;
+    white-space: pre;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10.5px;
+    margin: 3px 0;
+  }
+  td, th {
+    padding: 2px 5px;
+    border: 0.5px solid #ccc;
+    text-align: left;
+  }
+  th {
+    background: #f0f0ee;
+    font-weight: 600;
+  }
+
+  .warn { color: #b91c1c; font-weight: 500; }
+  .ok   { color: #166534; font-weight: 500; }
+
+  hr {
+    border: none;
+    border-top: 1.5px solid #ddd;
+    margin: 10px 0;
+  }
+
+  @media print {
+    body { padding: 12px 16px; }
+    .cols { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<h1>CS 7641 — Unit 4: Reinforcement Learning &amp; Game Theory &nbsp;<span style="font-size:11px;font-weight:400">Quick Reference</span></h1>
+
+<div class="cols">
+
+<!-- LEFT COLUMN -->
+<div>
+
+  <h2>1 · Markov Decision Processes</h2>
+
+  <h3>The MDP Five-Tuple</h3>
+  <div class="box">⟨S, A, T, R, γ⟩
+  S = states         A = actions
+  T(s, a, s') = transition probability     (sum to 1 over s')
+  R(s, a)     = expected reward            γ ∈ [0,1] = discount
+
+Markov property:  P(s_{t+1} = s' | s_t, a_t, s_{t-1}, …) = T(s_t, a_t, s')
+                  ⇒ next state depends ONLY on (s, a), not on history
+
+Return:  G_t = Σ_{k=0}^∞  γᵏ · r_{t+k+1}    (discounted sum of future rewards)</div>
+  <ul>
+    <li><b>Deterministic env:</b> for each (s,a), exactly one s' has T=1</li>
+    <li><b>Stochastic env:</b> multiple s' have non-zero T (noise / slippage)</li>
+    <li><b>γ → 0:</b> myopic; <b>γ → 1:</b> far-sighted. <b>Sparse rewards</b> ⇒ slow learning; shaping helps but bad shaping changes π*.</li>
+  </ul>
+
+  <h3>Policies</h3>
+  <ul>
+    <li><b>Deterministic π(s) = a:</b> single action per state with prob 1</li>
+    <li><b>Stochastic π(a|s):</b> distribution over actions; allows exploration / hedging</li>
+    <li><b>Optimal policy π*</b> maximizes expected return from every state</li>
+    <li class="warn">π* may not be unique — multiple policies can achieve V*(s)</li>
+    <li class="warn">A uniform-random policy is generally <em>not</em> optimal — it fails to exploit learned values</li>
+  </ul>
+
+  <h3>Value Functions &amp; Bellman Equations</h3>
+  <p><b>Five objects to keep straight</b> — three "what's this state/action worth?" quantities (one for each combo of "given vs optimal" × "state-only vs state+action") plus the optimal policy itself:</p>
+  <table>
+    <tr><th>Symbol</th><th>Reads as</th><th>Plain English</th></tr>
+    <tr><td><b>V^π(s)</b></td><td>value of state <em>s</em> under policy π</td><td>Expected total discounted reward if you start in s and follow π forever. Different π ⇒ different V^π.</td></tr>
+    <tr><td><b>Q^π(s, a)</b></td><td>value of taking <em>a</em> in <em>s</em>, then π</td><td>Take action a <em>now</em> (a may or may not be what π would pick), then follow π forever after.</td></tr>
+    <tr><td><b>V*(s)</b></td><td>optimal value of state s</td><td>Expected total discounted reward if you start in s and follow the <em>best</em> policy π*. Equivalently V*(s) = max_a Q*(s, a).</td></tr>
+    <tr><td><b>Q*(s, a)</b></td><td>optimal Q-value</td><td>Take action a <em>now</em>, then act <em>optimally</em> forever after. Even if a isn't optimal at s, the future is.</td></tr>
+    <tr><td><b>π*(s)</b></td><td>optimal policy</td><td>argmax_a Q*(s, a) — the action where V* and Q* agree:  the a for which Q*(s, a) = V*(s).</td></tr>
+  </table>
+  <p><b>Key identities</b> (these are how PI / VI / Q-learning move between objects):</p>
+  <div class="box">V^π(s)  =  Q^π(s, π(s))           [deterministic π — value of following π = value of taking π's action and then continuing with π]
+V*(s)   =  max_a Q*(s, a)         [optimal state value = best optimal action value]
+π*(s)   =  argmax_a Q*(s, a)      [optimal policy = greedy w.r.t. Q*]</div>
+  <div class="box">Bellman EXPECTATION (deterministic π):
+  V^π(s) = R(s, π(s)) + γ · Σ_{s'} T(s, π(s), s') · V^π(s')
+
+Bellman EXPECTATION (stochastic π — e.g. uniform random, ε-greedy):
+  V^π(s) = Σ_a π(a|s) · [ R(s, a) + γ · Σ_{s'} T(s, a, s') · V^π(s') ]
+                           ─────────────  outer Σ_a averages over the policy's own randomness
+
+Bellman OPTIMALITY (for π*):
+  V*(s)   = max_a [ R(s, a) + γ · Σ_{s'} T(s, a, s') · V*(s') ]
+  Q*(s,a) =        R(s, a) + γ · Σ_{s'} T(s, a, s') · max_{a'} Q*(s', a')</div>
+  <ul>
+    <li><b>Expectation form</b> (no max, π fixed) ⇒ <b>linear</b> system in V^π — solvable directly. Used in <b>PI eval step</b> and <b>SARSA</b> target.</li>
+    <li><b>Optimality form</b> (max over a) ⇒ <b>nonlinear</b> — must iterate. Used in <b>VI</b> and <b>Q-learning</b> target. Any policy greedy w.r.t. Q* is optimal.</li>
+    <li class="ok"><b>Why the distinction matters:</b> the form determines the algorithm. PI cleverly uses Expectation (easy, linear) for inner eval and Optimality (max) only for the outer improvement; VI uses Optimality directly. Same Expectation/Optimality split recurs in model-free RL as on-policy (SARSA) vs off-policy (Q-learning).</li>
+    <li>Changing T or R changes V* ⇒ may change π*</li>
+  </ul>
+
+  <h3 class="warn">Self-Loop Trap</h3>
+  <p>If an action keeps the agent in s, the Bellman RHS still has γ·V(s). <b>Don't drop the recursive term</b> — you'd toss the entire infinite discounted future of staying put. Common triggers: stochastic policy (Stay w/ prob p, Go w/ prob 1−p), wall-bump in a grid world, absorbing state reached probabilistically.</p>
+  <div class="box">Bellman:         V(s) = (1−p)·r_g + p·(r_s + γ·V(s))     ← V(s) on BOTH sides (self-loop)
+Solve for V(s):  V(s)·(1 − pγ) = (1−p)·r_g + p·r_s
+            ⇒    V(s) = [(1−p)·r_g + p·r_s] / (1 − p·γ)        ← (1 − pγ)⁻¹ = geometric-series sum
+                                                                  of all discounted "Stay" steps</div>
+
+  <h3>Policy Iteration (PI)</h3>
+  <p>Planning (needs ⟨T, R⟩). <b>Central object: π</b> — V^π is recomputed each outer round to evaluate the current policy. Uses <b>Expectation form</b> for eval (linear, π fixed) and <b>Optimality form</b> only for the improve step.</p>
+  <div class="box">Init  π₀  arbitrarily.   Repeat:
+
+(1) EVALUATION  — solve V^π exactly:
+      V^π(s) = R(s, π(s)) + γ · Σ_{s'} T(s, π(s), s') · V^π(s')    ∀s
+      (linear system in |S| unknowns — O(|S|³) — or inner Bellman-expectation loop)
+
+(2) IMPROVEMENT  — greedy w.r.t. V^π:
+      π'(s) = argmax_a  [ R(s, a) + γ · Σ_{s'} T(s, a, s') · V^π(s') ]
+
+Stop when π' = π   ⇒   π* found.</div>
+  <ul>
+    <li><b>Monotone:</b> V^{π_{k+1}} ≥ V^{π_k} pointwise — never gets worse</li>
+    <li><b>Finite-step termination:</b> finite MDPs converge in ≤ |A|^|S| iters (usually a handful in practice)</li>
+    <li class="warn"><b>Expensive per iteration</b> — evaluation solves a full linear system or runs an inner Bellman loop to convergence</li>
+  </ul>
+
+  <h3>Value Iteration (VI)</h3>
+  <p>Planning (needs ⟨T, R⟩). <b>Central object: V</b> — no π is stored during the loop; π* is derived once at the end via argmax. Uses <b>Optimality form</b> (max) directly on V every sweep.</p>
+  <div class="box">Init  V₀(s) = 0   ∀s.   Repeat until  ‖V_{k+1} − V_k‖_∞ &lt; ε:
+
+  V_{k+1}(s) = max_a  [ R(s, a) + γ · Σ_{s'} T(s, a, s') · V_k(s') ]     ∀s
+
+Recover policy:   π*(s) = argmax_a  [ R(s, a) + γ · Σ_{s'} T(s, a, s') · V*(s') ]</div>
+  <ul>
+    <li><b>Cheap iterations</b> — one max-Bellman sweep, no inner eval loop</li>
+    <li><b>γ-contraction:</b>  ‖V_{k+1} − V*‖_∞ ≤ γ · ‖V_k − V*‖_∞   ⇒ exponential at rate γ (<em>slower when γ ≈ 1</em>)</li>
+    <li class="ok"><b>Greedy policy stabilizes before V does</b> — argmax often locks in early while V_k is still rising; π* found long before V converges</li>
+  </ul>
+
+  <h3>PI vs VI</h3>
+  <table>
+    <tr><th></th><th>Policy Iteration</th><th>Value Iteration</th></tr>
+    <tr><th>Central object</th><td>π (V recomputed each round)</td><td>V (π derived at end)</td></tr>
+    <tr><th>Bellman form</th><td>Expectation (eval) + Optimality (improve)</td><td>Optimality only</td></tr>
+    <tr><th>Update</th><td>Full eval + greedy improve</td><td>Combined max-Bellman backup</td></tr>
+    <tr><th>Cost / iter</th><td class="warn">High (linear system / inner loop)</td><td class="ok">Cheap (one sweep)</td></tr>
+    <tr><th># iters</th><td class="ok">Few (often &lt; 10)</td><td class="warn">Many; bad when γ ≈ 1</td></tr>
+    <tr><th>Termination</th><td>Exact (π stable)</td><td>Asymptotic (ε-converged)</td></tr>
+  </table>
+  <p class="ok"><b>Modified Policy Iteration</b> = approximate eval with a <em>few</em> Bellman sweeps (not full convergence). Bridges PI ↔ VI; usually fastest in practice.</p>
+
+  <h3>Worked Example — PI vs VI on the Haunted House</h3>
+  <p><b>Setup:</b> S = {L, Q}, A = {organ, incense}, γ = 0.9. Deterministic transitions:</p>
+  <table>
+    <tr><th>state \ action</th><th>organ</th><th>incense</th></tr>
+    <tr><td><b>L</b> (laughing)</td><td>→ Q  (r = +1)</td><td>→ L  (r = −1)</td></tr>
+    <tr><td><b>Q</b> (quiet)</td><td>→ L  (r = −1)</td><td>→ Q  (r = +1)</td></tr>
+  </table>
+
+  <p><b>VI</b> — only V is stored; π derived once at the end:</p>
+  <div class="box">iter   V(L) = max(organ, incense)         V(Q) = max(organ, incense)
+0      0                                  0
+1      max(1+0,    −1+0)         = 1      max(−1+0,    1+0)         = 1
+2      max(1+0.9,  −1+0.9)       = 1.9    max(−1+0.9,  1+0.9)       = 1.9
+3      max(1+1.71, −1+1.71)      = 2.71   max(−1+1.71, 1+1.71)      = 2.71
+∞      → 10                               → 10
+
+Final π*:   π*(L) = argmax(1+0.9·10, −1+0.9·10) = organ   ;   π*(Q) = incense</div>
+
+  <p><b>PI</b> — only π is stored; V recomputed each round. Start π_0 = (L: incense, Q: incense).</p>
+  <div class="box">ITER 1 — Eval  (Expectation form: π fixed; both states self-loop)
+  V(L) = −1 + 0.9·V(L)   ⇒   V(L) = −10
+  V(Q) =  1 + 0.9·V(Q)   ⇒   V(Q) = +10
+
+ITER 1 — Improve  (compute Q^π(s, a) = R(s, a) + γ · V^π(s'), then argmax_a)
+  Q(L, organ)   = 1 + 0.9·V(Q) = 1 + 0.9·(10)  =  10  ←─┐
+  Q(L, incense) = −1 + 0.9·V(L) = −1 + 0.9·(−10) = −10   │ argmax ⇒ FLIP π(L) to organ
+  Q(Q, organ)   = −1 + 0.9·V(L) = −10
+  Q(Q, incense) = 1 + 0.9·V(Q) = 10            ←─ argmax ⇒ keep π(Q) = incense
+
+ITER 2 — Eval  under π_1 = (organ, incense)
+  V(Q) = 1 + 0.9·V(Q)   ⇒   V(Q) = 10           V(L) = 1 + 0.9·10 = 10
+
+ITER 2 — Improve  (Q^π re-computed under new V):  no argmax changes  ⇒  CONVERGED in 2 outer iters.</div>
+
+  <ul>
+    <li class="ok"><b>VI</b>: V refines slowly (1 → 1.9 → 2.71 → … → 10) but the <em>implicit</em> argmax is already π* from iter 1 — VI just doesn't track it</li>
+    <li class="ok"><b>PI</b>: π flips at iter 1, locks in at iter 2 — only 2 rounds, but each needed a linear-system solve</li>
+    <li><b>"Greedy stabilizes before V does" made concrete:</b> at VI iter 1, V(L) = 1 (way off from true 10) yet the greedy choice is already π*</li>
+  </ul>
+
+  <h3>Worked Example — Q^π Under Two Policies (Exploration vs Exploitation)</h3>
+  <p><b>Setup</b> (γ = 1, 1-step lookahead): at <em>s</em>, two actions — a1 (r = 1, → s'_1) or a2 (r = 0, → s'_2). Each next state offers two further (stochastic) actions whose leaf rewards are 50/50:</p>
+  <div class="box">s'_1 :   a'_1 → {1, 2}  E[r] = 1.5    ;    a'_2 → {1, 2}  E[r] = 1.5
+s'_2 :   a'_2 → {1, 2}  E[r] = 1.5    ;    a'_3 → {0, 6}  E[r] = 3.0</div>
+
+  <p><b>How the formula collapses to the calc.</b>  The cheat-sheet equation is for V^π (outer Σ_a). Here we want Q^π (first action <em>fixed</em>) — so the policy-averaging Σ_{a'} π(a'|s') resurfaces <em>one level deeper</em> than s, hidden inside V^π(s'). Tracing Q(s, a1):</p>
+  <div class="box">Q^π(s, a1) = R(s, a1) + γ · Σ_{s'} T(s, a1, s') · V^π(s')   [Q form: a1 fixed, no Σ_a]
+           = R(s, a1) + γ · V^π(s'_1)                       [T deterministic ⇒ s'_1]
+           = 1 + V^π(s'_1)                                  [γ = 1]
+
+V^π(s'_1)  = Σ_{a'} π(a'|s'_1) · Q^π(s'_1, a')              [V ↔ Q recursion]
+           = 0.5 · Q^π(s'_1, a'_1) + 0.5 · Q^π(s'_1, a'_2)  [uniform π = 1/2]
+
+⇒ Q^π(s, a1) = 1 + 0.5·Q^π(s'_1, a'_1) + 0.5·Q^π(s'_1, a'_2)
+                   └─────────── = V^π(s'_1) ──────────┘
+                   stochastic-π averaging Σ_{a'} π(a'|s')
+                   surfaces here, NOT at s itself</div>
+  <p><b>Where the sums live in this problem:</b></p>
+  <table>
+    <tr><th>Level</th><th>Sum present?</th><th>Why</th></tr>
+    <tr><td>at <em>s</em> (first action)</td><td>No Σ_a</td><td>a1 fixed — that's what makes it Q, not V</td></tr>
+    <tr><td><em>s</em> → <em>s'</em></td><td>No Σ_{s'}</td><td>Transitions are deterministic in this problem</td></tr>
+    <tr><td>at <em>s'</em> (second action)</td><td><b>Yes</b> — 0.5·Q + 0.5·Q</td><td>= V^π(s'_1) under uniform π</td></tr>
+    <tr><td><em>s'</em> → leaf</td><td>No Σ_{s''}</td><td>1-step horizon ⇒ Q^π(s', a') = E[leaf reward]</td></tr>
+  </table>
+
+  <p><b>Total exploration</b> (π(a'|s') = 0.5 uniform — Bellman <em>expectation</em>, stochastic form):</p>
+  <div class="box">Q(s, a1) = R(s, a1) + 0.5·Q(s'_1, a'_1) + 0.5·Q(s'_1, a'_2)
+        = 1       + 0.5·1.5            + 0.5·1.5             = 2.50
+
+Q(s, a2) = R(s, a2) + 0.5·Q(s'_2, a'_2) + 0.5·Q(s'_2, a'_3)
+        = 0       + 0.5·1.5            + 0.5·3.0             = 2.25
+
+⇒ Pick a1.   Averaging across sub-actions dilutes a'_3's high mean.</div>
+
+  <p><b>Greedy</b> (π(a'|s') = argmax_{a'} Q — at a 1-step horizon this is Bellman <em>optimality</em>):</p>
+  <div class="box">At s'_1:  Q(s'_1, a'_1) = Q(s'_1, a'_2) = 1.5      ⇒ either (tied)
+At s'_2:  Q(s'_2, a'_3) = 3.0  >  Q(s'_2, a'_2) = 1.5   ⇒ pick a'_3
+
+Q(s, a1) = 1 + 1.5 = 2.50
+Q(s, a2) = 0 + 3.0 = 3.00
+
+⇒ Pick a2.   Committing to a'_3 unlocks its full mean.</div>
+
+  <ul>
+    <li class="ok"><b>Same MDP, different π ⇒ different Q^π.</b>  Q^π(s, a) = R(s, a) + γ · V^π(s'); the future term is <em>V^π</em>, not V*. "Is action <em>a</em> good?" has no answer without committing to a follow-on policy.</li>
+    <li><b>Uniform π</b> applies Bellman expectation with π(a|s) = 1/k ⇒ averages over sub-actions ⇒ high-mean leaves get diluted by their middling siblings.</li>
+    <li><b>Greedy π</b> applies argmax everywhere ⇒ at a 1-step horizon V^π_greedy(s') = max_{a'} Q(s', a') (Bellman optimality). Switching π flipped the answer: a1 wins under exploration, a2 wins under greedy.</li>
+  </ul>
+
+  <hr>
+  <h2>2 · Reinforcement Learning</h2>
+
+  <h3>Model-Free vs Model-Based</h3>
+  <table>
+    <tr><th></th><th>Model-Based</th><th>Model-Free</th></tr>
+    <tr><th>Learns</th><td>T̂, R̂; then plans</td><td>Q or π directly from experience</td></tr>
+    <tr><th>Sample efficiency</th><td>Higher (can simulate &amp; replan)</td><td>Lower (each update needs real experience)</td></tr>
+    <tr><th>Compute</th><td>Heavier (planning / rollouts)</td><td>Lighter</td></tr>
+    <tr><th>Risk</th><td class="warn">Bad model ⇒ bad plans</td><td>No model bias, but slower</td></tr>
+    <tr><th>Reusability</th><td>Model can be reused for new goals</td><td>Q/π is goal-specific</td></tr>
+  </table>
+
+  <h3>Q-Learning — off-policy, optimistic target</h3>
+  <div class="box">Target uses MAX over next actions (assumes optimal future):
+  Q(s,a) ← Q(s,a) + α [ r + γ · max_{a'} Q(s',a') − Q(s,a) ]
+                              ─────────────
+                              greedy bootstrap
+
+Off-policy: learns about π* regardless of behavior policy.</div>
+  <ul>
+    <li><b>Off-policy:</b> behavior policy (often ε-greedy) explores; target evaluates the <em>greedy</em> policy</li>
+    <li>Q-values converge to Q* (optimal), even though behavior is exploratory</li>
+    <li class="warn"><b>Convergence requires:</b> all (s,a) visited infinitely often (sufficient exploration) AND decaying α (Robbins–Monro). Pure greedy + fixed α ⇒ no convergence guarantee.</li>
+    <li class="warn">Q-values do NOT represent return under behavior policy — they reflect <em>optimal</em> future</li>
+  </ul>
+
+  <h3>SARSA — on-policy, realistic target</h3>
+  <div class="box">Target uses the ACTUAL next action a' sampled from current policy:
+  Q(s,a) ← Q(s,a) + α [ r + γ · Q(s',a') − Q(s,a) ]
+                              ──────────
+                              uses sampled a' (incl. exploration)
+
+SARSA = (s, a, r, s', a') tuple — name from the update.</div>
+  <ul>
+    <li><b>On-policy:</b> learns Q for the policy it's actually following (including exploration)</li>
+    <li class="ok"><b>More conservative near risk:</b> if exploring near a cliff sometimes triggers ε-random falls, SARSA's Q reflects that danger ⇒ safer learned policy. Q-Learning, optimistic, walks the cliff edge.</li>
+    <li>Classic intuition: <em>"Q-Learning ignores exploration cost; SARSA pays for it."</em></li>
+  </ul>
+
+  <h3>ε-Greedy Action Selection</h3>
+  <div class="box">With prob 1 − ε:  pick greedy (argmax_a Q(s,a))
+With prob ε:      pick uniformly at random over all N actions
+
+If k actions tie for max:
+  P(each greedy)     = (1 − ε) / k   +   ε / N
+  P(each non-greedy) =                   ε / N</div>
+  <ul>
+    <li><b>ε too high:</b> too random ⇒ ignores learned Q ⇒ slow convergence, high variance</li>
+    <li><b>ε too low / 0:</b> insufficient exploration ⇒ may never visit some (s,a) ⇒ stuck at local opt</li>
+    <li><b>Persistent ε &gt; 0</b> keeps exploration alive after convergence — useful in non-stationary envs</li>
+    <li><b>Annealing schedule:</b> high ε early (explore), decay over time (exploit)</li>
+    <li><b>Softmax alternative:</b> P(a) ∝ exp(Q(s,a)/τ) — graded by Q-values, not fixed ε; τ→0 greedy, τ→∞ uniform</li>
+  </ul>
+
+</div>
+
+<!-- RIGHT COLUMN -->
+<div>
+
+  <h2>3 · Game Theory — Strategies &amp; Equilibrium</h2>
+
+  <h3>Setup</h3>
+  <ul>
+    <li><b>Players</b> simultaneously choose actions; each gets a payoff depending on <em>everyone's</em> choices</li>
+    <li><b>Pure strategy:</b> a single action with prob 1</li>
+    <li><b>Mixed strategy:</b> a probability distribution over actions (deliberately randomize)</li>
+    <li><b>Best response:</b> action(s) maximizing your payoff given the opponent's strategy</li>
+  </ul>
+
+  <h3>Nash Equilibrium</h3>
+  <p>A profile of strategies where <b>no player can unilaterally improve</b> by deviating. "Stable" — given everyone else's choice, you're already best-responding.</p>
+  <ul>
+    <li class="ok"><b>Existence (Nash 1950):</b> every finite game has at least one mixed-strategy Nash equilibrium</li>
+    <li class="warn"><b>Pure-strategy Nash may not exist</b> (e.g., Matching Pennies, Rock-Paper-Scissors); mixed always does</li>
+    <li class="warn">Multiple Nash can coexist; not all are equally "good" or stable</li>
+    <li class="warn">Nash ≠ Pareto-optimal — Prisoner's Dilemma's (D,D) is Nash but both prefer (C,C)</li>
+  </ul>
+
+  <h3>Mixed-Strategy Indifference Principle</h3>
+  <p>In a mixed Nash, every pure strategy <em>in the support</em> of your mix yields the <em>same</em> expected payoff (otherwise you'd shift weight to the better one).</p>
+  <p class="ok"><b>Use:</b> to find an opponent's mixing probability, set up "make me indifferent" — solve for the probability that equates my expected payoff across my pure strategies.</p>
+
+  <h3>Zero-Sum &amp; Minimax</h3>
+  <p><b>Zero-sum:</b> total payoffs sum to 0 (one player's gain = other's loss). Strictly competitive.</p>
+  <div class="box">Maximin (row player):  max_i  min_j  u(i, j)
+                       ↑pick the row whose worst-case is least bad↑
+
+Von Neumann theorem (1928):
+  In any finite zero-sum game, max_i min_j = min_j max_i  (with mixed strategies)
+  This common value = the GAME VALUE</div>
+  <ul>
+    <li class="warn"><b>Mixed minimax can be worse than pure</b> for a fixed mixture if the mix isn't the equilibrium one — randomizing 60/40 between two row choices weights toward the worse-case row, lowering the min. Only the <em>equilibrium</em> mix attains the game value.</li>
+    <li>Folk Theorem does NOT apply to (single-shot) zero-sum games — there's nothing to cooperate about</li>
+  </ul>
+
+  <hr>
+  <h2>4 · Repeated Games &amp; the Folk Theorem</h2>
+
+  <h3>Repeated Game Setup</h3>
+  <ul>
+    <li>Same stage game played indefinitely; players observe history</li>
+    <li>Total payoff = discounted sum: Σ δᵗ · u_t with discount δ ∈ [0,1)</li>
+    <li>Strategies can be <em>history-dependent</em> ⇒ rich behaviors emerge that don't exist in one-shot games</li>
+  </ul>
+
+  <h3>The Folk Theorem (informal)</h3>
+  <p>In an <em>infinitely</em> repeated game with sufficient discount factor, <b>any feasible &amp; individually rational payoff vector can be sustained as a Nash equilibrium</b> via credible punishment for deviations.</p>
+  <ul>
+    <li><b>Feasible:</b> achievable as a (possibly mixed) average of stage payoffs</li>
+    <li><b>Individually rational:</b> each player gets at least their minimax (worst-case-guaranteed) value</li>
+    <li class="ok"><b>Mechanism:</b> threat of future punishment outweighs the one-shot gain from deviating ⇒ cooperation sustainable</li>
+    <li class="warn">Requires <b>infinite (or unknown) horizon</b> — backward induction unravels cooperation in finite-known games</li>
+    <li class="warn">Requires <b>high enough δ</b> — if future doesn't matter, threats don't bite</li>
+    <li class="warn">Requires <b>credible threats</b> — see SPE below</li>
+  </ul>
+
+  <h3>Subgame Perfect Equilibrium (SPE)</h3>
+  <p>Strategy profile is a <b>Nash equilibrium in every subgame</b>, including off-path histories. Stronger than Nash: rules out <em>empty threats</em> that wouldn't actually be carried out.</p>
+  <ul>
+    <li>Solved via <b>backward induction</b>: start from the end of the game, find optimal play, propagate back</li>
+    <li>Not every Nash is SPE — non-credible punishment threats can support Nash but fail SPE</li>
+    <li>Requires <em>punishment to be optimal even when triggered</em> — else the deviator knows you won't follow through</li>
+  </ul>
+
+  <h3>Common Repeated-Game Strategies</h3>
+  <table>
+    <tr><th>Strategy</th><th>Rule</th><th>Strengths · Weaknesses</th></tr>
+    <tr><td><b>Tit-for-Tat (TFT)</b></td><td>Cooperate first; then copy opponent's last action</td><td class="ok">Nice, retaliatory, forgiving · <span class="warn">noise causes endless retaliation loops</span></td></tr>
+    <tr><td><b>Grim Trigger</b></td><td>Cooperate until first defection; then defect forever</td><td>Strongest deterrent · <span class="warn">unforgiving — single mistake ⇒ permanent breakdown</span></td></tr>
+    <tr><td><b>Pavlov (WSLS)</b></td><td>Win-Stay, Lose-Shift: repeat last action if payoff was good, switch if bad</td><td class="ok">Robust to noise (forgives slips), recovers from accidents</td></tr>
+    <tr><td><b>Always Defect</b></td><td>Defect every round</td><td>Benchmark for incorrigible opponents</td></tr>
+    <tr><td><b>Always Cooperate</b></td><td>Cooperate every round</td><td class="warn">Exploitable by defectors; useful only as baseline</td></tr>
+  </table>
+  <ul>
+    <li><b>TFT vs Pavlov in noisy envs:</b> TFT's mirror gets stuck mirroring noise ⇒ cooperation collapses; Pavlov shifts after a bad payoff and can re-establish cooperation faster</li>
+    <li class="warn"><b>Folk Theorem fails against AlwaysDefect:</b> if a player ignores punishment threats, cooperation cannot be sustained — others may need to coalition-punish or accept lower payoffs</li>
+  </ul>
+
+  <h3>Discount Factor Intuition</h3>
+  <ul>
+    <li><b>High δ (future matters):</b> threat of future punishment is heavy ⇒ cooperation sustainable</li>
+    <li><b>Low δ (future doesn't matter):</b> one-shot gain from defecting outweighs distant punishment ⇒ cooperation collapses</li>
+    <li>Quantitative threshold (Prisoner's Dilemma + Grim Trigger): cooperation sustainable iff δ ≥ (T − R) / (T − P), where T=temptation, R=reward, P=punishment payoffs</li>
+  </ul>
+
+  <h3>Common Game-Theory Pitfalls</h3>
+  <ul>
+    <li class="warn"><b>Folk Theorem ≠ "any outcome works"</b> — needs feasible, individually rational, infinite horizon, credible punishment</li>
+    <li class="warn"><b>Nash ⇏ SPE:</b> Nash can rely on threats that wouldn't be carried out; SPE requires credibility everywhere</li>
+    <li class="warn"><b>Zero-sum ≠ all competitive games</b> — most real interactions have positive-sum opportunities</li>
+    <li class="warn"><b>Mixed strategy ≠ uncertain about choice</b> — it's a deliberate randomization to make opponent indifferent</li>
+    <li class="warn"><b>Heavy future discounting kills cooperation</b> — players want their treats <em>now</em></li>
+  </ul>
+
+</div>
+</div>
+
+</body>
+</html>

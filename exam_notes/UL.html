@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CS 7641 — Unit 3: Unsupervised Learning Cheat Sheet</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 11.5px;
+    color: #1a1a1a;
+    background: #fff;
+    padding: 18px 22px;
+    line-height: 1.45;
+  }
+
+  h1 {
+    font-size: 15px;
+    font-weight: 600;
+    border-bottom: 2px solid #1a1a1a;
+    padding-bottom: 4px;
+    margin-bottom: 10px;
+  }
+
+  h2 {
+    font-size: 11.5px;
+    font-weight: 600;
+    background: #1a1a1a;
+    color: #fff;
+    padding: 2px 6px;
+    margin: 10px 0 5px;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+
+  h3 {
+    font-size: 11.5px;
+    font-weight: 600;
+    margin: 7px 0 2px;
+    border-bottom: 0.5px solid #ccc;
+    padding-bottom: 1px;
+  }
+
+  .cols {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  p { margin: 2px 0 4px; }
+
+  ul { margin: 2px 0 4px; padding-left: 15px; }
+  li { margin: 1px 0; }
+
+  .box {
+    background: #f5f5f3;
+    border: 0.5px solid #bbb;
+    border-radius: 4px;
+    padding: 5px 7px;
+    margin: 4px 0;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10.5px;
+    line-height: 1.6;
+    white-space: pre;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10.5px;
+    margin: 3px 0;
+  }
+  td, th {
+    padding: 2px 5px;
+    border: 0.5px solid #ccc;
+    text-align: left;
+  }
+  th {
+    background: #f0f0ee;
+    font-weight: 600;
+  }
+
+  .warn { color: #b91c1c; font-weight: 500; }
+  .ok   { color: #166534; font-weight: 500; }
+
+  hr {
+    border: none;
+    border-top: 1.5px solid #ddd;
+    margin: 10px 0;
+  }
+
+  @media print {
+    body { padding: 12px 16px; }
+    .cols { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<h1>CS 7641 — Unit 3: Unsupervised Learning &nbsp;<span style="font-size:11px;font-weight:400">Quick Reference</span></h1>
+
+<div class="cols">
+
+<!-- LEFT COLUMN -->
+<div>
+
+  <h2>1 · Clustering</h2>
+
+  <h3>Setup</h3>
+  <p>Partition n unlabeled points into k groups of similar items. No ground truth — quality judged by <em>internal</em> metrics (silhouette, inertia, BIC) and downstream utility.</p>
+  <ul>
+    <li class="warn"><b>Standardize first:</b> all distance/likelihood-based methods are scale-sensitive; large-magnitude features dominate. (GMMs are <em>not</em> immune — covariance still skews.)</li>
+    <li class="warn"><b>Curse of dimensionality:</b> distances concentrate in high-d; "nearest" loses meaning above ~20 dims; clustering quality degrades</li>
+  </ul>
+
+  <h3>K-Means — hard, spherical</h3>
+  <p><b>Idea:</b> minimize within-cluster sum-of-squares. Each point joins its nearest centroid; centroids re-fit to their members; repeat until stable.</p>
+  <div class="box">Inertia (objective):  J = Σᵢ ‖xᵢ − μ_{c(i)}‖²    (LOWER = tighter clusters = better)
+Lloyd's algo:
+  1) Assign:  c(i) ← argmin_k ‖xᵢ − μ_k‖
+  2) Update:  μ_k ← mean of points assigned to k
+  Repeat until assignments stop changing</div>
+  <ul>
+    <li><b>Assumptions:</b> spherical (isotropic) clusters, similar sizes, Euclidean geometry</li>
+    <li class="warn"><b>Fails on:</b> non-convex shapes (crescents), elongated clusters, very different cluster sizes (centroid drifts toward the bigger one)</li>
+    <li class="warn"><b>Init sensitivity:</b> can land in local minima; <b>k-means++</b> seeds centroids spread out (proportional to D²); use multiple restarts and keep the lowest-inertia run</li>
+    <li>Hard assignment — every point belongs to exactly one cluster, no uncertainty</li>
+  </ul>
+
+  <h3>GMM with EM — soft, ellipsoidal</h3>
+  <p><b>Generative story:</b> (1) Pick cluster zᵢ = k with prior probability π_k; (2) Draw xᵢ ~ 𝒩(μ_k, Σ_k). Marginalizing out the hidden zᵢ gives the <em>mixture density</em>:</p>
+  <div class="box">p(x | θ) = Σ_k π_k · 𝒩(x | μ_k, Σ_k)
+
+x   = one observed data point (one row of data)
+θ   = { π_1..π_K,  μ_1..μ_K,  Σ_1..Σ_K }   (all params)
+π_k = P(z=k) = prior probability of cluster k     (Σ_k π_k = 1)
+μ_k = mean of cluster k              Σ_k = covariance of cluster k
+zᵢ  = latent cluster index for xᵢ    (unobserved)</div>
+  <p><b>Reading p(x | θ):</b> weighted avg over clusters — each term = (cluster k's prior) × (likelihood of x under cluster k). Sum because we don't know which cluster generated x. The hidden zᵢ is the <b>latent variable</b> EM is built to handle.</p>
+
+  <p><b>Goal:</b> find θ that maximizes the log-likelihood log L(θ) = Σᵢ log p(xᵢ | θ). Direct optimization is hard because of the unobserved zᵢ ⇒ <b>EM</b> alternates soft assignments and parameter refits until log L(θ) stabilizes.</p>
+
+  <div class="box">E-step (responsibilities = posterior over cluster):
+  γ_ik = P(zᵢ=k | xᵢ, θ) = π_k · 𝒩(xᵢ; μ_k, Σ_k) / Σⱼ π_j · 𝒩(xᵢ; μ_j, Σ_j)
+
+M-step (refit params using responsibilities as weights):
+  N_k = Σᵢ γ_ik
+  π_k = N_k / n
+  μ_k = (1/N_k) · Σᵢ γ_ik · xᵢ
+  Σ_k = (1/N_k) · Σᵢ γ_ik · (xᵢ − μ_k)(xᵢ − μ_k)ᵀ</div>
+  <ul>
+    <li><b>Three knobs per cluster:</b> μ_k (location), Σ_k (shape/orientation), π_k (size/prior)</li>
+    <li class="ok"><b>Handles unequal sizes &amp; shapes</b> via per-component π_k and Σ_k</li>
+    <li class="ok"><b>Soft assignments</b> capture uncertainty in overlap regions</li>
+    <li>EM is <em>coordinate ascent on a lower bound</em> to log-likelihood</li>
+    <li class="warn">Local optima: re-run from different inits; log-likelihood rises per iteration, finals differ</li>
+    <li class="warn">More k always raises training log-likelihood ⇒ use BIC/AIC to choose k</li>
+  </ul>
+
+  <h3>K-Means = EM on GMM (degenerate limit)</h3>
+  <p>Three constraints collapse the GMM EM machinery into Lloyd's algorithm:</p>
+  <table>
+    <tr><th>Constraint</th><th>What it kills</th></tr>
+    <tr><td>π_k = 1/K &nbsp;(equal mixing weights, fixed)</td><td>Cluster size prior</td></tr>
+    <tr><td>Σ_k = σ²I for all k &nbsp;(shared spherical, fixed)</td><td>Cluster shape/orientation — only Euclidean distance matters</td></tr>
+    <tr><td>σ² → 0 &nbsp;(conceptual limit)</td><td>Softmax responsibilities sharpen into hard 0/1 assignments</td></tr>
+  </table>
+  <p><em>K-Means itself has no σ² parameter — the σ² → 0 limit is the analytical bridge that turns GMM's soft responsibilities into K-Means' hard nearest-centroid choice.</em></p>
+
+  <p><b>E-step under these constraints:</b></p>
+  <div class="box">γ_ik = exp(−‖xᵢ − μ_k‖² / 2σ²) / Σⱼ exp(−‖xᵢ − μⱼ‖² / 2σ²)
+       └────────── softmax over distance, sharpens as σ² → 0 ──────────┘
+
+σ² → 0:  γ_ik → 1 if k = argmin_j ‖xᵢ − μⱼ‖, else 0    ← K-Means assignment</div>
+
+  <p><b>M-step</b> — <em>same formula as GMM EM</em>, just evaluated with hard γ_ik ∈ {0, 1}:</p>
+  <div class="box">μ_k = (1/N_k) · Σᵢ γ_ik · xᵢ
+     = (1/N_k) · Σ_{i: assigned to k} xᵢ      ← only assigned points contribute (γ_ik=1)
+     = mean of points in cluster k             ← Lloyd's centroid update</div>
+
+  <p class="ok"><b>K-Means throws away GMM's machinery for shape (Σ_k), size (π_k), and uncertainty (soft γ).</b> Forced spherical + equal-prior + zero-variance ⇒ EM degenerates into hard nearest-centroid + mean-update = Lloyd's algorithm.</p>
+
+  <h3>Hierarchical / Linkage Clustering</h3>
+  <p><b>Idea:</b> agglomerative (bottom-up): start with each point as its own cluster; repeatedly merge the closest two until one cluster remains. The output is a <b>dendrogram</b> — cut at any height for any k.</p>
+  <p><b>Linkage rule</b> = how we define the distance between two existing clusters A and B (used to decide which pair to merge next). All linkages below use <em>pairwise distances between original points</em>, not cluster means.</p>
+  <table>
+    <tr><th>Linkage</th><th>Distance between A and B =</th><th>Tendency</th></tr>
+    <tr><td><b>Single</b></td><td><code>min</code> over all (a, b) with a ∈ A, b ∈ B — i.e., the <em>closest</em> cross-cluster pair</td><td class="warn"><b>Chains</b> — one bridging pair is enough to merge; long stringy clusters; sensitive to noise</td></tr>
+    <tr><td><b>Complete</b></td><td><code>max</code> over all (a, b) — i.e., the <em>farthest</em> cross-cluster pair</td><td>Compact, ball-like; clusters merge only when fully tight; sensitive to outliers</td></tr>
+    <tr><td><b>Average</b></td><td>mean of all cross-cluster pair distances</td><td>Balanced; robust default</td></tr>
+    <tr><td><b>Ward</b></td><td>increase in within-cluster variance after the merge (uses centroids)</td><td>Like K-Means but hierarchical — favors compact, equal-variance clusters</td></tr>
+  </table>
+  <ul>
+    <li class="warn"><b>Single linkage chaining</b> is the canonical failure mode: a thin bridge of points merges two distinct clusters into one. Bad in noisy / high-d settings.</li>
+    <li>O(n²) memory for the distance matrix ⇒ doesn't scale to very large n</li>
+  </ul>
+
+  <h3>DBSCAN — density-based</h3>
+  <p><b>Idea:</b> a cluster is a region of high density; points outside any dense region are <b>noise</b>. Two hyperparams: ε (neighborhood radius), minPts (density threshold).</p>
+  <ul>
+    <li><b>Core point:</b> ≥ minPts within ε. Cluster grows by chaining core points; <b>border points</b> attach to a cluster but don't extend it; <b>noise points</b> remain unassigned.</li>
+    <li class="ok">No need to specify k; finds <em>arbitrary shapes</em> (crescents, rings); explicitly labels noise</li>
+    <li class="warn"><b>Fails when</b> clusters have <em>varying density</em> (single ε can't fit both); degrades in high-d (curse of dimensionality breaks ε neighborhoods)</li>
+  </ul>
+
+  <h3>Choosing k</h3>
+  <ul>
+    <li><b>Elbow method</b> (K-Means): plot inertia vs k. Inertia <em>always drops</em> as k grows (more centroids → smaller distances, k=N gives J=0); pick the "kink" where the drop levels off.</li>
+    <li><b>Silhouette score</b>: per-point (b−a)/max(a,b) where a = mean intra-cluster dist, b = mean dist to nearest other cluster. Range [−1, 1], <b>higher is better</b> (≈1 well-clustered, ≈0 on boundary, &lt;0 likely wrong cluster).</li>
+    <li><b>BIC / AIC</b> (GMM): penalize log-likelihood by # parameters; <b>lower is better</b>. BIC penalty (k·log n) is stricter than AIC's (2k) ⇒ BIC favors simpler models.</li>
+    <li class="warn">Optimizing in-sample fit alone (= minimizing inertia for K-Means or maximizing log-likelihood for GMM) <em>always</em> rewards larger k ⇒ over-segmentation. Practical pairings: <b>K-Means → elbow + silhouette</b> (elbow = diminishing returns; silhouette = geometric quality); <b>GMM → BIC/AIC</b> (built-in complexity penalty; silhouette assumes spherical clusters so it under-rates GMM's ellipsoidal fits).</li>
+  </ul>
+
+  <h3>Method-Selection Cheat Table</h3>
+  <table>
+    <tr><th>Geometry / Goal</th><th>Use</th></tr>
+    <tr><td>Spherical, similar sizes, fast</td><td>K-Means (++ init)</td></tr>
+    <tr><td>Ellipsoidal, unequal sizes, soft</td><td>GMM + EM</td></tr>
+    <tr><td>Arbitrary shapes, noise labeled</td><td>DBSCAN</td></tr>
+    <tr><td>Dendrogram / hierarchy needed</td><td>Hierarchical (Ward / average)</td></tr>
+    <tr><td>Very high-d</td><td>Reduce dim first (PCA) or rethink — all clustering hurts</td></tr>
+  </table>
+
+  <h3>Recognizing Clustering Outputs (Method Signatures)</h3>
+  <p>Each method's biases produce characteristic cluster shapes. Match the figure → algorithm:</p>
+  <table>
+    <tr><th>Output looks like…</th><th>Likely method</th><th>Why</th></tr>
+    <tr><td><b>Two compact balls of similar size, well-separated</b></td><td>K-Means or EM (GMM)</td><td>Both find it easily. Hierarchical methods <em>fail when balls are close</em> — early greedy merges grab points across the boundary.</td></tr>
+    <tr><td><b>Two ellipsoids w/ different orientation or size</b></td><td><b>EM (GMM)</b></td><td>Per-cluster Σ_k and π_k capture orientation/imbalance; K-Means is forced spherical &amp; equal-size</td></tr>
+    <tr><td><b>Two <em>overlapping</em> ellipsoidal clusters</b></td><td><b>EM (GMM) only</b></td><td>Soft responsibilities + per-cluster Σ_k handle overlap; K-Means and hierarchical force hard assignments at the boundary, so they can't represent overlap</td></tr>
+    <tr><td><b>Two crescents / moons (non-convex)</b></td><td><b>Single-link or DBSCAN</b> (GMM possible but init-dependent)</td><td>Single-link chains through each curve's dense region; DBSCAN preferred if noise present (minPts blocks chaining across sparse bridges); centroid methods slice across</td></tr>
+    <tr><td><b>Two concentric rings</b></td><td><b>Single-link or DBSCAN</b></td><td>Both follow density; K-Means/EM can't separate concentric shapes</td></tr>
+    <tr><td><b>Long stringy / chained snake</b></td><td><b>Single-link</b> (often a failure)</td><td>Hallmark single-link output, especially with noise</td></tr>
+    <tr><td><b>Two clusters merged via a thin chain</b></td><td>Single-link <em>failure mode</em></td><td>Single-link chains across noise/bridges — the canonical chaining mistake</td></tr>
+    <tr><td><b>Some points labeled as noise / unassigned (often black or <code>−1</code>)</b></td><td><b>DBSCAN</b></td><td>Hallmark DBSCAN output — no other method assigns a noise label; every other algo assigns every point to a cluster</td></tr>
+    <tr><td><b>Two clusters with very different densities (one tight, one loose)</b></td><td><b>DBSCAN failure mode</b></td><td>Single global ε can't fit both: tight cluster fragments, OR loose cluster gets absorbed into noise. Hierarchical/K-Means/EM don't have this issue.</td></tr>
+    <tr><td><b>Cluster cut perpendicular to its long axis</b></td><td>K-Means or Ward</td><td>Centroid methods cut elongated clouds with the perpendicular bisector between centroids</td></tr>
+  </table>
+  <p><b>Quick decision rules:</b></p>
+  <ul>
+    <li>Curved / non-convex boundaries → <b>single-link or DBSCAN</b> (DBSCAN if noise; single-link if clean)</li>
+    <li><b>Noise / outlier label visible → DBSCAN</b> (only method that produces one)</li>
+    <li>Smooth elliptical soft regions → <b>EM (GMM)</b></li>
+    <li><b>Overlapping clusters → EM only</b> (others can't represent overlap)</li>
+    <li>Straight Voronoi-style cuts between ball-like blobs → <b>K-Means / Ward / complete-link</b></li>
+    <li>Cluster sizes very unequal → <b>EM</b> (others bias toward balance)</li>
+  </ul>
+
+  <hr>
+  <h2>2 · Feature Selection</h2>
+
+  <h3>Why select features?</h3>
+  <ul>
+    <li><b>Generalization:</b> high-d, low-n (d ≫ n, e.g. genomics) ⇒ models fit noise. Removing irrelevant features reduces overfitting.</li>
+    <li><b>Interpretability &amp; cost:</b> fewer features = simpler model, cheaper inference, easier to explain</li>
+    <li><b>Selection ≠ transformation:</b> selection picks a <em>subset</em> of original features; PCA/ICA create new ones</li>
+  </ul>
+
+  <h3>Three Families</h3>
+  <table>
+    <tr><th>Family</th><th>How</th><th>Pros</th><th>Cons</th></tr>
+    <tr><td><b>Filter</b></td><td>Score each feature individually (correlation, MI, χ², ANOVA F); rank; keep top-k</td><td>Fast · scales to 1000s of features · model-agnostic</td><td class="warn">Ignores interactions; redundant top-k</td></tr>
+    <tr><td><b>Wrapper</b></td><td>Search subsets; evaluate each via CV with the actual model (forward, backward, RFE)</td><td>Captures interactions &amp; redundancy; tailored to model</td><td class="warn">Expensive (exponential subsets); overfits in low-n; needs nested CV</td></tr>
+    <tr><td><b>Embedded</b></td><td>Selection happens during model training (Lasso, tree feature importance, regularized SVM)</td><td>Model-aware &amp; cheap; principled</td><td>Tied to one model class</td></tr>
+  </table>
+
+  <h3>Relevance vs Usefulness</h3>
+  <p><b>Relevance:</b> "does this feature carry information about y?" (statistical property of the feature)<br>
+     <b>Usefulness:</b> "does this feature improve <em>this model's</em> performance?" (depends on model + other features)</p>
+  <ul>
+    <li class="warn"><b>Relevant but useless:</b> a feature can be highly correlated with y yet redundant given another feature already in the model</li>
+    <li class="ok"><b>Irrelevant individually but useful jointly:</b> features can be uninformative alone yet predictive in combination — XOR is the canonical example. Trees/NNs surface these; filter methods miss them.</li>
+    <li>⇒ Filter methods rank by relevance; wrappers measure usefulness directly</li>
+  </ul>
+
+  <h3>Practical Pitfalls</h3>
+  <ul>
+    <li class="warn"><b>Selection on training set leaks:</b> wrapper-style search on the same data used for evaluation overfits ⇒ <b>nested CV</b> (outer loop for evaluation, inner loop for selection)</li>
+    <li class="warn"><b>One-hot explosion:</b> dozens of sparse one-hots fragment clusters and add noise — prefer parsimonious encodings or embeddings</li>
+    <li>Wrappers don't guarantee global optimum: forward/backward search is greedy; combinatorial space too large to enumerate</li>
+  </ul>
+
+</div>
+
+<!-- RIGHT COLUMN -->
+<div>
+
+  <h2>3 · Feature Transformation</h2>
+
+  <h3>PCA — variance via orthogonal axes</h3>
+  <p><b>Idea:</b> find orthogonal directions of <em>maximum variance</em>. Project data onto top-k of these directions ⇒ best linear k-D approximation in least-squares sense.</p>
+  <div class="box">1) Center data: X̃ = X − x̄
+2) Covariance:  C = (1/n)·X̃ᵀX̃         (d × d)
+3) Eigendecompose: C = V Λ Vᵀ
+   Eigenvectors v_k → principal axes (orthogonal)
+   Eigenvalues  λ_k → variance along axis k
+4) Sort columns of V by DESCENDING λ_k       ← largest variance first = PC1
+5) Project: Z = X̃·V_{:,1:k}             (n × k)
+
+Variance explained by component k:  λ_k / Σⱼ λⱼ
+Equivalently: SVD of X̃ — same answer, more numerically stable, sorts for free</div>
+  <ul>
+    <li><b>What it does:</b> decorrelates features (Cov(Z) is diagonal); compresses by keeping top-variance directions</li>
+    <li><b>Picking k:</b> "knee" in scree plot, or smallest k with cumulative variance ≥ 90/95%</li>
+    <li class="ok"><b>Best when features are collinear</b> — strong linear redundancy collapses into a few high-λ directions</li>
+    <li class="warn"><b>High variance ≠ informative:</b> top components can capture noise, batch effects, or irrelevant dominant axes; not guaranteed to help downstream tasks</li>
+    <li class="warn"><b>Overfits in d ≫ n</b> regime — sample covariance is rank-deficient; some "signal" directions are noise</li>
+    <li class="warn"><b>Standardize first</b> if features have different units; otherwise high-magnitude features dominate</li>
+    <li>Components are linear combinations of all original features ⇒ <em>not interpretable</em> as original variables</li>
+  </ul>
+
+  <h3>Drawing PC1/PC2 by inspection (2D)</h3>
+  <ul>
+    <li><b>PC1</b> = direction of <em>max variance</em> — eyeball as the long axis of the data cloud</li>
+    <li><b>PC2</b> = orthogonal to PC1 with max remaining variance (in 2D: simply perpendicular)</li>
+    <li>Both axes pass through the centroid; arrow length ∝ √λ_k = std dev along that axis</li>
+    <li><b>Why max variance = long axis:</b> variance along unit direction u is <code>uᵀCu</code> (a quadratic form in the covariance matrix). Maximizing over unit u → top eigenvector of C = PC1; second max subject to orthogonality → PC2.</li>
+  </ul>
+
+  <p><b>Visual cases:</b></p>
+  <table>
+    <tr><th>Data cloud shape</th><th>PC1</th><th>PC2</th></tr>
+    <tr><td>Elongated, tilted (y ≈ x trend)</td><td>Along the diagonal</td><td>Anti-diagonal</td></tr>
+    <tr><td>Axis-aligned, wider in x</td><td>x-axis</td><td>y-axis</td></tr>
+    <tr><td>Circular (isotropic)</td><td colspan="2" class="warn">Degenerate — eigenvalues equal, any orthogonal pair works</td></tr>
+    <tr><td>Cross / V-shape</td><td colspan="2" class="warn">PC1 locks onto dominant arm, misses cross structure (PCA is linear-only)</td></tr>
+  </table>
+
+  <p><b>Exam gotchas:</b></p>
+  <ul>
+    <li class="warn"><b>Circular cloud:</b> "PCA is degenerate; eigenvalues equal so PC1/PC2 are arbitrary" is the <em>correct</em> answer — don't try to invent a direction.</li>
+    <li class="warn"><b>Cross / V-shape:</b> PC1 aligns with the dominant arm, missing the cross entirely. Flag PCA's linear limitation; kernel PCA or manifold methods are the fix.</li>
+    <li class="warn"><b>Outliers drag PC1:</b> PCA minimizes squared error, so far points have outsized influence on the principal direction.</li>
+  </ul>
+
+  <h3>ICA — independence via non-Gaussianity</h3>
+  <p><b>Idea:</b> assume observed data is a <em>linear mixture</em> of statistically independent latent sources; recover the unmixing matrix W. Classic <b>cocktail party problem</b>: separate two voices from two microphones.</p>
+  <div class="box">Model:    x = A·s     (x observed, s independent sources, A mixing matrix)
+Recover:  s ≈ W·x   by maximizing non-Gaussianity of W·x
+
+Common objectives:
+  · kurtosis  (proxy for non-Gaussianity, sensitive to outliers)
+  · negentropy J(y) = H(y_Gauss) − H(y)   (preferred, robust)
+  · maximum likelihood with non-Gaussian density</div>
+  <ul>
+    <li><b>Why non-Gaussianity?</b> Central Limit Thm: sum of independent rvs is "more Gaussian" than its parts. So the <em>most non-Gaussian</em> projection is the most "un-mixed."</li>
+    <li class="warn"><b>Gaussian sources are unrecoverable:</b> ICA needs at most one Gaussian source; if all sources are Gaussian, mixing is non-identifiable (rotations are equivalent)</li>
+    <li><b>Indeterminacies:</b> sources recovered up to (i) permutation and (ii) scale/sign — order and amplitude are not fixed</li>
+    <li class="warn"><b>Data-hungry &amp; unstable:</b> estimating higher-order stats needs more samples than PCA; collinearity hurts; can extract spurious components if true sources are near-Gaussian</li>
+  </ul>
+
+  <h3>PCA vs ICA — pick the right tool</h3>
+  <table>
+    <tr><th></th><th>PCA</th><th>ICA</th></tr>
+    <tr><th>Goal</th><td>Max variance</td><td>Max independence</td></tr>
+    <tr><th>Stats used</th><td>2nd-order (covariance)</td><td>Higher-order (kurtosis, negentropy)</td></tr>
+    <tr><th>Output axes</th><td>Orthogonal</td><td>Need not be orthogonal</td></tr>
+    <tr><th>Component property</th><td>Uncorrelated</td><td>Statistically independent</td></tr>
+    <tr><th>Ordering</th><td>By variance (λ)</td><td>By non-Gaussianity</td></tr>
+    <tr><th>Best for</th><td>Compression, denoising via low-rank</td><td>Source separation (audio, EEG, fMRI)</td></tr>
+  </table>
+  <p class="ok"><b>Uncorrelated ≠ independent.</b> Uncorrelated means only the linear (2nd-order) cross-moment vanishes:  Cov(X, Y) = E[XY] − E[X]·E[Y] = 0. Independence is strictly stronger — the joint factorizes  p(X, Y) = p(X)·p(Y), which forces  E[f(X)·g(Y)] = E[f(X)]·E[g(Y)] for <em>every</em> pair of functions f, g (i.e. <em>all</em> cross-moments factor, not just the linear one).</p>
+  <p>Independent ⇒ uncorrelated (always). The reverse only holds when the joint is <b>Gaussian</b> (where mean &amp; covariance fully describe the distribution).</p>
+  <div class="box">Classic counter-example:  X ~ Uniform(−1, 1),  Y = X²
+                  E[X] = 0,  E[XY] = E[X³] = 0   ⇒  Cov(X, Y) = 0   (uncorrelated)
+                  but Y is a deterministic function of X            (NOT independent)</div>
+  <p>This is why PCA is enough for Gaussian data (all dependence is 2nd-order ⇒ decorrelating = independence) but ICA must look at <em>higher-order</em> statistics for non-Gaussian sources — and conversely why ICA cannot separate Gaussian sources (no higher-order signal to exploit; see ICA warning above).</p>
+
+  <hr>
+  <h2>4 · Manifold Learning</h2>
+
+  <h3>The Manifold Hypothesis</h3>
+  <p>Real high-d data often lies on a low-d <em>manifold</em> (curved surface) embedded in ambient space. Linear methods (PCA) flatten it incorrectly; manifold learners aim to <em>unroll</em> the surface.</p>
+  <p><b>Canonical example:</b> the Swiss roll — 2D surface curled in 3D. PCA squashes it onto its longest axis (wrong); Isomap unrolls it.</p>
+
+  <h3>MDS &amp; Sammon Mapping (distance preservation)</h3>
+  <div class="box">Classical MDS:  preserves all pairwise Euclidean distances
+                Stress = Σᵢⱼ (d*ᵢⱼ − dᵢⱼ)²        (unweighted)
+                ≡ PCA when input distances are Euclidean
+
+Sammon:        weighted stress, weights ∝ 1/d*ᵢⱼ
+                Stress_S = Σᵢⱼ (d*ᵢⱼ − dᵢⱼ)² / d*ᵢⱼ
+                          → emphasizes SMALL original distances</div>
+  <ul>
+    <li><b>Sammon</b> deliberately overweights short distances ⇒ preserves <em>local</em> structure better than plain MDS, reducing crowding</li>
+    <li>Both are non-parametric: no inductive map for new points without re-running</li>
+  </ul>
+
+  <h3>Isomap — geodesics on a kNN graph</h3>
+  <ol style="margin:2px 0 4px;padding-left:18px">
+    <li>Build kNN graph on data points</li>
+    <li>Estimate <b>geodesic distance</b> between any two points = shortest path on the graph</li>
+    <li>Run classical MDS on the geodesic distance matrix ⇒ embedding</li>
+  </ol>
+  <ul>
+    <li class="ok"><b>Unrolls curved manifolds</b> (Swiss roll, "A" digits with angle/size variation) — geodesic ≈ true intrinsic distance, not ambient Euclidean</li>
+    <li class="warn"><b>Short-circuit failure:</b> if k is too large, the kNN graph creates spurious edges across folds of the manifold ⇒ geodesics become straight-line shortcuts ⇒ embedding corrupted. Tune k carefully.</li>
+  </ul>
+
+  <h3>Laplacian Eigenmaps — local neighborhoods</h3>
+  <p><b>Idea:</b> build a weighted kNN graph; embed so that strongly-connected points stay close. Solves the generalized eigenproblem on the graph Laplacian:</p>
+  <div class="box">W: weighted kNN graph (e.g. Gaussian heat kernel on edges)
+D: diagonal degree matrix (Dᵢᵢ = Σⱼ Wᵢⱼ)
+L = D − W   (graph Laplacian)
+
+Solve:  L f = λ D f
+Take the smallest non-trivial eigenvectors as embedding coords.</div>
+  <ul>
+    <li>Smallest eigenvectors = smoothest functions on the graph ⇒ preserves <em>local</em> adjacency</li>
+    <li>Trivial λ=0 eigenvector (constant) is dropped — it carries no info</li>
+    <li>Closely related to spectral clustering (same Laplacian, different downstream use)</li>
+  </ul>
+
+  <h3>t-SNE — local affinity, KL objective</h3>
+  <p><b>Goal:</b> visualize high-d data in 2D such that <em>local</em> structure (neighborhoods, clusters) is preserved — even at the cost of distorting global geometry. Best EDA tool for asking "are there cluster-like groups in my data?"</p>
+  <p><b>Three core tricks:</b></p>
+  <ol>
+    <li><b>Distances → probabilities (SNE):</b> raw high-d distances are noisy, so model "probability that j is a neighbor of i" via a Gaussian kernel anchored at xᵢ (i indexes data <em>points</em>, not features). σᵢ is the std dev of that kernel — one scalar per point, isotropic across all d feature directions. It's tuned <em>per-point</em> so each point sees the same effective neighborhood size = <b>perplexity</b> (small σᵢ in dense regions, large σᵢ in sparse ones — adapts to local density).</li>
+    <li><b>Asymmetric KL ⇒ local emphasis:</b> minimizing KL(P ‖ Q) heavily penalizes "false friends" (far high-d points placed close in 2D) but cheaply forgives "missed neighbors" (close points placed apart). ⇒ aggressive preservation of local neighborhoods, willing sacrifice of global geometry.</li>
+    <li><b>Student-t in low-d (the "t" of t-SNE) fixes crowding:</b> high-d volume grows faster than 2D, so a Gaussian-Gaussian version (original SNE) crowds moderate-distance points in the middle. Heavy-tailed Student-t lets moderate distances spread out ⇒ visible cluster gaps.</li>
+  </ol>
+  <div class="box">High-d affinities P (Gaussian kernel; perplexity sets bandwidth):
+  pⱼ|ᵢ ∝ exp(−‖xᵢ − xⱼ‖² / 2σᵢ²)
+  pᵢⱼ = (pⱼ|ᵢ + pᵢ|ⱼ) / (2n)
+
+Low-d affinities Q (Student-t kernel, heavy tails ⇒ less crowding):
+  qᵢⱼ ∝ (1 + ‖yᵢ − yⱼ‖²)⁻¹
+
+Optimize:  KL( P ‖ Q )   via gradient descent on {yᵢ}</div>
+  <ul>
+    <li><b>Perplexity</b> ≈ effective neighborhood size (typical 5–50); small ⇒ very local, large ⇒ broader</li>
+    <li><b>Early exaggeration</b>: scale up P early in optimization ⇒ tighter clusters with bigger gaps</li>
+    <li class="warn"><b>Distorts global geometry:</b> inter-cluster distances and cluster <em>areas</em> are NOT meaningful — blob size ≠ class prevalence</li>
+    <li class="warn">No native out-of-sample mapping (must re-run with new points); stochastic across runs</li>
+  </ul>
+
+  <h3>UMAP — fuzzy simplicial sets, cross-entropy</h3>
+  <p>Builds a (approximate) kNN graph as a <em>fuzzy topological representation</em>; finds a low-d layout whose fuzzy graph matches it via cross-entropy. Mathier framing than t-SNE, similar local emphasis.</p>
+  <ul>
+    <li><b>n_neighbors:</b> like t-SNE perplexity — small=local, large=more global. <b>min_dist:</b> minimum spacing in 2D; smaller ⇒ tighter clusters with bigger gaps.</li>
+    <li class="ok">Generally better global structure than t-SNE; faster on large data; supports <b>inductive transform</b> (place new points without re-fitting); has a <b>supervised mode</b></li>
+    <li>Spectral init by default ⇒ more reproducible than t-SNE's random init</li>
+    <li>No early exaggeration phase (that's a t-SNE thing)</li>
+  </ul>
+
+  <h3>When NOT to use t-SNE / UMAP</h3>
+  <ul>
+    <li class="warn"><b>kNN retrieval / quantitative distances:</b> 2D distances aren't faithful to high-d distances</li>
+    <li class="warn"><b>Stable production embeddings:</b> stochastic outputs, hyperparameter-fragile, hard to monitor</li>
+    <li class="warn"><b>Out-of-sample mapping:</b> vanilla t-SNE has none; UMAP's transform isn't metric-preserving</li>
+    <li class="warn"><b>Variance interpretation:</b> axes have no scale meaning — area ≠ prevalence, gap ≠ dissimilarity</li>
+    <li class="warn"><b>Batch-effect correction:</b> neither method does this — embeddings can reflect cohort artefacts</li>
+    <li class="ok"><b>Use them for:</b> exploratory visualization, finding cluster candidates, qualitative inspection</li>
+  </ul>
+
+</div>
+</div>
+
+</body>
+</html>

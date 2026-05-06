@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CS 7641 — Unit 1: Supervised Learning Cheat Sheet</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 11.5px;
+    color: #1a1a1a;
+    background: #fff;
+    padding: 18px 22px;
+    line-height: 1.45;
+  }
+
+  h1 {
+    font-size: 15px;
+    font-weight: 600;
+    border-bottom: 2px solid #1a1a1a;
+    padding-bottom: 4px;
+    margin-bottom: 10px;
+  }
+
+  h2 {
+    font-size: 11.5px;
+    font-weight: 600;
+    background: #1a1a1a;
+    color: #fff;
+    padding: 2px 6px;
+    margin: 10px 0 5px;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+
+  h3 {
+    font-size: 11.5px;
+    font-weight: 600;
+    margin: 7px 0 2px;
+    border-bottom: 0.5px solid #ccc;
+    padding-bottom: 1px;
+  }
+
+  .cols {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  p { margin: 2px 0 4px; }
+
+  ul { margin: 2px 0 4px; padding-left: 15px; }
+  li { margin: 1px 0; }
+
+  .box {
+    background: #f5f5f3;
+    border: 0.5px solid #bbb;
+    border-radius: 4px;
+    padding: 5px 7px;
+    margin: 4px 0;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10.5px;
+    line-height: 1.6;
+    white-space: pre;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10.5px;
+    margin: 3px 0;
+  }
+  td, th {
+    padding: 2px 5px;
+    border: 0.5px solid #ccc;
+    text-align: left;
+  }
+  th {
+    background: #f0f0ee;
+    font-weight: 600;
+  }
+
+  .warn { color: #b91c1c; font-weight: 500; }
+  .ok   { color: #166534; font-weight: 500; }
+
+  hr {
+    border: none;
+    border-top: 1.5px solid #ddd;
+    margin: 10px 0;
+  }
+
+  @media print {
+    body { padding: 12px 16px; }
+    .cols { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<h1>CS 7641 — Unit 1: Supervised Learning &nbsp;<span style="font-size:11px;font-weight:400">Quick Reference</span></h1>
+
+<div class="cols">
+
+<!-- LEFT COLUMN -->
+<div>
+
+  <h2>1 · Decision Trees &amp; ID3</h2>
+
+  <h3>Entropy &amp; Information Gain</h3>
+  <div class="box">H(S) = −Σᵢ pᵢ log₂ pᵢ        pᵢ = fraction of class i in S
+IG(S,A) = H(S) − Σᵥ |Sᵥ|/|S| · H(Sᵥ)
+ID3 greedily picks argmax_A IG(S,A)</div>
+  <ul>
+    <li><b>S</b> = examples at this node (rows); labels enter only via pᵢ</li>
+    <li><b>A</b> = candidate attribute (feature) to split on</li>
+    <li><b>v</b> = a value of A; <b>Sᵥ</b> = subset of S with A = v</li>
+    <li><b>|Sᵥ|/|S|</b> = weight of branch v (size-weighted avg child entropy)</li>
+    <li>H in bits (log₂); H = 0 ⇒ pure, H = 1 ⇒ 50/50 binary</li>
+  </ul>
+  <p><b>Leaf node:</b> all examples same label → entropy = 0, no further split. Path may involve multiple splits. ID3 assigns majority class (does not require ≥2 examples).</p>
+  <p><b>Ties in IG:</b> ID3 may pick randomly, use fixed attribute order, or first-in-dataset — no unique rule mandated.</p>
+
+  <h3>ID3 Algorithm (top-down, greedy)</h3>
+  <ul>
+    <li>At node: pick A* = argmax_A IG(S,A); split S into {Sᵥ}; recurse on each Sᵥ with A* <em>removed</em> from candidates</li>
+  </ul>
+  <p><b>Stopping conditions</b> at a node with examples Sᵥ:</p>
+  <table>
+    <tr><th>Condition</th><th>Leaf prediction</th></tr>
+    <tr><td>All Sᵥ same label &nbsp;(H(Sᵥ) = 0)</td><td>That label &nbsp;(pure leaf)</td></tr>
+    <tr><td>No attributes left to split</td><td>Majority class in Sᵥ</td></tr>
+    <tr><td>Sᵥ is empty &nbsp;(no examples reached this branch)</td><td>Parent's majority class</td></tr>
+  </table>
+  <ul>
+    <li class="warn">Greedy, no backtracking → may miss globally optimal tree</li>
+    <li>Categorical features only (<em>original</em> ID3); no built-in pruning; biased toward high-cardinality A</li>
+    <li><b>Continuous features</b> (C4.5 / CART): use the same midpoint-threshold search as regression trees (see below), but score splits with IG (C4.5) or Gini (CART) instead of SSE. Each continuous feature can be <em>re-used</em> at deeper levels with a different threshold.</li>
+  </ul>
+
+  <h3>IG Intuition</h3>
+  <p>IG = H(S) − H(S|A): the expected entropy <em>removed</em> by knowing A — "how much label-uncertainty does this split eliminate?"</p>
+  <ul>
+    <li>IG ≥ 0 always (information can't hurt on training set)</li>
+    <li><b>Range:</b> 0 ≤ IG(S,A) ≤ H(S)
+      <ul>
+        <li><b>IG = 0</b> (worst): children mirror the parent's class distribution — split learned nothing</li>
+        <li><b>IG = H(S)</b> (best): every child is pure (all one class) — maximum possible information gained</li>
+      </ul>
+    </li>
+    <li class="ok"><b>Computational shortcut #1:</b> Max IG ⇔ <b>min weighted child entropy</b> Σᵥ |Sᵥ|/|S|·H(Sᵥ). Since H(S) is constant across candidate attributes at this node, ranking by IG = ranking by weighted child entropy. <em>Don't bother computing H(S) when comparing splits — it cancels.</em></li>
+    <li class="ok"><b>Computational shortcut #2:</b> Pure subsets (all one class) have H(Sᵥ)=0 ⇒ contribute 0 to weighted child entropy ⇒ skip them when computing IG by hand</li>
+  </ul>
+
+  <h3>Generalization (prevent overfitting)</h3>
+  <ul>
+    <li>Prune branches post-training</li>
+    <li>Limit tree depth / min examples per leaf</li>
+    <li>Stop splitting when IG very low</li>
+    <li>Cross-validate stopping criteria</li>
+    <li class="warn">Do NOT use the label as an input feature</li>
+  </ul>
+
+  <h3>Decision Tree Regression</h3>
+  <p>Same recursive axis-aligned splits as classification — only the splitting criterion and leaf prediction change.</p>
+  <div class="box">Splitting:  pick (feature j, threshold t) minimizing
+            SSE = Σ_{i∈L} (yᵢ − ȳ_L)² + Σ_{i∈R} (yᵢ − ȳ_R)²
+            (variance reduction = MSE reduction)
+
+Threshold candidates t:  midpoints between consecutive sorted unique values
+                       of feature j in the current node's data.
+                       Exhaustive search — pick the t with lowest SSE.
+                       (NOT the mean of x; choice depends on y, not x.)
+
+Leaf prediction:  ŷ = mean of training y's in that leaf  (derivation below)</div>
+
+  <p><b>Mean-at-leaf is optimal under squared error</b> — minimize L(c) = Σᵢ(yᵢ − c)²:</p>
+  <div class="box">dL/dc = −2 Σᵢ(yᵢ − c) = 0   ⇒   c* = (1/n) Σᵢ yᵢ = ȳ
+d²L/dc² = 2n &gt; 0   ⇒   minimum (unique).</div>
+
+  <p><b>Loss → leaf statistic</b> (same MLE pattern from any noise model):</p>
+  <table>
+    <tr><th>Loss / noise model</th><th>Leaf prediction</th></tr>
+    <tr><td>Squared error / Gaussian</td><td><b>Mean</b> ȳ</td></tr>
+    <tr><td>Absolute error / Laplace</td><td><b>Median</b></td></tr>
+    <tr><td>0-1 loss / Categorical</td><td><b>Mode</b> (majority class — classification trees!)</td></tr>
+  </table>
+  <ul>
+    <li class="warn">Untuned regression trees overfit hard — every training point can become its own leaf with that point's value as prediction. Limit depth / min_samples_leaf, prune, or CV.</li>
+    <li>sklearn: <code>DecisionTreeRegressor</code> defaults to MSE splitting + mean-at-leaf</li>
+  </ul>
+
+  <h3>Lazy vs Eager Learning</h3>
+  <p><b>Eager:</b> build the model at training time; queries are fast lookups (ID3, NN, regression). &nbsp; <b>Lazy:</b> defer all work to query time; "training" just stores data (k-NN).</p>
+  <table>
+    <tr><th></th><th>Eager (ID3, NN, …)</th><th>Lazy (k-NN, lazy ID3)</th></tr>
+    <tr><th>Train cost</th><td>O(n·d·depth) once</td><td>O(1) — just store data</td></tr>
+    <tr><th>Query cost</th><td>O(depth)</td><td>O(n·d·depth) per query</td></tr>
+    <tr><th>Online updates</th><td class="warn">Costly (retrain)</td><td class="ok">Trivial (append to S)</td></tr>
+    <tr><th>Reusable model</th><td class="ok">Yes — exportable, inspectable</td><td class="warn">No global structure</td></tr>
+    <tr><th>Pruning, feat-importance</th><td class="ok">Easy (global view)</td><td class="warn">Awkward (no full tree)</td></tr>
+  </table>
+  <p><b>Lazy ID3 design:</b> at query time, run ID3 only along the branch x_q traverses (compute IG, pick A*, recurse on the child matching x_q[A*]; never build sibling subtrees).</p>
+  <p class="ok"><b>Key insight:</b> for deterministic learners with fixed training data, <em>basic lazy and eager versions produce identical predictions</em> — they compute the same tree, just in different orders. Lazy/eager is a <b>computation-schedule choice, not a modeling choice</b>.</p>
+  <ul>
+    <li class="warn"><b>Caveats where they diverge:</b> tie-breaking randomness; pruning (lazy can't, since it never sees the full tree); query-adaptive variants (where lazy intentionally biases splits toward x_q's neighborhood)</li>
+    <li><b>Use lazy when:</b> data streams in (frequent updates), few queries on large data, or query-adaptive features matter. <b>Use eager when:</b> many queries on fixed data — amortize training once.</li>
+  </ul>
+
+  <hr>
+  <h2>2 · Regression &amp; Classification</h2>
+
+  <h3>Error Metrics</h3>
+  <div class="box">MSE  = (1/n) Σ (y − ŷ)²      ← penalizes outliers heavily
+MAE  = (1/n) Σ |y − ŷ|
+L1 norm = Σ |eᵢ|              (= n · MAE)
+L2 norm = √(Σ eᵢ²)           (= √(n · MSE))</div>
+
+  <h3>L2 Regularization (Ridge)</h3>
+  <ul>
+    <li>Adds λ·Σwᵢ² penalty → shrinks weights, ↑ bias, ↓ variance</li>
+    <li>Helps with multicollinearity; does NOT zero weights (that's L1/Lasso)</li>
+    <li class="warn">Higher λ → higher bias, lower variance — NOT lower training error</li>
+    <li class="warn">Ridge does NOT reduce training error or increase model complexity</li>
+  </ul>
+
+  <h3>Decision Boundaries by Model</h3>
+  <table>
+    <tr><th>Model</th><th>Boundary Type</th></tr>
+    <tr><td>Linear / Logistic Regression</td><td>Linear (hyperplane)</td></tr>
+    <tr><td>Decision Tree</td><td>Axis-aligned piecewise linear</td></tr>
+    <tr><td>SVM + RBF kernel</td><td>Complex nonlinear</td></tr>
+    <tr><td>Neural Network</td><td>Nonlinear (not always linear!)</td></tr>
+    <tr><td>k-NN</td><td>Voronoi / nonlinear</td></tr>
+  </table>
+  <p class="warn">Logistic regression is linear UNLESS features are engineered/transformed.</p>
+  <p class="warn">Highly curved boundary → high variance, not low variance.</p>
+
+  <h3>Evaluation — Imbalanced Data</h3>
+  <div class="box">Precision = TP/(TP+FP)    Recall = TP/(TP+FN) = TPR
+F1 = 2·P·R / (P+R)
+TPR = TP/(TP+FN)          FPR = FP/(FP+TN)
+AUC-ROC: perfect = 1.0,  random = 0.5</div>
+  <ul>
+    <li>Accuracy misleading when classes skewed (e.g. 95/5 split)</li>
+    <li class="warn">High accuracy ≠ high recall; perfect classifier → AUC = 1.0, NOT 0.5</li>
+  </ul>
+
+  <h3>ROC Curve &amp; AUC</h3>
+  <ul>
+    <li><b>Axes:</b> TPR (y) vs <b>FPR</b> (x). Each point = one decision threshold; sweep threshold 1→0 to trace the curve.</li>
+    <li><b>AUC</b> = P(score(random positive) &gt; score(random negative)) — a <em>ranking</em> metric, threshold-free.</li>
+    <li>Diagonal = random guessing (AUC 0.5); top-left corner = perfect (AUC 1.0); below diagonal = worse than random (flip predictions).</li>
+  </ul>
+
+  <h3>AUC-ROC on Imbalanced Data</h3>
+  <ul>
+    <li class="warn">FPR denominator (FP+TN) is dominated by TN when negatives ≫ positives → many FPs barely move the x-axis → <b>AUC stays optimistic</b> even when minority-class performance is poor.</li>
+    <li class="ok"><b>Use PR curve / AUC-PR instead</b>: Precision = TP/(TP+FP) has no TN, so it's sensitive to minority-class errors.</li>
+    <li>PR baseline = positive-class prevalence (not 0.5); ROC baseline = 0.5 regardless of skew.</li>
+    <li>Also fine on imbalance: F1, F_β (weighted recall), Matthews correlation (MCC), balanced accuracy.</li>
+  </ul>
+
+  <h3>k-NN — How It Classifies</h3>
+  <p><b>Lazy learner:</b> no training step; memorizes data, computes at query time.</p>
+  <ol style="margin:2px 0 4px;padding-left:18px">
+    <li>Compute dist(x, xᵢ) to every training point (Euclidean default; Manhattan, cosine, Hamming for categorical)</li>
+    <li>Pick the k closest training points</li>
+    <li><b>Classification:</b> majority vote of their labels &nbsp; · &nbsp; <b>Regression:</b> mean (or weighted mean) of their y</li>
+    <li><em>Optional:</em> weight votes by 1/dist so closer neighbors count more</li>
+  </ol>
+  <ul>
+    <li class="warn"><b>Scale features first</b> — large-magnitude features dominate distance otherwise</li>
+    <li class="warn"><b>Curse of dimensionality:</b> in high-d, all distances concentrate → "nearest" loses meaning (degrades above ~20 dims)</li>
+    <li>Inference cost: O(n·d) per query naively; KD-tree / ball-tree help in low-d, FAISS/HNSW for high-d</li>
+    <li>Decision boundary = Voronoi tessellation of training points (k=1)</li>
+  </ul>
+
+  <h3>k-NN Bias–Variance</h3>
+  <ul>
+    <li>Small k → low bias, high variance, jagged boundary</li>
+    <li>Large k → high bias, low variance, smooth boundary → underfitting</li>
+    <li class="warn">k=1: memorizes training data, poor generalization on noisy data</li>
+    <li>Odd k for binary classification avoids ties</li>
+    <li>Tune k with cross-validation</li>
+  </ul>
+
+  <h3>DT vs k-NN — Which Hypothesis Class Fits?</h3>
+  <p>Right model = one whose natural boundary shape matches the target's.</p>
+  <ul>
+    <li><b>DT splits are axis-aligned</b> (x &gt; t or y &gt; t) ⇒ to approximate a non-axis-aligned line the tree builds an L-shaped <em>staircase</em>. Halving staircase error ≈ doubling depth ⇒ exponential leaves; finite data leaves step artifacts near the line. <em>Wrong inductive bias.</em></li>
+    <li><b>k-NN boundary = Voronoi midpoint surfaces</b> between opposite-class points. <em>Voronoi cell</em> = points closer to one training point than any other; boundary between two cells = <em>perpendicular bisector</em> of those two points (locally linear). The 1-NN decision boundary is the union of bisectors between opposite-class neighbors — a zig-zag that traces <em>any</em> true boundary (line, curve, whatever) as n grows. <b>No axis bias.</b></li>
+    <li class="ok"><b>Canonical exam problem (line on plane):</b> pick <b>k-NN</b>. DT fights its own geometry; k-NN has the correct inductive bias.</li>
+    <li><b>When DT wins:</b> axis-aligned thresholds, hierarchical rule logic, or when you need an interpretable decision path (the splits <em>are</em> the rules).</li>
+    <li><b>Rule of thumb:</b> rotated/curved geometry → k-NN; flowchart-like decisions → DT.</li>
+  </ul>
+
+</div>
+
+<!-- RIGHT COLUMN -->
+<div>
+
+  <h2>3 · Neural Networks &amp; Backprop</h2>
+
+  <h3>Boolean-operator notation (don't get tripped up)</h3>
+  <table>
+    <tr><th>Symbol</th><th>Name</th><th>Meaning</th></tr>
+    <tr><td>¬A &nbsp;or&nbsp; ~A &nbsp;or&nbsp; Ā</td><td>NOT</td><td>flip A: ¬1=0, ¬0=1</td></tr>
+    <tr><td>A ∧ B &nbsp;or&nbsp; A·B &nbsp;or&nbsp; AB</td><td>AND</td><td>1 iff both A and B are 1</td></tr>
+    <tr><td>A ∨ B &nbsp;or&nbsp; A+B</td><td>OR</td><td>1 iff at least one is 1</td></tr>
+    <tr><td>A ⊕ B</td><td>XOR</td><td>1 iff exactly one is 1 (≡ A ≠ B)</td></tr>
+    <tr><td>¬(A ∧ B)</td><td>NAND</td><td>0 iff both are 1, else 1</td></tr>
+  </table>
+  <p><b>Useful identities:</b> A ⊕ B = (A ∧ ¬B) ∨ (¬A ∧ B) = (A ∨ B) ∧ ¬(A ∧ B). DeMorgan: ¬(A ∧ B) = ¬A ∨ ¬B; ¬(A ∨ B) = ¬A ∧ ¬B.</p>
+
+  <h3>Perceptron Design — Boolean Functions</h3>
+  <p>Threshold perceptron: output = 1 if w₀ + Σ wᵢxᵢ ≥ 0, else 0. (w₀ is the bias.)</p>
+  <p><b>A ∧ ¬B</b> &nbsp; (single perceptron):</p>
+  <div class="box">w₀ = −0.5,  w_A = +1,  w_B = −1
+
+  A B │ w₀ + w_A·A + w_B·B │ out
+  0 0 │      −0.5          │  0
+  0 1 │      −1.5          │  0
+  1 0 │      +0.5          │  1
+  1 1 │      −0.5          │  0
+Negative w_B implements the "¬B" — B drags the sum down.</div>
+
+  <p><b>A ⊕ B (XOR)</b> &nbsp; — needs hidden layer; one perceptron can't do it. Two equivalent decompositions:</p>
+  <div class="box">Decomp 1 (AND-OR):  A ⊕ B = (A ∧ ¬B) ∨ (¬A ∧ B)
+
+Hidden h₁ = A ∧ ¬B :   w₀=−0.5,  w_A=+1,  w_B=−1
+Hidden h₂ = ¬A ∧ B :   w₀=−0.5,  w_A=−1,  w_B=+1
+Output (h₁ ∨ h₂)   :   w₀=−0.5,  w_h1=+1, w_h2=+1
+
+Decomp 2 (OR-NAND):  A ⊕ B = (A ∨ B) ∧ ¬(A ∧ B)
+
+Hidden o₁ = A ∨ B      :   w₀=−0.5,  w_A=+1,  w_B=+1
+Hidden o₂ = ¬(A ∧ B)   :   w₀=+1.5,  w_A=−1,  w_B=−1   ← NAND
+Output (o₁ ∧ o₂)       :   w₀=−1.5,  w_o1=+1, w_o2=+1
+
+Both networks output the same XOR truth table:
+  A B │ XOR
+  0 0 │  0
+  0 1 │  1
+  1 0 │  1
+  1 1 │  0</div>
+  <p class="ok"><b>Why hidden layers exist:</b> the (A,B)→(h₁,h₂) map sends <em>both</em> negative cases (0,0) and (1,1) to the same point (0,0); the positive cases land at distinct corners. Now a single line in (h₁,h₂)-space separates them. The hidden layer <em>learns features that linearize the problem</em>.</p>
+
+  <h3>XOR with MLP — Key Facts</h3>
+  <ul>
+    <li>Single-layer perceptron cannot solve XOR (not linearly separable)</li>
+    <li>Need ≥1 hidden layer with <em>nonlinear</em> activation (step / ReLU / sigmoid)</li>
+    <li>2 hidden neurons sufficient; ReLU or sigmoid both work</li>
+    <li class="warn">Linear hidden activation → still a linear model → cannot learn XOR</li>
+    <li>More hidden units help but aren't strictly necessary for XOR</li>
+  </ul>
+
+  <h3>Perceptron Rule vs Delta (GD) Rule</h3>
+  <p>Both updates have the <em>same form</em> w_i ← w_i + η(t − o)x_i but differ in what <code>o</code> is:</p>
+  <table>
+    <tr><th></th><th>Perceptron Rule</th><th>Delta / GD Rule</th></tr>
+    <tr><th>Output</th><td><b>Thresholded:</b> o = sgn(w·x)</td><td><b>Unthresholded:</b> o = w·x (linear)</td></tr>
+    <tr><th>Derived from</th><td>Heuristic: nudge boundary on errors</td><td>Gradient of ½Σ(t − o)²</td></tr>
+    <tr><th>Differentiable</th><td class="warn">No (sgn step)</td><td class="ok">Yes — enables backprop</td></tr>
+    <tr><th>Convergence</th><td class="ok">Finite steps <em>iff</em> data linearly separable (Rosenblatt)</td><td class="ok">Always converges to local min for small η</td></tr>
+    <tr><th>Inseparable data</th><td class="warn">Oscillates forever</td><td>Finds best linear fit (compromise)</td></tr>
+  </table>
+
+  <p><b>Delta rule</b> (linear unit, E = ½Σ(t − o)²):  &nbsp;∂E/∂wᵢ = −(t − o)·xᵢ &nbsp;⇒&nbsp; wᵢ ← wᵢ + η(t − o)xᵢ. Generic features φᵢ(x): replace xᵢ with φᵢ(x). Backprop example below shows this in action.</p>
+
+  <p><b>Why GD wins for NNs:</b></p>
+  <ul>
+    <li class="warn"><b>Fundamental limitation of perceptron rule:</b> cannot represent (let alone learn) any non-linearly-separable function — XOR, parity, etc. Oscillates forever on such data with no graceful degradation. <em>This is precisely why hidden layers + GD exist.</em></li>
+    <li class="ok"><b>Differentiable end-to-end</b> ⇒ chain rule propagates gradients through hidden layers (= backprop). Perceptron's sgn step kills the gradient.</li>
+    <li><b>Graded signal:</b> updates proportional to error magnitude (t − o), not just 0/1 misclassification</li>
+    <li><b>Works on inseparable data:</b> finds best fit instead of oscillating</li>
+    <li><b>Stacks:</b> swap sgn for sigmoid/ReLU, stack layers → modern deep nets — none of which work without GD</li>
+  </ul>
+
+  <h3>Backprop Worked Example</h3>
+  <p style="margin-bottom:3px">x=2, w₁=1.2, w₂=0.8, y=4, η=0.1, L=½(y−ŷ)²</p>
+  <div class="box">Forward:
+  z₁ = w₁·x = 2.4   →   a₁ = ReLU(2.4) = 2.4
+  ŷ  = w₂·a₁ = 1.92
+
+Gradients (chain rule):
+  dL/dŷ  = ŷ − y           = −2.08
+  dL/dw₂ = dL/dŷ · a₁      = −2.08 · 2.4  = −4.992
+  dL/dw₁ = dL/dŷ · w₂ · ReLU'(z₁) · x
+          = −2.08 · 0.8 · 1 · 2            = −3.328
+  (ReLU'= 1 since z₁ = 2.4 > 0)
+
+Updates (w ← w − η·dL/dw):
+  w₂_new = 0.8  − 0.1·(−4.992) = 1.2992
+  w₁_new = 1.2  − 0.1·(−3.328) = 1.5328</div>
+
+  <h3>NN Training — Practical Pitfalls</h3>
+  <p><b>Learning rate:</b></p>
+  <ul>
+    <li class="ok">Warm-up phase: stabilizes training in early epochs</li>
+    <li class="ok">LR decay schedules: standard in modern deep learning</li>
+    <li class="ok">Cyclical LR: periodically increase AND decrease</li>
+    <li class="ok">Gradient clipping: pair with high LR to avoid instability</li>
+    <li class="warn">Exponentially increasing LR → divergence, not faster convergence</li>
+    <li class="warn">Adaptive optimizers (Adam) reduce need for schedules but don't eliminate them</li>
+  </ul>
+  <p><b>Activation functions:</b></p>
+  <ul>
+    <li class="warn"><b>Sigmoid / tanh:</b> derivatives saturate to 0 in the tails ⇒ <b>vanishing gradients</b> through deep networks ⇒ slow / stalled training in hidden layers</li>
+    <li class="warn"><b>ReLU "dying":</b> a neuron stuck with z &lt; 0 has gradient 0 forever ⇒ never updates. Mitigate with Leaky ReLU / GELU or careful init.</li>
+    <li>Random init + non-convex loss ⇒ can land in different local minima across runs (less catastrophic than once feared, but still real)</li>
+  </ul>
+
+  <hr>
+  <h2>4 · PAC Learning &amp; VC Dimension</h2>
+
+  <h3>PAC Guarantee &amp; Sample Complexity</h3>
+  <p><b>PAC = Probably Approximately Correct.</b> Generalization bound for any <em>consistent learner</em> (one that fits training data perfectly): with high prob over the training sample, the learned h is approximately correct on fresh data from D.</p>
+  <div class="box">Pr[ error_D(h) > ε ] ≤ δ                 goal
+↔ w.p. ≥ 1−δ (over training set), error_D(h) ≤ ε
+
+error_D(h) = Pr_{x~D}[ h(x) ≠ c(x) ]    true error
+m ≥ (1/ε) · [ ln|H| + ln(1/δ) ]         sample complexity</div>
+
+  <table>
+    <tr><th>Symbol</th><th>Meaning</th><th>Cost in m</th></tr>
+    <tr><td><b>ε</b></td><td>Accuracy — max tolerated <em>true</em> error</td><td>linear (expensive)</td></tr>
+    <tr><td><b>δ</b></td><td>Confidence — max tolerated failure prob</td><td>log (cheap)</td></tr>
+    <tr><td><b>|H|</b></td><td>Hypothesis class size — union-bound penalty</td><td>log</td></tr>
+  </table>
+
+  <p><b>How to read the formula:</b> ε and δ are two <em>independent demands</em> you set ("I want true error ≤ 0.05 with confidence ≥ 95%"). Each has a separate cost in data — <b>they don't trade off against each other; they both trade off against m</b>. Tighter ε is much more expensive than tighter δ. They only <em>appear</em> to trade off when m is fixed (e.g., "with this dataset, I can have tight ε OR tight δ, not both").</p>
+
+  <p><b>Where the formula comes from (union bound):</b> a single "bad" h (true error &gt; ε) is consistent on m random samples with prob ≤ (1−ε)ᵐ ≤ e^(−εm). Union-bound over |H| hypotheses ⇒ |H|·e^(−εm) ≤ δ ⇒ solve for m. The ln|H| term <em>is</em> the union-bound penalty.</p>
+
+  <p><b>Key terms:</b></p>
+  <ul>
+    <li><b>Realizability:</b> true concept c ∈ H (so some h ∈ H achieves zero error). Without it, fall back to <em>agnostic PAC</em>: bound is relative to best-in-class h*, not to c itself.</li>
+    <li><b>Consistent learner:</b> returns h with <em>zero training error</em>. Under realizability such an h exists; PAC says any consistent h likely has low true error.</li>
+    <li><b>Distribution-free:</b> bound holds for any D — but same D must produce train and test data (i.i.d.).</li>
+  </ul>
+  <ul>
+    <li>Guarantee applies to the <em>learned</em> h (whichever consistent one the algorithm returned), not any arbitrary h in H</li>
+    <li class="warn">PAC does NOT guarantee minimum training error or best test accuracy — many consistent h's exist; PAC just bounds <em>whichever one</em> the learner picks. Achieving 0 training error often = overfitting noisy data.</li>
+  </ul>
+
+  <h3>Sample Complexity Behaviour</h3>
+  <table>
+    <tr><th>Change</th><th>Effect on m</th></tr>
+    <tr><td>Larger |H| (more expressive)</td><td>↑ m (log scale)</td></tr>
+    <tr><td>Smaller ε (need more accuracy)</td><td>↑ m (linear: ×1/ε)</td></tr>
+    <tr><td>Smaller δ (need more confidence)</td><td>↑ m (log scale)</td></tr>
+    <tr><td>Infinite VC-dim</td><td>Not PAC learnable</td></tr>
+  </table>
+  <p class="ok"><b>Symmetry:</b> doubling |H| and halving δ have <em>identical</em> marginal cost — both add (1/ε)·ln(2) to m. ε is the expensive knob (linear); |H| and δ are cheap (log) and interchangeable in cost.</p>
+
+  <h3>VC Dimension &amp; Shattering</h3>
+  <p><b>Shatter:</b> H shatters a set of n points if <em>every</em> possible labeling (all 2ⁿ +/− assignments) is achievable by some h ∈ H. Picture: H is so flexible it can memorize any labeling of those points — even adversarial ones.</p>
+  <p><b>VC dimension</b> = size of the largest set H can shatter (∞ if unbounded).</p>
+
+  <p><b>Walk-through — 2D hyperplanes:</b></p>
+  <ul>
+    <li><b>3 points (general position) ✓:</b> all 2³=8 labelings work — "all same" → line outside; "isolate one" → line cuts that point off.</li>
+    <li><b>4 points ✗:</b> triangle + interior → inside-point can't be opposite-labeled (convexity). Quadrilateral → (+,−,+,−) checkerboard can't be cut by any line.</li>
+    <li>So <b>VC dim = 3</b> for 2D hyperplanes.</li>
+  </ul>
+
+  <p class="ok"><b>Practical tip — pick points in general position:</b> to show <b>VC ≥ n</b>, find <em>one</em> n-point set that's shattered (lower bounds are <em>existential</em>). Degenerate configs (equidistant from origin for circles, collinear for hyperplanes, identical coords) may fail and that's fine — they don't lower VC. <b>VC ≤ n−1</b> is stricter: <em>every</em> n-point set must fail.</p>
+
+  <p class="warn"><b>Shatter ≠ fit training data:</b> shattering is about expressive capacity (can produce <em>any</em> labeling, including pure noise). Fitting your specific labels is a much weaker requirement.</p>
+
+  <p><b>VC in PAC (infinite |H|):</b> when |H| is infinite, ln|H| blows up — VC takes its role:</p>
+  <div class="box">m ≥ O((1/ε) · [ VC(H)·log(1/ε) + log(1/δ) ])</div>
+  <p>Same shape as the finite-class bound. Higher VC = more capacity = more data needed. <em>VC = ∞ ⇒ not PAC learnable.</em></p>
+
+  <p><b>Common classes:</b></p>
+  <table>
+    <tr><th>Classifier in ℝᵈ</th><th>VC-dim</th><th>Reason</th></tr>
+    <tr><td>1D threshold (x &gt; t)</td><td>1</td><td>2 points: (+,−) impossible when t flipped</td></tr>
+    <tr><td>1D interval [a,b]</td><td>2</td><td>3 points: can't isolate middle as −</td></tr>
+    <tr><td>Hyperplanes</td><td>d + 1</td><td>d+1 affinely independent points</td></tr>
+    <tr><td>Hyperspheres (free center)</td><td>d + 2</td><td>d center coords + 1 radius</td></tr>
+    <tr><td><b>Origin-centered circle/sphere</b></td><td><b>1</b> or <b>2</b> *</td><td>Only r free → 1D threshold on ‖x‖. <b>VC=1</b> if one polarity (‖x‖≤r positive); <b>VC=2</b> if both polarities allowed (course solutions usually take 2).</td></tr>
+    <tr><td>Axis-aligned boxes</td><td>2d</td><td>2 thresholds (lower + upper) per dim</td></tr>
+    <tr><td>sin(ωx), free ω</td><td>∞</td><td>Frequency can flip any subset → not PAC learnable</td></tr>
+  </table>
+  <p>For ℝ¹⁰ specifically: hyperplanes = 11, free-center spheres = 12, boxes = 20.</p>
+
+  <ul>
+    <li class="ok"><b>Constraints kill capacity:</b> VC tracks <em>effective free parameters</em>, not input dimension. Fixing the center of a circle/sphere drops VC from d+2 → 1 or 2 (depending on sign convention).</li>
+    <li class="warn">Higher VC ≠ better generalization — more data required</li>
+    <li class="warn">Same VC ≠ same sample complexity (constants differ)</li>
+  </ul>
+
+</div>
+</div>
+
+</body>
+</html>
