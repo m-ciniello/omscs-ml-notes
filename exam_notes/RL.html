@@ -123,6 +123,7 @@ Return:  G_t = Σ_{k=0}^∞  γᵏ · r_{t+k+1}    (discounted sum of future rew
   <ul>
     <li><b>Deterministic env:</b> for each (s,a), exactly one s' has T=1</li>
     <li><b>Stochastic env:</b> multiple s' have non-zero T (noise / slippage)</li>
+    <li class="warn"><b>Reward lives on the edge, not the destination:</b> R(s, a) is paid <em>once</em>, at the moment of taking action a in s. <b>V(terminal) = 0 always</b> — terminal states have no future. Common bug: setting V(G) = "the reward of reaching G" ⇒ each backup re-injects γ·V(G), inflating values geometrically forever.</li>
     <li><b>γ → 0:</b> myopic; <b>γ → 1:</b> far-sighted. <b>Sparse rewards</b> ⇒ slow learning; shaping helps but bad shaping changes π*.</li>
   </ul>
 
@@ -136,19 +137,22 @@ Return:  G_t = Σ_{k=0}^∞  γᵏ · r_{t+k+1}    (discounted sum of future rew
   </ul>
 
   <h3>Value Functions &amp; Bellman Equations</h3>
-  <p><b>Five objects to keep straight</b> — three "what's this state/action worth?" quantities (one for each combo of "given vs optimal" × "state-only vs state+action") plus the optimal policy itself:</p>
+  <p><b>Core intuition:</b> <em>Q is V with the first action forced.</em>  V^π(s) = "follow π forever from s"; Q^π(s, a) = "force action a at s, then revert to π." Optimal versions Q*, V* swap π for π*.</p>
   <table>
-    <tr><th>Symbol</th><th>Reads as</th><th>Plain English</th></tr>
-    <tr><td><b>V^π(s)</b></td><td>value of state <em>s</em> under policy π</td><td>Expected total discounted reward if you start in s and follow π forever. Different π ⇒ different V^π.</td></tr>
-    <tr><td><b>Q^π(s, a)</b></td><td>value of taking <em>a</em> in <em>s</em>, then π</td><td>Take action a <em>now</em> (a may or may not be what π would pick), then follow π forever after.</td></tr>
-    <tr><td><b>V*(s)</b></td><td>optimal value of state s</td><td>Expected total discounted reward if you start in s and follow the <em>best</em> policy π*. Equivalently V*(s) = max_a Q*(s, a).</td></tr>
-    <tr><td><b>Q*(s, a)</b></td><td>optimal Q-value</td><td>Take action a <em>now</em>, then act <em>optimally</em> forever after. Even if a isn't optimal at s, the future is.</td></tr>
-    <tr><td><b>π*(s)</b></td><td>optimal policy</td><td>argmax_a Q*(s, a) — the action where V* and Q* agree:  the a for which Q*(s, a) = V*(s).</td></tr>
+    <tr><th>Symbol</th><th>Plain English</th></tr>
+    <tr><td><b>V^π(s)</b></td><td>Expected discounted return: start at s, follow π forever.</td></tr>
+    <tr><td><b>Q^π(s, a)</b></td><td>Same as V^π but force action a at s; then revert to π. (a need not be what π picks.)</td></tr>
+    <tr><td><b>V*(s)</b></td><td>V^π under the best policy π*.</td></tr>
+    <tr><td><b>Q*(s, a)</b></td><td>Q^π under π*: force a now, act optimally after.</td></tr>
+    <tr><td><b>π*(s)</b></td><td>argmax_a Q*(s, a) — the action where V* and Q* agree.</td></tr>
   </table>
-  <p><b>Key identities</b> (these are how PI / VI / Q-learning move between objects):</p>
-  <div class="box">V^π(s)  =  Q^π(s, π(s))           [deterministic π — value of following π = value of taking π's action and then continuing with π]
-V*(s)   =  max_a Q*(s, a)         [optimal state value = best optimal action value]
-π*(s)   =  argmax_a Q*(s, a)      [optimal policy = greedy w.r.t. Q*]</div>
+  <p><b>V ↔ Q identities</b> (how PI / VI / Q-learning move between the two views):</p>
+  <div class="box">V^π(s) = Σ_a π(a|s) · Q^π(s, a)        (general — V is Q averaged over π's choice)
+       ↓ deterministic π collapses the sum
+V^π(s) = Q^π(s, π(s))                   (V = Q at π's chosen action)
+       ↓ optimal π picks the max
+V*(s)  = max_a   Q*(s, a)               (V* = Q at the BEST action)
+π*(s)  = argmax_a Q*(s, a)              (π* = which action achieves it)</div>
   <div class="box">Bellman EXPECTATION (deterministic π):
   V^π(s) = R(s, π(s)) + γ · Σ_{s'} T(s, π(s), s') · V^π(s')
 
@@ -164,6 +168,12 @@ Bellman OPTIMALITY (for π*):
     <li><b>Optimality form</b> (max over a) ⇒ <b>nonlinear</b> — must iterate. Used in <b>VI</b> and <b>Q-learning</b> target. Any policy greedy w.r.t. Q* is optimal.</li>
     <li class="ok"><b>Why the distinction matters:</b> the form determines the algorithm. PI cleverly uses Expectation (easy, linear) for inner eval and Optimality (max) only for the outer improvement; VI uses Optimality directly. Same Expectation/Optimality split recurs in model-free RL as on-policy (SARSA) vs off-policy (Q-learning).</li>
     <li>Changing T or R changes V* ⇒ may change π*</li>
+  </ul>
+
+  <p class="ok"><b>What Bellman IS / IS NOT for (one-glance):</b></p>
+  <ul>
+    <li class="ok"><b>IS:</b> recursive decomposition of the value function — relates V(s) to V(s') across one transition. Computes <em>expected return</em> under a given π (Expectation form) or under π* (Optimality form). Provides the structural recursion that PI/VI exploit.</li>
+    <li class="warn"><b>IS NOT:</b> a way to <em>estimate</em> rewards R or transition probabilities T — those are MDP inputs, given. Does NOT directly produce π* — values come first, then π*(s) = argmax_a Q*(s, a) reads it off. Bellman is the <em>equation</em>, not the algorithm; PI/VI do the iteration.</li>
   </ul>
 
   <h3 class="warn">Self-Loop Trap</h3>
@@ -202,6 +212,7 @@ Recover policy:   π*(s) = argmax_a  [ R(s, a) + γ · Σ_{s'} T(s, a, s') · V*
     <li><b>Cheap iterations</b> — one max-Bellman sweep, no inner eval loop</li>
     <li><b>γ-contraction:</b>  ‖V_{k+1} − V*‖_∞ ≤ γ · ‖V_k − V*‖_∞   ⇒ exponential at rate γ (<em>slower when γ ≈ 1</em>)</li>
     <li class="ok"><b>Greedy policy stabilizes before V does</b> — argmax often locks in early while V_k is still rising; π* found long before V converges</li>
+    <li class="ok"><b>VI as discounted reverse-BFS:</b> R(s, a) is the seed paid once on a transition; every other Bellman backup reduces to V(s) ← max_a γ · V(s'), copying value <em>one γ-discounted hop per iter</em> outward from reward sources. Sparse R ⇒ # iters ≈ MDP diameter; shaping densifies seeds; large γ extends echo range.</li>
   </ul>
 
   <h3>PI vs VI</h3>
@@ -215,6 +226,8 @@ Recover policy:   π*(s) = argmax_a  [ R(s, a) + γ · Σ_{s'} T(s, a, s') · V*
     <tr><th>Termination</th><td>Exact (π stable)</td><td>Asymptotic (ε-converged)</td></tr>
   </table>
   <p class="ok"><b>Modified Policy Iteration</b> = approximate eval with a <em>few</em> Bellman sweeps (not full convergence). Bridges PI ↔ VI; usually fastest in practice.</p>
+
+  <p class="warn"><b>Common traps:</b> Neither <em>always</em> converges faster — PI has fewer but more expensive iterations; VI has many cheap ones; total time is problem-dependent. <b>Both PI and VI are planning algorithms requiring ⟨T, R⟩</b> — neither is model-free. Model-free RL (Q-learning, SARSA, MC) is a different category that learns from samples without a model.</p>
 
   <h3>Worked Example — PI vs VI on the Haunted House</h3>
   <p><b>Setup:</b> S = {L, Q}, A = {organ, incense}, γ = 0.9. Deterministic transitions:</p>
@@ -383,11 +396,57 @@ If k actions tie for max:
     <li class="warn"><b>Pure-strategy Nash may not exist</b> (e.g., Matching Pennies, Rock-Paper-Scissors); mixed always does</li>
     <li class="warn">Multiple Nash can coexist; not all are equally "good" or stable</li>
     <li class="warn">Nash ≠ Pareto-optimal — Prisoner's Dilemma's (D,D) is Nash but both prefer (C,C)</li>
+    <li class="ok"><b>Applies in multi-agent RL:</b> stable joint policies are characterized by NE. Algorithms like <b>Nash-Q</b> (general-sum) and <b>minimax-Q</b> (zero-sum) compute equilibrium policies in stochastic / Markov games.</li>
+    <li class="warn"><b>NOT an information condition:</b> NE is a property of the strategy <em>profile</em>, not whether players observe each other. Bayesian NE handles incomplete-information games; standard NE doesn't require complete observation.</li>
+    <li class="warn"><b>NOT restricted to deterministic games:</b> NE concepts apply to stochastic games (Markov games), repeated games, and Bayesian games — NE is the unifying solution concept across strategic interactions.</li>
   </ul>
 
+  <h3>Finding Pure-Strategy Nash (Best-Response / Underline Method)</h3>
+  <div class="box">For a 2-player normal-form game with cells (u₁, u₂):
+
+(1) For each COLUMN (each of P2's pure strategies), underline P1's
+    best payoff in that column.
+(2) For each ROW (each of P1's pure strategies), underline P2's
+    best payoff in that row.
+(3) Cells where BOTH numbers are underlined ⇒ pure-strategy Nash.
+
+Each underlined number = that player's best response to the
+other's column/row choice. Both underlined ⇒ mutual best
+response ⇒ Nash equilibrium.</div>
+  <ul>
+    <li><b>0 cells:</b> no pure Nash; must compute mixed via indifference (below). E.g., Matching Pennies.</li>
+    <li><b>1 cell:</b> unique pure Nash. Often a dominant-strategy game (e.g., Prisoner's Dilemma's (D,D)).</li>
+    <li><b>2+ cells:</b> multiple pure Nash; usually one mixed Nash also exists "between" them (coordination, Battle of Sexes, chicken).</li>
+  </ul>
+
+  <h3>Common 2×2 Game Shapes (Pattern Recognition)</h3>
+  <table>
+    <tr><th>Type</th><th>Payoff signature</th><th>Nash structure</th></tr>
+    <tr><td><b>Pure coordination</b></td><td>Diagonal high &amp; equal; off-diag = 0</td><td>2 pure Nash on diagonal + 1 mixed</td></tr>
+    <tr><td><b>Battle of the Sexes</b></td><td>Diagonal high but <em>asymmetric</em> (each prefers a different match)</td><td>2 pure Nash (each player's preferred match) + 1 mixed</td></tr>
+    <tr><td><b>Anti-coordination</b><br>(chicken / hawk-dove)</td><td>Off-diag high (mismatch wins); diagonal low</td><td>2 pure Nash off-diag + 1 mixed</td></tr>
+    <tr><td><b>Dominant strategy</b><br>(Prisoner's Dilemma)</td><td>One action strictly dominates regardless of opponent</td><td>1 pure Nash (dominant cell); often Pareto-dominated</td></tr>
+    <tr><td><b>Zero-sum</b><br>(Matching Pennies)</td><td>u₁ + u₂ = 0; pure conflict</td><td>Often no pure Nash; 1 mixed Nash (50/50 if symmetric)</td></tr>
+  </table>
+
   <h3>Mixed-Strategy Indifference Principle</h3>
-  <p>In a mixed Nash, every pure strategy <em>in the support</em> of your mix yields the <em>same</em> expected payoff (otherwise you'd shift weight to the better one).</p>
-  <p class="ok"><b>Use:</b> to find an opponent's mixing probability, set up "make me indifferent" — solve for the probability that equates my expected payoff across my pure strategies.</p>
+  <p>In a mixed Nash, every pure strategy <em>in the support</em> of your mix yields the <em>same</em> expected payoff (otherwise you'd shift weight to the better one). <b>Solve for the OPPONENT's mix</b> by setting <em>your own</em> expected payoffs equal across your pure strategies.</p>
+  <div class="box">2×2 recipe: P1 actions {T, B}; P2 actions {L, R}.
+  Let q = P(P2 plays L)  ⇒  solve for q by making P1 INDIFFERENT:
+
+  E[P1 | T] = q · u₁(T,L) + (1−q) · u₁(T,R)
+  E[P1 | B] = q · u₁(B,L) + (1−q) · u₁(B,R)
+
+  Set equal, solve for q.
+  (Symmetric: find p by making P2 indifferent across L vs R.)</div>
+  <p><b>Worked — Matching Pennies</b> (zero-sum):</p>
+  <div class="box">         L          R
+   T  (+1, −1)   (−1, +1)
+   B  (−1, +1)   (+1, −1)
+
+P1 indifferent ⇒   q·(+1) + (1−q)·(−1)  =  q·(−1) + (1−q)·(+1)
+                   2q − 1  =  1 − 2q     ⇒   q = 1/2.
+Symmetric ⇒ p = 1/2.   Mixed Nash: both 50/50.   Game value = 0.</div>
 
   <h3>Zero-Sum &amp; Minimax</h3>
   <p><b>Zero-sum:</b> total payoffs sum to 0 (one player's gain = other's loss). Strictly competitive.</p>
@@ -401,6 +460,32 @@ Von Neumann theorem (1928):
     <li class="warn"><b>Mixed minimax can be worse than pure</b> for a fixed mixture if the mix isn't the equilibrium one — randomizing 60/40 between two row choices weights toward the worse-case row, lowering the min. Only the <em>equilibrium</em> mix attains the game value.</li>
     <li>Folk Theorem does NOT apply to (single-shot) zero-sum games — there's nothing to cooperate about</li>
   </ul>
+
+  <h3>Stochastic (Markov) Games — multi-agent MDP</h3>
+  <p><b>Setup:</b> generalize the MDP to multiple players. A stochastic game is a tuple <code>(S, A₁, ..., Aₙ, T, R₁, ..., Rₙ, γ)</code> — same as MDP but each player has their own action set <em>and</em> their own reward function. At each state, all players act simultaneously; T(s, a₁, ..., aₙ, s′) gives the joint transition. <em>n=1 ⇒ MDP; T trivial ⇒ matrix game.</em></p>
+
+  <table>
+    <tr><th></th><th>Zero-sum stochastic game</th><th>General-sum stochastic game</th></tr>
+    <tr><th>Reward structure</th><td>Σᵢ Rᵢ = 0 (strict competition)</td><td>Each Rᵢ independent (mix of cooperation & competition)</td></tr>
+    <tr><th>Equilibrium concept</th><td>Minimax (unique value)</td><td>Nash equilibrium (often multiple)</td></tr>
+    <tr><th>Bellman backup</th><td><code>V*(s) = max_π1 min_π2 Σ_a₁,a₂ π1·π2·[r + γ·V*(s′)]</code></td><td><code>V*(s) = NashValue at stage game with continuation</code></td></tr>
+    <tr><th>Backup is a contraction?</th><td class="ok">Yes (γ-contraction)</td><td class="warn">No in general — multiple NE break uniqueness</td></tr>
+    <tr><th>VI converges?</th><td class="ok">Yes — to unique value</td><td class="warn">Not guaranteed</td></tr>
+    <tr><th>Q* unique?</th><td class="ok">Yes</td><td class="warn">No — multiple NE ⇒ multiple Q*</td></tr>
+    <tr><th>Algorithm</th><td><b>minimax-Q</b> (Littman 1994)</td><td><b>Nash-Q</b> (Hu &amp; Wellman 2003), Friend-or-Foe Q</td></tr>
+    <tr><th>Convergence guarantee</th><td>Guaranteed</td><td>Conditional (e.g., requires unique NE per stage game)</td></tr>
+  </table>
+
+  <p class="ok"><b>The wedge:</b> uniqueness of equilibrium value at each stage game. Zero-sum has it (Von Neumann minimax theorem) ⇒ Bellman backup is a contraction ⇒ everything works like single-agent RL. General-sum doesn't ⇒ central headache of MARL.</p>
+
+  <p><b>Mitigations for general-sum games (option d on Q21):</b></p>
+  <ul>
+    <li><b>Side payments</b> (transferable utility): players can compensate each other, aligning incentives. Turns Prisoner's-Dilemma-like games cooperative.</li>
+    <li><b>Repeated stochastic games:</b> infinite-horizon + discount enables Folk-Theorem cooperation via credible punishment threats.</li>
+    <li><b>Communication / coordination protocols:</b> pre-agreed conventions resolve equilibrium selection (e.g., always coordinate on row-player's preferred Nash in BotS-style stages).</li>
+  </ul>
+
+  <p class="warn"><b>Common traps:</b> <b>minimax-Q ≠ Nash-Q</b> (different game classes — minimax-Q for zero-sum, Nash-Q for general-sum). VI does NOT generally converge in general-sum games. Q* is NOT unique in general-sum games.</p>
 
   <hr>
   <h2>4 · Repeated Games &amp; the Folk Theorem</h2>
@@ -460,6 +545,31 @@ Von Neumann theorem (1928):
     <li class="warn"><b>Mixed strategy ≠ uncertain about choice</b> — it's a deliberate randomization to make opponent indifferent</li>
     <li class="warn"><b>Heavy future discounting kills cooperation</b> — players want their treats <em>now</em></li>
   </ul>
+
+  <hr>
+  <h2>5 · Deep RL — DQN &amp; Rainbow</h2>
+
+  <h3>DQN — Deep Q-Network (Mnih et al. 2015)</h3>
+  <p>Q-learning with a neural net function approximator. Two stability tricks make it work:</p>
+  <ul>
+    <li><b>Experience replay:</b> store transitions (s, a, r, s′) in a buffer; sample minibatches uniformly to break temporal correlation</li>
+    <li><b>Target network:</b> separate frozen copy of Q used for computing targets; sync to online net every k steps. Prevents the "moving target" instability of bootstrapping toward a network that's also being updated.</li>
+  </ul>
+  <div class="box">Target:  y = r + γ · max_{a'} Q_target(s', a')
+Loss:    L = E[(y − Q_online(s, a))²]    ← TD loss on minibatch from replay</div>
+
+  <h3>Rainbow DQN (Hessel et al. 2017) — six improvements stacked</h3>
+  <p>Six independent ablations over baseline DQN, each addressing a different failure mode. Combined ≈ 2–3× median human-normalized score on Atari 57.</p>
+  <table>
+    <tr><th>Component</th><th>Mechanism</th><th>Failure mode addressed</th></tr>
+    <tr><td><b>Double DQN</b><br>(Hasselt 2015)</td><td>Decouple action <em>selection</em> (online net) from action <em>evaluation</em> (target net):<br><code>y = r + γ · Q_target(s', argmax_a Q_online(s', a))</code></td><td>Q-value <b>overestimation</b> from max(noisy estimates)</td></tr>
+    <tr><td><b>Prioritized Experience Replay</b><br>(Schaul 2015)</td><td>Sample transitions w.p. ∝ |TD-error|<sup>α</sup>; correct sampling bias with importance-sampling weights (1/(N·P(i)))<sup>β</sup></td><td>Uniform replay wastes updates on already-learned transitions</td></tr>
+    <tr><td><b>Dueling Networks</b><br>(Wang 2016)</td><td>Two heads: V(s) and A(s, a); recombine as Q = V + A − mean_a' A(s, a').<br>Shared features feed both streams</td><td><b>Sample inefficiency when action choice is moot</b> — V(s) learns even without trying every action</td></tr>
+    <tr><td><b>n-step Returns</b><br>(Sutton 1988)</td><td>Bootstrap target after n real steps:<br><code>R⁽ⁿ⁾_t = r_t + γr_{t+1} + ... + γⁿ⁻¹r_{t+n−1} + γⁿ·max_a Q(s_{t+n}, a)</code></td><td>1-step bootstrap propagates rewards <b>too slowly</b>; faster credit assignment (cost: higher variance)</td></tr>
+    <tr><td><b>Distributional RL (C51)</b><br>(Bellemare 2017)</td><td>Predict the <em>distribution</em> of returns Z(s,a) over 51 atoms in [V_min, V_max], not just the mean. Categorical projection of the distributional Bellman update; cross-entropy loss</td><td>Scalar Q-values discard <b>higher-order info</b>; capturing return distribution improves stability</td></tr>
+    <tr><td><b>NoisyNets</b><br>(Fortunato 2017)</td><td>Replace linear layers with <code>y = (μ_W + σ_W ⊙ ε_W)·x + ...</code>; σ is <em>learned</em> ⇒ state-dependent exploration noise</td><td>Crude exploration via fixed ε-schedule; agent learns when/where to explore</td></tr>
+  </table>
+  <p class="ok"><b>Mnemonic:</b> <b>"Double the priority, duel the n-step distribution noisily."</b> (Double DQN · PER · Dueling · n-step · C51 · NoisyNets)</p>
 
 </div>
 </div>

@@ -118,6 +118,13 @@
     <li><b>Apps:</b> Neural arch. search (AmoebaNet = GA, DARTS = differentiable relaxation), hyperparam tuning, TSP, scheduling, RL with sparse reward</li>
     <li class="warn">If f is continuous &amp; differentiable, use gradients — far more sample-efficient (gradient gives d directional pieces of info per eval; neighbor sampling gives 1)</li>
   </ul>
+
+  <p class="ok"><b>What randomized opt IS / IS NOT (one-glance summary):</b></p>
+  <ul>
+    <li class="ok"><b>IS:</b> uses <em>probabilistic</em> decisions to search — random neighbors (RHC), random uphill acceptance (SA), random selection / mutation / crossover (GA). Randomness is the <em>mechanism for escaping local optima</em>.</li>
+    <li class="warn"><b>IS NOT:</b> deterministic, predictable, or "always faster than gradient methods." Different runs ⇒ different paths and possibly different solutions.</li>
+    <li class="warn"><b>NO finite-step global-optimum guarantee in practice.</b> Geman–Geman gives SA asymptotic global optimality under logarithmic cooling — but it's impractically slow; geometric SA, RHC, and GA give no finite-time guarantee at all.</li>
+  </ul>
   <table>
     <tr><th>State representation</th><th>Neighbor =</th></tr>
     <tr><td>Bit string</td><td>flip 1 bit (Hamming-1)</td></tr>
@@ -317,6 +324,7 @@ to fold single sums into the double sum:
     <li>Captures <em>any</em> dependence (linear, nonlinear, deterministic) — unlike correlation</li>
     <li class="ok"><b>= Information Gain:</b> ID3's IG(S,A) is exactly I(A;Y) on the node's data</li>
     <li>MI invariant to sample size — depends only on probabilities, not counts</li>
+    <li class="warn"><b>Direction trap (MI ↔ KL):</b> MI <em>is</em> the KL between joint and product-of-marginals. To <b>maximize</b> MI you want this KL <b>large</b> (joint far from independence). <b>Minimizing</b> this KL ⇒ joint → marginals' product ⇒ MI → 0 ⇒ <em>zero</em> shared info. So "minimize KL" and "maximize MI" pull in <em>opposite</em> directions for this specific KL.</li>
   </ul>
 
   <h3>KL Divergence</h3>
@@ -442,11 +450,30 @@ AdamW (fixed):
     <li class="warn">Exclude biases &amp; LayerNorm/BatchNorm scale-shift from decay (best practice)</li>
   </ul>
 
+  <p class="ok"><b>What AdamW changes vs keeps (one-glance):</b></p>
+  <ul>
+    <li class="ok"><b>Only one thing changes:</b> <em>where</em> weight decay is applied (decoupled −α·λ·θ instead of L2-in-the-gradient).</li>
+    <li class="ok"><b>Everything else is identical to Adam:</b> momentum m_t (β₁), variance v_t (β₂), bias correction m̂/v̂, ε. Default β₁=0.9, β₂=0.999, ε≈10⁻⁸ all carry over unchanged.</li>
+    <li class="ok"><b>λ = 0 ⇒ AdamW ≡ Adam exactly</b> (the −α·λ·θ term vanishes; the rest is Adam).</li>
+    <li class="warn">AdamW does <b>NOT</b> remove bias correction (unrelated concern), does <b>NOT</b> add λθ to the gradient (that's the broken behavior it <em>fixes</em>), and does <b>NOT</b> guarantee convergence to a global optimum on nonconvex problems (no first-order optimizer does).</li>
+  </ul>
+
   <hr>
   <h2>4 · Bayesian Learning</h2>
 
   <h3>Bayes' Rule — the four ingredients</h3>
   <p>The principled answer to "I had a belief, then I saw data — how should belief update?" Falls straight out of the chain rule: <code>P(H,D) = P(H|D)·P(D) = P(D|H)·P(H)</code>.</p>
+
+  <p class="ok"><b>Why "principled" (Cox / Dutch book):</b> Bayes' rule is the <em>unique</em> consistent way to update degrees of belief that respects the probability axioms — alternatives lead to incoherent (Dutch-book-able) bets.</p>
+
+  <p class="ok"><b>What Bayesian inference gives you (vs frequentist):</b></p>
+  <ul>
+    <li class="ok"><b>Full posterior distribution</b> over h, not a point estimate — supports credible intervals, posterior predictive, Bayes factors, model averaging</li>
+    <li class="ok"><b>Integrates prior knowledge</b> (domain info, regularization) with data via <em>posterior ∝ likelihood × prior</em></li>
+    <li class="warn"><b>NOT always unimodal</b> — multimodal priors / non-identifiable likelihoods / symmetry give multimodal posteriors. Capturing that multimodality is a feature, not a bug.</li>
+    <li class="warn"><b>NOT computationally trivial</b> — only conjugate priors give closed-form posteriors. Otherwise: MCMC, variational inference, or Laplace approximation. "Principled" ≠ "easy to compute."</li>
+    <li class="warn"><b>NEVER discards the prior</b> — that's MLE, not Bayes. The prior is the Bayesian distinguishing feature.</li>
+  </ul>
   <table>
     <tr><th>Term</th><th>Name</th><th>Role</th></tr>
     <tr><td>P(h)</td><td><b>Prior</b></td><td>belief about h <em>before</em> data</td></tr>
@@ -471,6 +498,7 @@ Odds:         P(h₁|D)/P(h₂|D) = [P(h₁)/P(h₂)] · [P(D|h₁)/P(D|h₂)]
     <li><b>MAP:</b> argmax_h P(D|h) · P(h) — explanation weighted by prior plausibility</li>
     <li><b>MAP collapses to MLE under uniform prior</b> (constant P(h) doesn't affect the argmax)</li>
     <li class="ok"><b>Regularization = prior in disguise:</b> L2 ≡ MAP w/ Gaussian prior on weights; L1 ≡ Laplace prior. Reg strength ≡ prior tightness.</li>
+    <li class="warn"><b>"More probable hypothesis" = posterior, NOT likelihood.</b> Higher P(D|h) ⇒ higher P(h|D) <em>only under uniform prior</em>. With an informative prior, a high-likelihood overfit-prone h can lose to a medium-likelihood plausible one. Likelihood ≠ probability of h; it's probability of D given h.</li>
   </ul>
 
   <h3>Loss Functions = MLE under a Noise Model</h3>

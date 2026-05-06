@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>CS 7641 — Unit 1: Supervised Learning Cheat Sheet</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 11.5px;
+    color: #1a1a1a;
+    background: #fff;
+    padding: 18px 22px;
+    line-height: 1.45;
+  }
+  h1 { font-size: 16px; font-weight: 600; border-bottom: 2.5px solid #1a1a1a; padding-bottom: 5px; margin-bottom: 14px; }
+  h2 { font-size: 11.5px; font-weight: 600; background: #1a1a1a; color: #fff; padding: 3px 7px; margin: 14px 0 6px; letter-spacing: .05em; text-transform: uppercase; }
+  h3 { font-size: 11.5px; font-weight: 600; margin: 8px 0 3px; border-bottom: 0.5px solid #ccc; padding-bottom: 2px; }
+  .cols2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  p { margin: 2px 0 5px; }
+  ul { margin: 2px 0 5px; padding-left: 15px; }
+  li { margin: 2px 0; }
+  .box {
+    background: #f5f5f3; border: 0.5px solid #bbb; border-radius: 4px;
+    padding: 6px 8px; margin: 4px 0;
+    font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; line-height: 1.6; white-space: pre;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 10.5px; margin: 4px 0; }
+  td, th { padding: 3px 6px; border: 0.5px solid #ccc; text-align: left; vertical-align: top; }
+  th { background: #f0f0ee; font-weight: 600; }
+  .warn { color: #b91c1c; font-weight: 500; }
+  .ok   { color: #166534; font-weight: 500; }
+  hr { border: none; border-top: 1.5px solid #ddd; margin: 12px 0; }
+  .note { background: #fffbeb; border-left: 3px solid #d97706; padding: 5px 8px; margin: 5px 0; font-size: 10.5px; }
+</style>
+</head>
+<body>
+
+<h1>CS 7641 — Unit 1: Supervised Learning &nbsp;<span style="font-size:12px;font-weight:400">Comprehensive Reference · v2</span></h1>
+
+<div class="cols2">
+<div>
+
+<!-- ─── DECISION TREES ─── -->
+<h2>1 · Decision Trees &amp; ID3</h2>
+
+<h3>Entropy &amp; Information Gain</h3>
+<div class="box">H(S) = −Σ pᵢ log₂ pᵢ           (convention: 0·log0 := 0)
+
+IG(S, A) = H(S) − Σ_{v ∈ vals(A)} (|Sᵥ|/|S|) · H(Sᵥ)
+
+ID3 root = argmax_A  IG(S, A)</div>
+<ul>
+  <li>ID3 picks <b>highest IG</b> — NOT the attribute with lowest entropy</li>
+  <li>Conditional entropy = weighted average of per-value subset entropies</li>
+  <li>Pure subsets (all one class) contribute 0 to the weighted sum</li>
+  <li>Ties in IG: random selection, fixed order, or first-in-dataset are all valid</li>
+  <li>Numeric attributes must be discretized or threshold-split before use in ID3</li>
+  <li>Creates one branch per unique value of a categorical attribute</li>
+  <li class="warn">Multi-valued attrs can artificially inflate IG — C4.5 gain ratio corrects this</li>
+</ul>
+
+<h3>Leaf Node Properties</h3>
+<ul>
+  <li>All examples same label → entropy = 0 → no further split</li>
+  <li>Path to a leaf may involve many splits along the way</li>
+  <li>ID3 assigns majority class at leaf (does not require ≥2 examples)</li>
+  <li>Leaf does NOT mean all features contributed — many may be unused</li>
+</ul>
+
+<h3>Generalization / Avoiding Overfitting</h3>
+<ul>
+  <li class="ok">Prune branches that overfit training data</li>
+  <li class="ok">Limit tree depth or minimum examples per leaf</li>
+  <li class="ok">Stop splitting when IG is very low</li>
+  <li class="ok">Cross-validate stopping criteria</li>
+  <li class="warn">Adding more attributes does NOT guarantee better generalization</li>
+  <li class="warn">Never use the label as an input feature</li>
+</ul>
+
+<h3>ID3 Worked Example — Gardening (7 examples, 4 Yes / 3 No)</h3>
+<div class="box">H(Garden) = −(4/7)log₂(4/7) − (3/7)log₂(3/7) ≈ 0.985
+
+IG(SoilMoisture) = 0.985 − [2/7·1.0 + 2/7·0 + 3/7·0] = 0.699  ← ROOT
+IG(Weather)      = 0.985 − [3/7·0.918 + 2/7·0 + 2/7·0] = 0.592
+IG(TimeAvail.)   = 0.985 − [5/7·0.722 + 2/7·0]         = 0.469
+IG(Temperature)  = 0.985 − [2/7·0 + 2/7·1.0 + 1/7·0 + 2/7·1.0] = 0.414</div>
+
+<h3>ID3 Worked Example — GoSwimming (8 examples, 4 Yes / 4 No)</h3>
+<div class="box">H(S) = −(4/8)log₂(4/8) − (4/8)log₂(4/8) = 1.0  (max entropy)
+
+IG(Pollution):
+  High (4 ex): all No → H=0
+  Low  (4 ex): all Yes → H=0
+  IG = 1.0 − 0 = 1.0  ← ROOT (perfect split)
+
+IG(Weather):
+  Sunny (3): 2No,1Yes → H≈0.918
+  Overcast (2): 2Yes → H=0
+  Rain (3): 1Yes,2No → H≈0.918
+  IG = 1.0 − [3/8·0.918 + 0 + 3/8·0.918] = 1.0 − 0.688 = 0.312</div>
+
+<hr>
+
+<!-- ─── ADABOOST ─── -->
+<h2>2 · Boosting &amp; AdaBoost</h2>
+
+<h3>Core Idea</h3>
+<ul>
+  <li>Train weak learners sequentially; each focuses on previously misclassified examples</li>
+  <li>Misclassified examples get higher weight; correctly classified get lower weight</li>
+  <li>Correctly classified examples still included — just downweighted (not ignored)</li>
+  <li>Weak learner requirement: error ε &lt; 0.5 (better than random); if ε ≥ 0.5, learner is discarded</li>
+  <li>Aggregates with <b>weighted</b> votes — not equal votes</li>
+  <li>Designed for weak (underfit) base learners — stumps are typical</li>
+  <li class="warn">Can overfit on noisy datasets with too many learners</li>
+  <li><b>Order per round:</b> train hₜ → compute εₜ → compute αₜ → update weights. αₜ must be known before weights can move.</li>
+  <li><b>Why αₜ in the weight update (not εₜ directly):</b> better learner → larger αₜ → e^{+αₜ} is large → misclassified examples boosted aggressively. Near-random learner → small αₜ → gentle shift. Redistribution is automatically calibrated to how informative the learner was.</li>
+  <li>εₜ=0.5 → αₜ=0 → learner contributes nothing. εₜ&gt;0.5 → αₜ&lt;0 → vote flipped (discard in practice).</li>
+</ul>
+
+<h3>AdaBoost Formulas</h3>
+<div class="box">Learner weight:   αₜ = ½ · ln((1 − εₜ) / εₜ)
+  where εₜ = weighted error of learner t
+
+Weight update (unnormalized):
+  misclassified: wᵢ' = wᵢ · e^{+αₜ}   ← weight goes up
+  correct:       wᵢ' = wᵢ · e^{-αₜ}   ← weight goes down
+
+Normalize: wᵢ ← wᵢ' / Z   where Z = Σ wᵢ'</div>
+
+<h3>AdaBoost Worked Example (8 examples, w₀ = 1/8 each)</h3>
+<div class="box">Learner 1 misclassifies examples 3 and 8:
+  ε₁ = 2/8 = 0.25
+  α₁ = ½·ln(0.75/0.25) = ½·ln(3) ≈ 0.549
+
+Unnormalized new weights:
+  correct (6):       1/8 · e^{−0.549} ≈ 0.072
+  misclassified (2): 1/8 · e^{+0.549} ≈ 0.217
+
+Z = 6·0.072 + 2·0.217 = 0.434 + 0.434 = 0.868
+
+Normalized:
+  correct      → 0.072/0.868 ≈ 0.083
+  misclassified → 0.217/0.868 ≈ 0.250</div>
+
+<hr>
+
+<!-- ─── REGRESSION ─── -->
+<h2>3 · Regression &amp; Classification</h2>
+
+<h3>Polynomial Regression — Bias / Variance</h3>
+<ul>
+  <li>Degree-d polynomial has <b>d+1 parameters</b> (including constant term)</li>
+  <li>Higher degree → lower bias, higher variance → risk of overfitting</li>
+  <li>n data points: degree n−1 → zero training error (exact interpolation)</li>
+  <li class="warn">Higher degree ≠ better generalization; degree-3 may not beat degree-2</li>
+  <li>Select model with lowest cross-validation error (not lowest training error)</li>
+</ul>
+
+<h3>Normal Equations (Closed-Form Least Squares)</h3>
+<div class="box">β̂ = (XᵀX)⁻¹ Xᵀy
+
+Design matrix X: rows = examples, cols = [1, x, x², ..., xᵈ]
+Example (degree-2, 8 points, x ∈ {0..7}):
+  β̂ ≈ [2.125, −0.435, 1.030]  →  ŷ(8) ≈ 64.55</div>
+
+<h3>Error Metrics</h3>
+<div class="box">MSE  = (1/n) Σ (y − ŷ)²      ← penalizes large errors heavily
+MAE  = (1/n) Σ |y − ŷ|
+L1 norm of errors = Σ |eᵢ|    = n · MAE
+L2 norm of errors = √(Σ eᵢ²)  = √(n · MSE)</div>
+
+<h3>L2 Regularization (Ridge)</h3>
+<ul>
+  <li>Adds λ·Σwᵢ² penalty → shrinks weights; ↑ bias, ↓ variance</li>
+  <li>Helps with multicollinearity</li>
+  <li>Does NOT zero out weights (that's L1 / Lasso)</li>
+  <li class="warn">Higher λ → higher bias; does NOT lower training error</li>
+  <li class="warn">Ridge does NOT increase model complexity</li>
+</ul>
+
+<h3>Decision Boundaries by Model</h3>
+<table>
+  <tr><th>Model</th><th>Boundary</th><th>Notes</th></tr>
+  <tr><td>Linear / Logistic Regression</td><td>Linear (hyperplane)</td><td>Nonlinear only with feature transforms</td></tr>
+  <tr><td>Decision Tree</td><td>Axis-aligned piecewise linear</td><td>Always axis-parallel splits</td></tr>
+  <tr><td>SVM + RBF kernel</td><td>Complex nonlinear</td><td>Infinite-dim feature space</td></tr>
+  <tr><td>Neural Network</td><td>Nonlinear</td><td class="warn">NOT always linear — watch for this trap</td></tr>
+  <tr><td>k-NN</td><td>Voronoi / nonlinear</td><td>Highly curved = high variance</td></tr>
+</table>
+
+<h3>Evaluation — Imbalanced Data</h3>
+<div class="box">Precision = TP/(TP+FP)     Recall = TP/(TP+FN)
+F1 = 2·P·R/(P+R)
+AUC-ROC: perfect=1.0,  random=0.5</div>
+<ul>
+  <li>Accuracy misleading on skewed classes (e.g. 95% class 0)</li>
+  <li class="warn">High accuracy ≠ high recall</li>
+  <li class="warn">Perfect classifier → AUC = 1.0, not 0.5</li>
+</ul>
+
+<h3>k-NN — Bias/Variance &amp; Practical Notes</h3>
+<ul>
+  <li>Small k → low bias, high variance (jagged boundary)</li>
+  <li>Large k → high bias, low variance (smooth) → can underfit</li>
+  <li class="warn">k=1: memorizes training data, poor generalization on noisy data</li>
+  <li>Odd k avoids ties in binary classification</li>
+  <li>Tune k with cross-validation</li>
+  <li>Feature scaling changes distances → can change neighbor identities and predictions</li>
+  <li>z-score scaling: equalizes feature contributions (zero mean, unit variance)</li>
+  <li>Distance-weighted voting (wᵢ = 1/d) downweights far neighbors → less sensitive to outliers</li>
+  <li>L1 (Manhattan) and L2 (Euclidean) can produce different neighbor orderings</li>
+  <li>LOO-CV valid for k-NN — held-out point excluded from neighbor search, no leakage</li>
+  <li class="warn">Increasing k increases bias AND decreases variance — not both decrease simultaneously</li>
+</ul>
+
+</div>
+<div>
+
+<!-- ─── NEURAL NETWORKS ─── -->
+<h2>4 · Neural Networks &amp; Gradient Descent</h2>
+
+<h3>Gradient Descent Behavior</h3>
+<ul>
+  <li>Negative gradient = direction of steepest descent</li>
+  <li>Zero gradient = critical point: could be min, max, or <b>saddle point</b></li>
+  <li>If gradient=0 but loss not minimal → saddle point</li>
+  <li>Momentum: incorporates past gradients → helps escape saddle points / shallow minima</li>
+  <li class="warn">Large LR → overshoot → oscillation or divergence, even for convex functions</li>
+  <li class="warn">Constant LR does NOT guarantee convergence if too large</li>
+  <li class="warn">GD does NOT guarantee global minimum for non-convex (neural net) losses</li>
+</ul>
+
+<h3>ReLU Properties</h3>
+<ul>
+  <li>ReLU(x) = max(0, x)</li>
+  <li>Mitigates vanishing gradients compared to sigmoid/tanh</li>
+  <li>Sparse activations: outputs 0 for all negative inputs</li>
+  <li>Dead neurons: if input always negative → always outputs 0 → stops learning</li>
+  <li class="warn">ReLU is NOT differentiable at x=0 (discontinuous derivative) — common trap</li>
+  <li class="warn">Deep ReLU nets still require gradient descent — no closed-form training</li>
+</ul>
+
+<h3>Universal Approximation Theorem</h3>
+<p>A single hidden layer with sufficient width can approximate any continuous function — doesn't specify how many neurons or how to train efficiently.</p>
+
+<h3>XOR with MLP</h3>
+<ul>
+  <li>Single-layer perceptron cannot solve XOR (not linearly separable)</li>
+  <li>Need ≥1 hidden layer with nonlinear activation</li>
+  <li>2 hidden neurons sufficient; ReLU or sigmoid both work</li>
+  <li class="warn">Linear hidden activation → still linear overall → cannot learn XOR regardless of depth</li>
+  <li class="warn">Sigmoid: vanishing gradients slow training; random init can → local minima</li>
+</ul>
+
+<h3>Backprop — ReLU (Squared Loss)</h3>
+<p>x=2, w₁=1.2, w₂=0.8, y=4, η=0.1, L=½(y−ŷ)²</p>
+<div class="box">Forward:
+  z₁ = w₁·x = 2.4  →  a₁ = ReLU(2.4) = 2.4  →  ŷ = w₂·a₁ = 1.92
+
+Gradients:
+  dL/dŷ  = ŷ − y                    = −2.08
+  dL/dw₂ = dL/dŷ · a₁               = −2.08 · 2.4      = −4.992
+  dL/dw₁ = dL/dŷ · w₂ · ReLU'(z₁) · x = −2.08·0.8·1·2 = −3.328
+            (ReLU'(2.4) = 1 since z₁ > 0)
+Updates:
+  w₂_new = 0.8 − 0.1·(−4.992) = 1.2992
+  w₁_new = 1.2 − 0.1·(−3.328) = 1.5328</div>
+
+<h3>Backprop — Sigmoid (Binary Cross-Entropy)</h3>
+<p>x=2, w=1.5, y=1, η=0.1, ŷ=σ(wx), L=−[y·log(ŷ)+(1−y)·log(1−ŷ)]</p>
+<div class="box">Forward:
+  z = wx = 3  →  ŷ = σ(3) = 1/(1+e⁻³) ≈ 0.9526
+
+Loss:  L = −log(0.9526) ≈ 0.0485
+
+Key identity: dσ/dz = σ(1−σ) = ŷ(1−ŷ) ≈ 0.0452
+
+Gradient:
+  dL/dw = (dL/dŷ)·(dŷ/dz)·(dz/dw)
+        = (−1/ŷ) · ŷ(1−ŷ) · x
+        = −(1−ŷ)·x = −0.0474·2 ≈ −0.0948
+
+Update:  w_new = 1.5 − 0.1·(−0.0948) = 1.5095</div>
+
+<h3>Two-Layer Backprop (ReLU, Squared Loss)</h3>
+<p>x=1, w₁=1, w₂=2, y=3, η=0.05</p>
+<div class="box">Forward:  z₁=1, a₁=ReLU(1)=1, ŷ=2·1=2
+dL/dw₂ = (ŷ−y)·a₁        = −1·1 = −1
+dL/dw₁ = (ŷ−y)·w₂·1·x   = −1·2·1·1 = −2
+w₂_new = 2 − 0.05·(−1) = 2.05
+w₁_new = 1 − 0.05·(−2) = 1.10</div>
+
+<h3>Learning Rate Strategies</h3>
+<ul>
+  <li class="ok">Warm-up: stabilizes training in early epochs</li>
+  <li class="ok">LR decay: standard in modern deep learning</li>
+  <li class="ok">Cyclical LR: periodically increase and decrease</li>
+  <li class="ok">Gradient clipping: pair with high LR to prevent instability</li>
+  <li class="warn">Exponentially increasing LR → divergence (not faster convergence)</li>
+  <li class="warn">Adaptive optimizers (Adam) reduce but don't eliminate the need for schedules</li>
+</ul>
+
+<hr>
+
+<!-- ─── ENSEMBLES ─── -->
+<h2>5 · Ensemble Methods — Bagging &amp; Boosting</h2>
+
+<h3>Bagging</h3>
+<ul>
+  <li>Train each model on a bootstrap sample (draw n with replacement from n points)</li>
+  <li>Each bootstrap sample contains ~63.2% unique examples on average</li>
+  <li>~36.8% left out per tree → out-of-bag (OOB) examples</li>
+  <li>OOB error: predict each example using only trees for which it was OOB → free internal CV estimate</li>
+  <li class="warn">OOB error computed on left-out examples — not all examples; no data leakage</li>
+  <li class="warn">Random forests = bagging + feature subsampling per split — NOT boosting</li>
+  <li>Gradient boosting: each new learner fits the negative gradient of the loss w.r.t. current predictions (= residuals for squared loss)</li>
+</ul>
+
+<h3>OOB Accuracy Worked Example</h3>
+<div class="box">Example  True  OOB trees         OOB pred  Correct?
+1        Y     T1=Y, T3=N → tie  Y          ✓
+2        N     T2=N, T3=N        N          ✓
+3        Y     T1=Y, T2=Y        Y          ✓
+4        N     T1=Y, T3=N → tie  Y          ✗
+5        Y     T2=Y, T3=Y        Y          ✓
+6        N     T1=N, T2=N        N          ✓
+
+OOB accuracy = 5/6 ≈ 83.3%
+Tie rule: break toward Y (either valid; overall accuracy same here)</div>
+
+<hr>
+
+<!-- ─── KERNEL METHODS ─── -->
+<h2>6 · Kernel Methods &amp; SVM</h2>
+
+<h3>Kernel Trick</h3>
+<ul>
+  <li>Any PSD kernel K(x,z) = ⟨φ(x), φ(z)⟩ in some (possibly infinite-dim) feature space (RKHS)</li>
+  <li>Kernel trick: evaluate K(x,z) directly — never compute φ(x) explicitly</li>
+  <li>SVM decision: f(x) = sign(Σᵢ αᵢyᵢ K(xᵢ,x) + b)</li>
+  <li>RBF kernel → infinite-dimensional feature map</li>
+  <li class="warn">SVM training scales with n² (Gram matrix n×n), NOT with feature dimension</li>
+  <li class="warn">Higher polynomial degree → lower bias, higher variance → more overfitting risk</li>
+</ul>
+
+<h3>Polynomial Kernel SVM — Worked Example</h3>
+<p>K(x,z)=(⟨x,z⟩+1)², x₁=(1,0) y₁=+1 α₁=0.6, x₂=(0,1) y₂=−1 α₂=0.4, b=−0.2, x*=(1,1)</p>
+<div class="box">K(x₁,x*) = (1·1 + 0·1 + 1)² = (1+1)² = 4
+K(x₂,x*) = (0·1 + 1·1 + 1)² = (1+1)² = 4
+
+f(x*) = 0.6·(+1)·4 + 0.4·(−1)·4 − 0.2
+       = 2.4 − 1.6 − 0.2 = 0.6  →  ŷ = sign(0.6) = +1
+
+Gram matrix K (i,j entry = K(xᵢ,xⱼ)):
+  K(x₁,x₁) = (1+1)² = 4    K(x₁,x₂) = (0+1)² = 1
+  K(x₂,x₂) = (1+1)² = 4    →  K = [[4, 1], [1, 4]]</div>
+
+<hr>
+
+<!-- ─── PAC LEARNING ─── -->
+<h2>7 · PAC Learning</h2>
+
+<h3>Core Guarantee &amp; Formula</h3>
+<div class="box">Goal:  Pr[ error_D(h) > ε ] ≤ δ
+       i.e., with prob ≥ 1−δ, error of learned h ≤ ε
+
+m ≥ (1/ε) · [ ln|H| + ln(1/δ) ]</div>
+<ul>
+  <li>Guarantee is for the <b>learned h</b>, not any arbitrary hypothesis</li>
+  <li>Assumes realizability: true concept ∈ H</li>
+  <li>Distribution-free: worst-case guarantee over all distributions</li>
+  <li class="warn">PAC does NOT guarantee smallest training error</li>
+  <li class="warn">Consistent learner (zero train error) needs sufficient m to ensure low test error</li>
+  <li class="warn">Infinite |H| does NOT mean not PAC learnable — infinite classes with finite VC-dim are learnable (e.g. linear classifiers in ℝᵈ)</li>
+  <li>Sample complexity grows: linearly in 1/ε (dominant), logarithmically in 1/δ and |H|</li>
+</ul>
+
+<h3>Sample Complexity Behavior</h3>
+<table>
+  <tr><th>Change</th><th>Effect on m</th><th>Scale</th></tr>
+  <tr><td>Larger |H| (more expressive)</td><td>↑ m</td><td>log in |H|</td></tr>
+  <tr><td>Smaller ε (need more accuracy)</td><td>↑ m</td><td>linear ×1/ε — dominant</td></tr>
+  <tr><td>Smaller δ (need more confidence)</td><td>↑ m</td><td>log in 1/δ</td></tr>
+  <tr><td>Infinite VC-dim</td><td>Not PAC learnable</td><td>—</td></tr>
+</table>
+
+<h3>Worked Examples</h3>
+<div class="box">Formula: m ≥ (1/ε)·[ln|H| + ln(1/δ)]
+
+Fixed ε=0.05, δ=0.01  →  ln(1/δ)=ln(100)≈4.605, 1/ε=20:
+  |H|=100:    ln100≈4.605   → 20·(4.605+4.605)=184.2  → 185
+  |H|=10k:    ln10k≈9.210   → 20·(9.210+4.605)=276.3  → 277
+  |H|=1M:     ln1M≈13.816   → 20·(13.816+4.605)=368.4 → 369
+
+Fixed |H|=10,000 (ln≈9.21), varying ε and δ:
+  ε=0.10, δ=0.05: 10·(9.21+2.996) = 122.1  → 123
+  ε=0.05, δ=0.01: 20·(9.21+4.605) = 276.3  → 277
+  ε=0.01, δ=0.001:100·(9.21+6.908)= 1611.8 → 1612</div>
+
+<h3>Key ln Values</h3>
+<div class="box">ln(10)≈2.303   ln(20)≈2.996   ln(100)≈4.605
+ln(1000)≈6.908  ln(10000)≈9.210  ln(1M)≈13.816</div>
+
+<hr>
+
+<!-- ─── VC DIMENSION ─── -->
+<h2>8 · VC Dimension</h2>
+
+<h3>Definition</h3>
+<p>VC-dim(H) = size of the largest set H can <b>shatter</b> (realize all 2ⁿ labelings). Property of the class only — independent of data distribution.</p>
+<div class="note">
+  <b>Shattering ≠ every set of that size.</b> VC-dim=k means ∃ <em>some</em> set of k points that can be shattered — NOT that every set of k points can be shattered.
+</div>
+
+<h3>Full Reference Table</h3>
+<table>
+  <tr><th>Classifier</th><th>Space</th><th>VC-dim</th><th>Key reason / trap</th></tr>
+  <tr><td>Threshold sign(x−t)</td><td>ℝ¹</td><td>1</td><td>Can't realize (+,−) on 2 ordered points</td></tr>
+  <tr><td>Decision stump</td><td>ℝ¹</td><td>1</td><td>Same as threshold with polarity — NOT 2</td></tr>
+  <tr><td>Constant classifiers {0, 1}</td><td>any</td><td>1</td><td>Two hypotheses; can't do mixed labels on ≥2 pts</td></tr>
+  <tr><td>Hyperplanes (linear)</td><td>ℝᵈ</td><td>d+1</td><td>d+1 affinely independent points can be shattered</td></tr>
+  <tr><td>Hyperspheres</td><td>ℝᵈ</td><td>d+2</td><td>Richer geometry than DOF count suggests; d+1 also accepted in course</td></tr>
+  <tr><td>Axis-aligned boxes</td><td>ℝᵈ</td><td>2d</td><td>2 thresholds (lower + upper) per dimension</td></tr>
+  <tr><td>Axis-aligned rectangles</td><td>ℝ²</td><td>4</td><td>2d with d=2. Unit-square corners DON'T work — use staircase points</td></tr>
+  <tr><td>Disks / circles</td><td>ℝ²</td><td>3</td><td>Any 3 general-position pts shattered; opposite corners of square fail for 4</td></tr>
+  <tr><td>Annuli (rings)</td><td>ℝ²</td><td>4</td><td>Radial band adds freedom; alternating labels on pentagon unrealizable</td></tr>
+  <tr><td>Hypercube (equal-side box)</td><td>ℝ⁴</td><td>5</td><td>d translations + 1 scale = d+1; d=4 → 5</td></tr>
+  <tr><td>1-NN classifier</td><td>any</td><td>∞</td><td>Any finite labeled set memorized (training set = prototypes)</td></tr>
+</table>
+
+<h3>For ℝ¹⁰ Specifically</h3>
+<div class="box">Hyperplanes:        VC-dim = 11   (d+1)
+Hyperspheres:       VC-dim = 12   (d+2; 11 also accepted in this course)
+Axis-aligned boxes: VC-dim = 20   (2d)</div>
+
+<h3>Key Facts &amp; Common Traps</h3>
+<ul>
+  <li>Finite VC-dim ↔ PAC learnable (necessary and sufficient under realizability)</li>
+  <li class="warn">Higher VC-dim ≠ better generalization — requires more data to avoid overfitting</li>
+  <li class="warn">Same VC-dim ≠ same sample complexity (constants can differ)</li>
+  <li class="warn">VC-dim depends on hypothesis class expressiveness, NOT just number of input features</li>
+  <li class="warn">Axis-aligned rectangle VC-dim=4, but the unit-square corners {(0,0),(0,1),(1,0),(1,1)} CANNOT be shattered — XOR labeling is unrealizable by any rectangle</li>
+  <li>A shatterable 4-point set requires a "staircase" arrangement, e.g. {(0,0),(1,3),(2,1),(3,4)}</li>
+  <li>VC-dim is independent of whether the learning algorithm is deterministic or randomized</li>
+</ul>
+
+</div>
+</div>
+
+</body>
+</html>

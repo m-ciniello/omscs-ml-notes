@@ -156,12 +156,13 @@ ID3 greedily picks argmax_A IG(S,A)</div>
   </ul>
 
   <h3>Generalization (prevent overfitting)</h3>
+  <p>Untuned trees drive training error to 0 (one leaf per example) but generalize poorly. Two families of remedies:</p>
   <ul>
-    <li>Prune branches post-training</li>
-    <li>Limit tree depth / min examples per leaf</li>
-    <li>Stop splitting when IG very low</li>
-    <li>Cross-validate stopping criteria</li>
-    <li class="warn">Do NOT use the label as an input feature</li>
+    <li><b>Pre-pruning (early stopping):</b> stop growing on the way down — limit max depth, require min samples/leaf, stop splitting when IG &lt; threshold. Cheap but can stop too early (a poor split now might enable great splits later — the "horizon problem").</li>
+    <li><b>Post-pruning:</b> grow full tree, then collapse subtrees whose validation accuracy doesn't beat replacing them with a leaf. Methods: <em>reduced-error pruning</em> (greedy on val set), <em>cost-complexity pruning</em> (CART's α: minimize <code>error + α·|leaves|</code>). More expensive but typically better than pre-pruning.</li>
+    <li><b>Pruning effects:</b> reduces depth ⇒ simpler model, better interpretability; trades training accuracy for (usually) better test accuracy. <em>Does NOT</em> guarantee a balanced tree, strictly higher accuracy, or "the best" model.</li>
+    <li><b>Cross-validate</b> the stopping criteria / pruning hyperparams (depth, min_leaf, α).</li>
+    <li class="warn">Do NOT use the label as an input feature.</li>
   </ul>
 
   <h3>Decision Tree Regression</h3>
@@ -193,23 +194,6 @@ d²L/dc² = 2n &gt; 0   ⇒   minimum (unique).</div>
     <li>sklearn: <code>DecisionTreeRegressor</code> defaults to MSE splitting + mean-at-leaf</li>
   </ul>
 
-  <h3>Lazy vs Eager Learning</h3>
-  <p><b>Eager:</b> build the model at training time; queries are fast lookups (ID3, NN, regression). &nbsp; <b>Lazy:</b> defer all work to query time; "training" just stores data (k-NN).</p>
-  <table>
-    <tr><th></th><th>Eager (ID3, NN, …)</th><th>Lazy (k-NN, lazy ID3)</th></tr>
-    <tr><th>Train cost</th><td>O(n·d·depth) once</td><td>O(1) — just store data</td></tr>
-    <tr><th>Query cost</th><td>O(depth)</td><td>O(n·d·depth) per query</td></tr>
-    <tr><th>Online updates</th><td class="warn">Costly (retrain)</td><td class="ok">Trivial (append to S)</td></tr>
-    <tr><th>Reusable model</th><td class="ok">Yes — exportable, inspectable</td><td class="warn">No global structure</td></tr>
-    <tr><th>Pruning, feat-importance</th><td class="ok">Easy (global view)</td><td class="warn">Awkward (no full tree)</td></tr>
-  </table>
-  <p><b>Lazy ID3 design:</b> at query time, run ID3 only along the branch x_q traverses (compute IG, pick A*, recurse on the child matching x_q[A*]; never build sibling subtrees).</p>
-  <p class="ok"><b>Key insight:</b> for deterministic learners with fixed training data, <em>basic lazy and eager versions produce identical predictions</em> — they compute the same tree, just in different orders. Lazy/eager is a <b>computation-schedule choice, not a modeling choice</b>.</p>
-  <ul>
-    <li class="warn"><b>Caveats where they diverge:</b> tie-breaking randomness; pruning (lazy can't, since it never sees the full tree); query-adaptive variants (where lazy intentionally biases splits toward x_q's neighborhood)</li>
-    <li><b>Use lazy when:</b> data streams in (frequent updates), few queries on large data, or query-adaptive features matter. <b>Use eager when:</b> many queries on fixed data — amortize training once.</li>
-  </ul>
-
   <hr>
   <h2>2 · Regression &amp; Classification</h2>
 
@@ -218,6 +202,23 @@ d²L/dc² = 2n &gt; 0   ⇒   minimum (unique).</div>
 MAE  = (1/n) Σ |y − ŷ|
 L1 norm = Σ |eᵢ|              (= n · MAE)
 L2 norm = √(Σ eᵢ²)           (= √(n · MSE))</div>
+
+  <h3>Cross-Validation (CV)</h3>
+  <p>The standard estimator of out-of-sample (generalization) performance, and the standard tool for hyperparameter tuning when a separate test set is unavailable or would shrink training too much.</p>
+  <div class="box">k-fold CV:
+1. Shuffle data; split into k equal folds.
+2. For i = 1..k:  train on (k−1) folds, evaluate on fold i.
+3. Average the k validation scores ⇒ CV estimate of generalization.
+
+Common k = 5 or 10.   LOOCV (k = n) — low bias, high variance, expensive.</div>
+  <ul>
+    <li><b>Use for hyperparameter tuning:</b> run CV across a grid of hyperparam values; pick the one with best mean CV score.</li>
+    <li><b>Task-agnostic</b> — applies to regression, classification, ranking, even unsupervised model selection. NOT regression-specific.</li>
+    <li class="warn"><b>Does NOT:</b> eliminate the need for hyperparam tuning (CV is the <em>tool</em> you tune <em>with</em>); guarantee good test performance (only estimates it, with variance); train on the full dataset without validation (held-out folds are the entire point).</li>
+    <li><b>Stratified k-fold:</b> preserves class proportions per fold ⇒ use for imbalanced classification.</li>
+    <li><b>Time-series CV:</b> never train on data from <em>after</em> validation — use rolling-origin / expanding-window splits to avoid lookahead leakage.</li>
+    <li class="warn"><b>CV-set leakage / over-tuning:</b> repeatedly tuning on the same folds optimistically biases the score (you've effectively "fit" the CV set). Use a held-out final test set as the unbiased check.</li>
+  </ul>
 
   <h3>L2 Regularization (Ridge)</h3>
   <ul>
@@ -264,6 +265,30 @@ AUC-ROC: perfect = 1.0,  random = 0.5</div>
     <li>Also fine on imbalance: F1, F_β (weighted recall), Matthews correlation (MCC), balanced accuracy.</li>
   </ul>
 
+  <h3>Lazy vs Eager Learning</h3>
+  <p><b>Eager:</b> build the model at training time; queries are fast lookups (ID3, NN, regression). &nbsp; <b>Lazy:</b> defer all work to query time; "training" just stores data (k-NN).</p>
+  <table>
+    <tr><th></th><th>Eager (ID3, NN, …)</th><th>Lazy (k-NN, lazy ID3)</th></tr>
+    <tr><th>Train cost</th><td>O(n·d·depth) once</td><td>O(1) — just store data</td></tr>
+    <tr><th>Query cost</th><td>O(depth)</td><td>O(n·d·depth) per query</td></tr>
+    <tr><th>Online updates</th><td class="warn">Costly (retrain)</td><td class="ok">Trivial (append to S)</td></tr>
+    <tr><th>Reusable model</th><td class="ok">Yes — exportable, inspectable</td><td class="warn">No global structure</td></tr>
+    <tr><th>Pruning, feat-importance</th><td class="ok">Easy (global view)</td><td class="warn">Awkward (no full tree)</td></tr>
+  </table>
+  <p><b>Defining traits of instance-based / lazy learning:</b></p>
+  <ul>
+    <li><b>Memorizes</b> the training set verbatim; defers all work to query time.</li>
+    <li><b>Similarity-based</b> predictions (distance metrics, kernels) — <em>NOT</em> probabilistic models. (Naive Bayes is probabilistic but <em>not</em> instance-based.)</li>
+    <li class="warn"><b>Sensitive to irrelevant / redundant features</b> — distance metrics weight all features equally; noise features inflate distances and drown out signal even at modest dimensionality. Mitigate with feature selection, feature weighting, or learned metrics (Mahalanobis, LMNN). Distinct from the high-dim concentration effect.</li>
+    <li class="warn"><b>Slow at <em>prediction</em>, not training</b> — classic exam trap reverses these. Lazy = trivial training (just store data) + expensive query (scan or tree-search every prediction).</li>
+  </ul>
+  <p><b>Lazy ID3 design</b> (DT example showing any learner can be lazy): at query time, run ID3 only along the branch x_q traverses — compute IG, pick A*, recurse on the child matching x_q[A*]; never build sibling subtrees.</p>
+  <p class="ok"><b>Key insight:</b> for deterministic learners with fixed training data, <em>basic lazy and eager versions produce identical predictions</em> — they compute the same tree, just in different orders. Lazy/eager is a <b>computation-schedule choice, not a modeling choice</b>.</p>
+  <ul>
+    <li class="warn"><b>Caveats where they diverge:</b> tie-breaking randomness; pruning (lazy can't, since it never sees the full tree); query-adaptive variants (where lazy intentionally biases splits toward x_q's neighborhood)</li>
+    <li><b>Use lazy when:</b> data streams in (frequent updates), few queries on large data, or query-adaptive features matter. <b>Use eager when:</b> many queries on fixed data — amortize training once.</li>
+  </ul>
+
   <h3>k-NN — How It Classifies</h3>
   <p><b>Lazy learner:</b> no training step; memorizes data, computes at query time.</p>
   <ol style="margin:2px 0 4px;padding-left:18px">
@@ -296,6 +321,111 @@ AUC-ROC: perfect = 1.0,  random = 0.5</div>
     <li class="ok"><b>Canonical exam problem (line on plane):</b> pick <b>k-NN</b>. DT fights its own geometry; k-NN has the correct inductive bias.</li>
     <li><b>When DT wins:</b> axis-aligned thresholds, hierarchical rule logic, or when you need an interpretable decision path (the splits <em>are</em> the rules).</li>
     <li><b>Rule of thumb:</b> rotated/curved geometry → k-NN; flowchart-like decisions → DT.</li>
+  </ul>
+
+  <h3>Kernel Methods &amp; SVM</h3>
+  <p><b>SVM</b> finds the linear hyperplane that <em>maximizes the margin</em> between classes — distance from boundary to the nearest training point. The boundary is fully determined by the few points on the margin (the <b>support vectors</b>); all other training points are irrelevant.</p>
+  <ul>
+    <li><b>Hard-margin SVM:</b> requires linearly separable data — every point correctly classified outside the margin.</li>
+    <li><b>Soft-margin SVM</b> (slack ξᵢ + parameter C): tolerates violations. <b>Large C</b> ⇒ narrow margin, low train error (closer to hard-margin); <b>small C</b> ⇒ wide margin, more violations OK (closer to underfit).</li>
+    <li><b>Decision rule:</b> f(x) = sign(Σᵢ αᵢ yᵢ K(xᵢ, x) + b). Only support vectors have αᵢ &gt; 0 — everything else drops out of the sum.</li>
+  </ul>
+  <p><b>The kernel trick</b> — what makes SVMs powerful on non-linear data:</p>
+  <ul>
+    <li>To handle non-separable data, map x → φ(x) into a higher-dim space where a linear SVM <em>can</em> separate. Idea: lift, then linearly classify.</li>
+    <li><b>Trick:</b> SVM training and prediction only ever need <em>inner products</em> ⟨φ(x), φ(z)⟩ — never φ itself. Define <b>K(x, z) = ⟨φ(x), φ(z)⟩</b> and compute K directly. A polynomial kernel of degree d in many features has <em>exponentially many</em> implicit features, but K takes O(input-dim) to compute.</li>
+    <li>Any <b>positive semi-definite (PSD)</b> function K corresponds to some valid φ in a (possibly infinite-dim) feature space (RKHS).</li>
+  </ul>
+  <p><b>Common kernels:</b></p>
+  <table>
+    <tr><th>Kernel</th><th>K(x, z)</th><th>Inductive bias</th></tr>
+    <tr><td>Linear</td><td>x · z</td><td>No lift — equivalent to plain linear SVM</td></tr>
+    <tr><td>Polynomial</td><td>(x · z + c)ᵈ</td><td>Degree-d feature interactions; higher d ⇒ lower bias, higher variance, more overfit risk</td></tr>
+    <tr><td><b>RBF (Gaussian)</b></td><td>exp(−γ ‖x − z‖²)</td><td>Local similarity; <em>infinite-dim</em> implicit φ. γ = bandwidth: large γ ⇒ tight / overfit; small γ ⇒ smooth / underfit</td></tr>
+  </table>
+  <ul>
+    <li class="warn"><b>SVM training scales with n²</b> (Gram matrix is n×n) — NOT with feature dimension. Impractical above ~100k samples; raw input dim is not the bottleneck.</li>
+    <li class="warn">Kernel choice = inductive-bias choice. RBF is a strong default for tabular data when you don't know the geometry.</li>
+    <li class="ok">SVMs and kernels are a <em>different</em> tradition from DTs/NNs — they replace "learn features" with "engineer the right kernel."</li>
+    <li class="warn"><b>NOT what kernels do</b> (common distractors): they don't <em>reduce</em> SVM complexity (kernel SVM is more expensive than linear SVM — they go from <em>infeasible to feasible</em> vs. explicit lifting, not feasible to cheaper); they don't <em>minimize</em> the number of support vectors (SVs are an outcome of the data geometry, not a goal); they don't handle missing values.</li>
+  </ul>
+
+  <h3>Ensemble Methods</h3>
+  <p><b>Idea:</b> combine many "weak" learners into a strong one — diverse models cancel out individual mistakes. Two main families differ in <em>how</em> they generate diversity:</p>
+  <table>
+    <tr><th></th><th>Bagging (Random Forest)</th><th>Boosting (AdaBoost, GBM, XGBoost)</th></tr>
+    <tr><th>Built</th><td>Parallel — independent base learners</td><td>Sequential — each round fixes prior errors</td></tr>
+    <tr><th>Each learner sees</th><td>Bootstrap sample (~63% of data)</td><td>Full data, reweighted by prior errors / residuals</td></tr>
+    <tr><th>Reduces primarily</th><td class="ok"><b>Variance</b></td><td class="ok"><b>Bias</b></td></tr>
+    <tr><th>Base learner</th><td>Low-bias, high-variance (deep DTs)</td><td>High-bias, low-variance (shallow stumps)</td></tr>
+    <tr><th>Overfit risk</th><td class="ok">Low — more trees ≈ better</td><td class="warn">Higher — can overfit; use early stopping / val</td></tr>
+  </table>
+  <ul>
+    <li><b>Why bagging reduces variance:</b> averaging N i.i.d. predictors with variance σ² gives σ²/N. Random Forest's random feature subset per split <em>decorrelates</em> the trees further, deepening the reduction.</li>
+    <li><b>Why boosting reduces bias:</b> each round fits a weak learner to prior residuals (GBM) or reweighted samples (AdaBoost). The "weak → strong" conversion is the core theoretical result (Schapire 1990).</li>
+    <li><b>Stacking:</b> a meta-learner is trained on base learners' out-of-fold predictions ⇒ optimal combination weights for heterogeneous models. Different from voting/averaging — the combination itself is learned.</li>
+  </ul>
+
+  <p><b>Bagging mechanics &amp; OOB error:</b></p>
+  <ul>
+    <li><b>Bootstrap</b> = draw n samples <em>with replacement</em> from n training points ⇒ each base learner sees a different ~63.2% unique subset of the data.</li>
+    <li><b>Out-of-bag (OOB) examples:</b> the ~36.8% left out per tree. Predict each example using only trees for which it was OOB ⇒ <b>free internal CV estimate</b>, no extra holdout needed.</li>
+    <li class="warn"><b>Random Forest = bagging + feature subsampling per split</b> (typically √d for classification, d/3 for regression) — NOT boosting. The feature randomness <em>decorrelates</em> trees beyond plain bagging, deepening variance reduction.</li>
+    <li><b>Gradient boosting:</b> each new learner fits the <em>negative gradient</em> of the loss w.r.t. current predictions (= residuals for squared loss; log-odds shifts for cross-entropy).</li>
+  </ul>
+  <p><b>Worked Example — OOB Accuracy</b> (3-tree forest):</p>
+  <div class="box">Example  True  OOB trees         OOB pred   Correct?
+1        Y     T1=Y, T3=N → tie  Y          ✓
+2        N     T2=N, T3=N        N          ✓
+3        Y     T1=Y, T2=Y        Y          ✓
+4        N     T1=Y, T3=N → tie  Y          ✗
+5        Y     T2=Y, T3=Y        Y          ✓
+6        N     T1=N, T2=N        N          ✓
+
+OOB accuracy = 5/6 ≈ 83.3%
+Tie rule: break consistently (toward Y here); pick a deterministic rule.</div>
+
+  <p><b>AdaBoost mechanics:</b></p>
+  <ul>
+    <li>Sequential: at round t, train weak learner hₜ on the <em>current</em> sample weights. Misclassified examples get higher weight; correctly classified get lower (still included — just downweighted, not removed).</li>
+    <li><b>Weak-learner requirement:</b> εₜ &lt; 0.5 (better than random). εₜ = 0.5 ⇒ αₜ = 0 (no contribution); εₜ &gt; 0.5 ⇒ αₜ &lt; 0 (vote flipped — usually means the base hypothesis class is wrong; discard in practice).</li>
+    <li><b>Order per round:</b> train hₜ → compute εₜ → compute αₜ → update weights. αₜ must be known before the weights can move.</li>
+    <li><b>Why αₜ (not εₜ) drives the weight update:</b> a better learner gets larger αₜ ⇒ e^{+αₜ} is larger ⇒ misclassified examples boosted aggressively. A near-random learner gets small αₜ ⇒ gentle redistribution. The shift is auto-calibrated to the learner's informativeness.</li>
+    <li>Final classifier aggregates with <b>αₜ-weighted votes</b>, not equal votes: H(x) = sign(Σₜ αₜ · hₜ(x)).</li>
+    <li class="warn">AdaBoost can <b>overfit on noisy data</b> with too many rounds — counterexample to the misconception that "boosting always reduces overfit."</li>
+  </ul>
+  <p><b>AdaBoost formulas:</b></p>
+  <div class="box">Learner weight:   αₜ = ½ · ln((1 − εₜ) / εₜ)
+                  where εₜ = weighted error of hₜ on current weights
+
+Weight update (unnormalized):
+  misclassified:   wᵢ' = wᵢ · e^{+αₜ}    ← weight goes UP
+  correct:         wᵢ' = wᵢ · e^{−αₜ}    ← weight goes DOWN
+
+Normalize:   wᵢ ← wᵢ' / Z      where  Z = Σⱼ wⱼ'</div>
+
+  <p><b>Worked Example — AdaBoost round 1</b> (8 examples, w₀ = 1/8 each):</p>
+  <div class="box">Learner h₁ misclassifies examples 3 and 8:
+  ε₁ = 2/8 = 0.25
+  α₁ = ½ · ln(0.75 / 0.25) = ½ · ln(3) ≈ 0.549
+
+Unnormalized new weights:
+  correct (6 examples):  1/8 · e^{−0.549} ≈ 0.072
+  misclassified (2):     1/8 · e^{+0.549} ≈ 0.217
+
+Z = 6·0.072 + 2·0.217 = 0.434 + 0.434 = 0.868
+
+Normalized:
+  correct       → 0.072 / 0.868 ≈ 0.083
+  misclassified → 0.217 / 0.868 ≈ 0.250
+
+Sanity: 6·0.083 + 2·0.250 ≈ 1.0  ✓</div>
+
+  <p><b>NOT what ensembles do</b> (common distractors):</p>
+  <ul>
+    <li class="warn"><b>Don't speed up training</b> — N models = N× compute. Bagging parallelizes (independent base learners); boosting cannot (sequential by construction).</li>
+    <li class="warn"><b>Don't improve interpretability</b> — 1 tree is readable; 1000 trees is a black box. Workarounds: feature importance, SHAP, partial-dependence plots — but these are post-hoc.</li>
+    <li class="warn"><b>Don't handle missing values</b> on their own — that's a per-base-learner property (XGBoost learns missing-direction; bagging vanilla DTs requires imputation).</li>
   </ul>
 
 </div>
@@ -358,6 +488,15 @@ Both networks output the same XOR truth table:
     <li>More hidden units help but aren't strictly necessary for XOR</li>
   </ul>
 
+  <h3>Universal Approximation Theorem (UAT)</h3>
+  <p>A feedforward network with a <em>single hidden layer</em> of finite (but possibly very large) width and a non-polynomial activation (sigmoid, ReLU, etc.) can approximate <em>any continuous function</em> on a compact domain to arbitrary accuracy.</p>
+  <ul>
+    <li class="ok"><b>What UAT guarantees:</b> the hypothesis class is rich enough — expressivity is not the bottleneck.</li>
+    <li class="warn"><b>What UAT does NOT guarantee:</b> efficient learning, reasonable width, or that GD will <em>find</em> a good fit. Width may need to be exponential; training is non-convex; convergence to the optimal approximation is not promised.</li>
+    <li class="warn"><b>Linear activations defeat UAT:</b> stacking linear layers collapses to a single linear map ⇒ can't approximate non-linear functions regardless of depth.</li>
+    <li><b>Why depth helps in practice (despite "1 hidden layer enough" in theory):</b> deeper nets can express the same function with exponentially fewer parameters than a single very-wide hidden layer. UAT is an <em>existence</em> result, not a practical recipe.</li>
+  </ul>
+
   <h3>Perceptron Rule vs Delta (GD) Rule</h3>
   <p>Both updates have the <em>same form</em> w_i ← w_i + η(t − o)x_i but differ in what <code>o</code> is:</p>
   <table>
@@ -409,9 +548,15 @@ Updates (w ← w − η·dL/dw):
   </ul>
   <p><b>Activation functions:</b></p>
   <ul>
-    <li class="warn"><b>Sigmoid / tanh:</b> derivatives saturate to 0 in the tails ⇒ <b>vanishing gradients</b> through deep networks ⇒ slow / stalled training in hidden layers</li>
+    <li class="warn"><b>Sigmoid / tanh:</b> derivatives saturate to 0 in the tails ⇒ <b>vanishing gradients</b> through deep networks ⇒ slow / stalled training in hidden layers. Mitigations: ReLU activations, He / Xavier init, batch norm, residual connections.</li>
     <li class="warn"><b>ReLU "dying":</b> a neuron stuck with z &lt; 0 has gradient 0 forever ⇒ never updates. Mitigate with Leaky ReLU / GELU or careful init.</li>
-    <li>Random init + non-convex loss ⇒ can land in different local minima across runs (less catastrophic than once feared, but still real)</li>
+  </ul>
+  <p><b>Generalization &amp; model concerns:</b></p>
+  <ul>
+    <li class="warn"><b>Overfitting</b> — NNs have huge parameter counts and can memorize training data. Mitigate via <em>dropout, weight decay (L2), early stopping, data augmentation, batch norm</em>.</li>
+    <li class="warn"><b>Interpretability</b> — NN is a black-box function approximator; understanding "why this prediction" needs post-hoc tools (SHAP, saliency maps, attention viz). A top concern in regulated domains (finance, healthcare).</li>
+    <li class="warn"><b>Local minima &amp; saddle points</b> — non-convex loss ⇒ GD can plateau. Random init ⇒ different runs land in different basins. In high dimensions <em>saddle points</em> (gradient = 0 but not a minimum) are typically more common than true local minima; momentum / Adam help escape both.</li>
+    <li class="ok"><b>NOT primary NN concerns:</b> <em>support-vector calculations</em> (those are SVMs, not NNs); <em>collinearity among features</em> (linear-model issue — NNs learn feature combinations that absorb redundancy).</li>
   </ul>
 
   <hr>
@@ -445,6 +590,7 @@ m ≥ (1/ε) · [ ln|H| + ln(1/δ) ]         sample complexity</div>
   <ul>
     <li>Guarantee applies to the <em>learned</em> h (whichever consistent one the algorithm returned), not any arbitrary h in H</li>
     <li class="warn">PAC does NOT guarantee minimum training error or best test accuracy — many consistent h's exist; PAC just bounds <em>whichever one</em> the learner picks. Achieving 0 training error often = overfitting noisy data.</li>
+    <li class="warn"><b>PAC is algorithm-agnostic and representation-agnostic.</b> It does NOT pin down a specific learner (NN, SVM, DT — any consistent one works) and does NOT require a specific feature set. The four PAC "knobs" are <b>H, ε, δ, m</b>; X and D are background assumptions.</li>
   </ul>
 
   <h3>Sample Complexity Behaviour</h3>
@@ -461,14 +607,18 @@ m ≥ (1/ε) · [ ln|H| + ln(1/δ) ]         sample complexity</div>
   <p><b>Shatter:</b> H shatters a set of n points if <em>every</em> possible labeling (all 2ⁿ +/− assignments) is achievable by some h ∈ H. Picture: H is so flexible it can memorize any labeling of those points — even adversarial ones.</p>
   <p><b>VC dimension</b> = size of the largest set H can shatter (∞ if unbounded).</p>
 
-  <p><b>Walk-through — 2D hyperplanes:</b></p>
+  <p class="ok"><b>The two quantifiers (don't confuse them):</b></p>
   <ul>
-    <li><b>3 points (general position) ✓:</b> all 2³=8 labelings work — "all same" → line outside; "isolate one" → line cuts that point off.</li>
-    <li><b>4 points ✗:</b> triangle + interior → inside-point can't be opposite-labeled (convexity). Quadrilateral → (+,−,+,−) checkerboard can't be cut by any line.</li>
-    <li>So <b>VC dim = 3</b> for 2D hyperplanes.</li>
+    <li class="ok"><b>VC ≥ n</b> is <b>existential</b> — there <em>exists</em> at least one n-point set that H shatters. To prove it, exhibit <em>one</em> good witness in general position. Degenerate configs (collinear points for hyperplanes, equidistant points for circles, duplicate coordinates) may fail to be shattered — that's fine, they don't lower VC.</li>
+    <li class="warn"><b>VC ≤ n</b> is <b>universal</b> — <em>every</em> (n+1)-point set fails to be shattered. Much stricter: you must rule out all configurations, not just one.</li>
+    <li><b>VC = n</b> ⇔ both: some n-point set is shattered AND every (n+1)-point set is not. So "VC = n" never means "every n-point set is shattered."</li>
   </ul>
 
-  <p class="ok"><b>Practical tip — pick points in general position:</b> to show <b>VC ≥ n</b>, find <em>one</em> n-point set that's shattered (lower bounds are <em>existential</em>). Degenerate configs (equidistant from origin for circles, collinear for hyperplanes, identical coords) may fail and that's fine — they don't lower VC. <b>VC ≤ n−1</b> is stricter: <em>every</em> n-point set must fail.</p>
+  <p><b>Walk-through — 2D hyperplanes (VC = 3):</b></p>
+  <ul>
+    <li><b>VC ≥ 3 ✓:</b> 3 points in general position (non-collinear) → all 2³=8 labelings achievable. "All same" → line outside; "isolate one" → line cuts that point off. 3 collinear points fail, but that's OK — we only need <em>one</em> witness.</li>
+    <li><b>VC ≤ 3 ✓:</b> for any 4 points: triangle + interior → inside-point can't be opposite-labeled (convexity); quadrilateral → (+,−,+,−) checkerboard can't be cut by any line. <em>Every</em> 4-point config fails.</li>
+  </ul>
 
   <p class="warn"><b>Shatter ≠ fit training data:</b> shattering is about expressive capacity (can produce <em>any</em> labeling, including pure noise). Fitting your specific labels is a much weaker requirement.</p>
 
@@ -492,7 +642,9 @@ m ≥ (1/ε) · [ ln|H| + ln(1/δ) ]         sample complexity</div>
   <ul>
     <li class="ok"><b>Constraints kill capacity:</b> VC tracks <em>effective free parameters</em>, not input dimension. Fixing the center of a circle/sphere drops VC from d+2 → 1 or 2 (depending on sign convention).</li>
     <li class="warn">Higher VC ≠ better generalization — more data required</li>
+    <li class="warn"><b>Lower VC ≠ guaranteed better generalization either</b> — if H is too small for the true concept, you underfit (high bias). VC is one knob in the bias-variance tradeoff, never a guarantee. Constant classifier has VC=0 and is useless on most tasks.</li>
     <li class="warn">Same VC ≠ same sample complexity (constants differ)</li>
+    <li class="warn"><b>VC ≠ number of features.</b> Axis-aligned boxes in ℝᵈ have VC=2d; origin-centered circles in ℝ¹⁰⁰ have VC=1 or 2; sin(ωx) in ℝ¹ has VC=∞. Count <em>free parameters of H</em>, not input dim.</li>
   </ul>
 
 </div>

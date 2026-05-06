@@ -128,8 +128,11 @@ Lloyd's algo:
     <li><b>Assumptions:</b> spherical (isotropic) clusters, similar sizes, Euclidean geometry</li>
     <li class="warn"><b>Fails on:</b> non-convex shapes (crescents), elongated clusters, very different cluster sizes (centroid drifts toward the bigger one)</li>
     <li class="warn"><b>Init sensitivity:</b> can land in local minima; <b>k-means++</b> seeds centroids spread out (proportional to D²); use multiple restarts and keep the lowest-inertia run</li>
+    <li class="warn"><b>Outlier sensitivity:</b> distance is <em>squared</em> in the inertia objective and centroids are arithmetic <em>means</em> — a single far point can drag μ_k off the cluster body. Mitigations: trim outliers, use K-medoids (medoids are robust), or DBSCAN (handles noise natively).</li>
     <li>Hard assignment — every point belongs to exactly one cluster, no uncertainty</li>
   </ul>
+
+  <p class="ok"><b>Four things K-Means needs help with (memory hook):</b> <b>K</b> (selection — elbow / silhouette), <b>init</b> (k-means++ + restarts), <b>scale</b> (standardize features), <b>outliers</b> (remove or switch to K-medoids). Anything else (dataset size, feature "unequal importance") is a distractor.</p>
 
   <h3>GMM with EM — soft, ellipsoidal</h3>
   <p><b>Generative story:</b> (1) Pick cluster zᵢ = k with prior probability π_k; (2) Draw xᵢ ~ 𝒩(μ_k, Σ_k). Marginalizing out the hidden zᵢ gives the <em>mixture density</em>:</p>
@@ -284,6 +287,16 @@ M-step (refit params using responsibilities as weights):
     <li>Wrappers don't guarantee global optimum: forward/backward search is greedy; combinatorial space too large to enumerate</li>
   </ul>
 
+  <h3>Real Challenges of Feature Selection</h3>
+  <ul>
+    <li class="warn"><b>Bias from removing important features:</b> dropping a relevant feature loses information ⇒ higher bias. Selection trades variance reduction for potential bias increase — that's the bias-variance tradeoff applied to features.</li>
+    <li class="warn"><b>Joint relevance (XOR trap):</b> a feature can be uninformative alone yet essential in combination — filter methods miss this entirely.</li>
+    <li class="warn"><b>Computational cost:</b> wrapper subset search scales as 2ᵈ exhaustively, O(d²) greedily. Filter methods are cheap; embedded methods (Lasso) intermediate.</li>
+    <li class="warn"><b>Simplicity vs informativeness balance:</b> too few features ⇒ underfit; too many ⇒ overfit + interpretability/cost issues. Goal is the sweet spot, not "remove as many as possible."</li>
+    <li class="warn"><b>NOT supervised-only:</b> unsupervised feature selection exists (variance threshold, Laplacian score, autoencoder-based, redundancy removal). Selection is a preprocessing tool, not a label-dependent one.</li>
+    <li class="warn"><b>NO accuracy guarantee:</b> selection can help (remove noise), hurt (drop relevant features), or do nothing. Cross-validate the selection itself; "always improves accuracy" is false.</li>
+  </ul>
+
 </div>
 
 <!-- RIGHT COLUMN -->
@@ -361,8 +374,10 @@ Common objectives:
     <tr><th>Output axes</th><td>Orthogonal</td><td>Need not be orthogonal</td></tr>
     <tr><th>Component property</th><td>Uncorrelated</td><td>Statistically independent</td></tr>
     <tr><th>Ordering</th><td>By variance (λ)</td><td>By non-Gaussianity</td></tr>
+    <tr><th>Supervision</th><td>Unsupervised</td><td>Unsupervised</td></tr>
     <tr><th>Best for</th><td>Compression, denoising via low-rank</td><td>Source separation (audio, EEG, fMRI)</td></tr>
   </table>
+  <p class="warn"><b>Common traps:</b> ICA finds <em>independent</em> axes, NOT "linearly dependent" axes (word-swap trap). Both PCA and ICA are <em>unsupervised</em> — neither uses labels. ICA does NOT maximize variance — it whitens variance away first, then maximizes non-Gaussianity.</p>
   <p class="ok"><b>Uncorrelated ≠ independent.</b> Uncorrelated means only the linear (2nd-order) cross-moment vanishes:  Cov(X, Y) = E[XY] − E[X]·E[Y] = 0. Independence is strictly stronger — the joint factorizes  p(X, Y) = p(X)·p(Y), which forces  E[f(X)·g(Y)] = E[f(X)]·E[g(Y)] for <em>every</em> pair of functions f, g (i.e. <em>all</em> cross-moments factor, not just the linear one).</p>
   <p>Independent ⇒ uncorrelated (always). The reverse only holds when the joint is <b>Gaussian</b> (where mean &amp; covariance fully describe the distribution).</p>
   <div class="box">Classic counter-example:  X ~ Uniform(−1, 1),  Y = X²
@@ -439,12 +454,47 @@ Optimize:  KL( P ‖ Q )   via gradient descent on {yᵢ}</div>
   </ul>
 
   <h3>UMAP — fuzzy simplicial sets, cross-entropy</h3>
-  <p>Builds a (approximate) kNN graph as a <em>fuzzy topological representation</em>; finds a low-d layout whose fuzzy graph matches it via cross-entropy. Mathier framing than t-SNE, similar local emphasis.</p>
+  <p><b>Goal:</b> same as t-SNE — visualize HD data in 2D, preserve neighborhoods, reveal clusters. Different machinery; broadly similar empirical output, with somewhat better global structure, faster runtime, and an out-of-sample transform.</p>
+
+  <p><b>The intuition in one line:</b> build a <em>weighted graph</em> on your HD data where edge weights = "how confident am I that these two points are neighbors," then lay it out in 2D as a force-directed graph (springs pull connected points together, random pairs repel) until the 2D graph "matches" the HD graph.</p>
+
+  <p><b>Four core tricks (mirroring t-SNE's three):</b></p>
+  <ol>
+    <li><b>HD graph as a fuzzy simplicial set:</b> for each point xᵢ, its <em>k</em> nearest neighbors form a fuzzy neighborhood with edge weights wᵢⱼ ∈ [0, 1] — close = strong (≈1), far = weak (≈0). "Fuzzy simplicial set" is just fancy topology-speak for this weighted kNN graph. This is UMAP's analog of t-SNE's HD probability matrix P.</li>
+    <li><b>Adaptive bandwidth (analog of perplexity):</b> per-point parameters ρᵢ (distance to nearest neighbor) and σᵢ (scale) are set so each xᵢ ends up with ≈ log₂(<b>n_neighbors</b>) effective connections. Dense regions ⇒ small σᵢ; sparse regions ⇒ large σᵢ. <em>Same idea as t-SNE's per-point Gaussian σᵢ, just with a different formula.</em></li>
+    <li><b>Symmetrize via fuzzy union (probabilistic OR):</b> the raw graph is asymmetric (i may consider j a neighbor but not vice versa). UMAP uses <code>w(i,j) = wᵢⱼ + wⱼᵢ − wᵢⱼ·wⱼᵢ</code> — "either direction counts" — instead of t-SNE's average. Result: a single symmetric fuzzy graph in HD.</li>
+    <li><b>Cross-entropy loss + force-directed SGD:</b> in 2D, edge weights vᵢⱼ come from a Student-t-like kernel. Minimize cross-entropy CE(w ‖ v) — equivalent to two forces:
+      <ul style="margin-top:2px">
+        <li><b>Attractive</b> on each HD edge: pull yᵢ and yⱼ together with strength ∝ wᵢⱼ</li>
+        <li><b>Repulsive</b> on random non-edges (<em>negative sampling</em>, ~5 per positive): push them apart</li>
+      </ul>
+      Optimize via stochastic edge-sampling SGD — no full pairwise gradient ⇒ <em>linear-time per epoch</em>, which is why UMAP scales.</li>
+  </ol>
+
+  <div class="box">HD fuzzy weight (i → j):
+  wᵢⱼ = exp( −max(0, dᵢⱼ − ρᵢ) / σᵢ )
+                              ─── ── ──
+                              dist  near  scale
+                                   nbr   (set so Σⱼ wᵢⱼ ≈ log₂(n_neighbors))
+
+Symmetrize:  w(i,j) = wᵢⱼ + wⱼᵢ − wᵢⱼ·wⱼᵢ      (fuzzy OR)
+
+LD weight (Student-t-like; min_dist sets the spacing):
+  vᵢⱼ = (1 + a · ‖yᵢ − yⱼ‖²ᵇ)⁻¹
+
+Loss:  CE(w ‖ v) = Σ_{ij} [ w log(w/v) + (1−w) log((1−w)/(1−v)) ]
+                  ─────────────────  ─────────────────────────────
+                   attractive term         repulsive term
+                   (HD edges pull)      (non-edges push, via neg. sampling)</div>
+
+  <p class="ok"><b>Why this gives better global structure than t-SNE:</b> the cross-entropy loss penalizes BOTH "false friends" (close in 2D, far in HD) <em>and</em> "missed neighbors" (far in 2D, close in HD) — symmetric, unlike KL(P‖Q) which only punishes the first. So UMAP is less willing to crush long-range structure to perfect locals.</p>
+
   <ul>
     <li><b>n_neighbors:</b> like t-SNE perplexity — small=local, large=more global. <b>min_dist:</b> minimum spacing in 2D; smaller ⇒ tighter clusters with bigger gaps.</li>
-    <li class="ok">Generally better global structure than t-SNE; faster on large data; supports <b>inductive transform</b> (place new points without re-fitting); has a <b>supervised mode</b></li>
+    <li class="ok">Generally better global structure than t-SNE; faster on large data (edge-sampling SGD); supports <b>inductive transform</b> (place new points without re-fitting); has a <b>supervised mode</b></li>
     <li>Spectral init by default ⇒ more reproducible than t-SNE's random init</li>
     <li>No early exaggeration phase (that's a t-SNE thing)</li>
+    <li class="warn"><b>Both methods are scale-sensitive</b> (Euclidean distances in HD). Standardize features first — but neither method <em>requires</em> a specific range like [0,1]. "t-SNE is scale-invariant" is false.</li>
   </ul>
 
   <h3>When NOT to use t-SNE / UMAP</h3>
