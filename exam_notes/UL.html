@@ -214,7 +214,7 @@ M-step (refit params using responsibilities as weights):
   <ul>
     <li><b>Elbow method</b> (K-Means): plot inertia vs k. Inertia <em>always drops</em> as k grows (more centroids → smaller distances, k=N gives J=0); pick the "kink" where the drop levels off.</li>
     <li><b>Silhouette score</b>: per-point (b−a)/max(a,b) where a = mean intra-cluster dist, b = mean dist to nearest other cluster. Range [−1, 1], <b>higher is better</b> (≈1 well-clustered, ≈0 on boundary, &lt;0 likely wrong cluster).</li>
-    <li><b>BIC / AIC</b> (GMM): penalize log-likelihood by # parameters; <b>lower is better</b>. BIC penalty (k·log n) is stricter than AIC's (2k) ⇒ BIC favors simpler models.</li>
+    <li><b>BIC / AIC</b> (GMM): <b>lower is better.</b> AIC = −2 log L + 2·p, BIC = −2 log L + log(n)·p, where <b>p</b> = number of free parameters in the model (grows with K and structure — not the same letter as cluster count!). For sufficiently large <i>n</i>, log(<i>n</i>) &gt; 2 ⇒ BIC penalizes complexity harder per parameter ⇒ often picks smaller K than AIC.</li>
     <li class="warn">Optimizing in-sample fit alone (= minimizing inertia for K-Means or maximizing log-likelihood for GMM) <em>always</em> rewards larger k ⇒ over-segmentation. Practical pairings: <b>K-Means → elbow + silhouette</b> (elbow = diminishing returns; silhouette = geometric quality); <b>GMM → BIC/AIC</b> (built-in complexity penalty; silhouette assumes spherical clusters so it under-rates GMM's ellipsoidal fits).</li>
   </ul>
 
@@ -393,15 +393,17 @@ Common objectives:
   <p><b>Canonical example:</b> the Swiss roll — 2D surface curled in 3D. PCA squashes it onto its longest axis (wrong); Isomap unrolls it.</p>
 
   <h3>MDS &amp; Sammon Mapping (distance preservation)</h3>
-  <div class="box">Classical MDS:  preserves all pairwise Euclidean distances
-                Stress = Σᵢⱼ (d*ᵢⱼ − dᵢⱼ)²        (unweighted)
-                ≡ PCA when input distances are Euclidean
+  <div class="box">Classical MDS (PCoA):  doubly-centered inner-product matrix built from squared D
+                → eigendecomposition (minimizes STRAIN ≡ preserves inner products)
+                ⇒ same embedding as PCA (up to rotation) when d*ᵢⱼ come from Euclidean data
+
+Metric / least-squares MDS: iterative STRESS     Σᵢⱼ (d*ᵢⱼ − dᵢⱼ)²       (unweighted)
 
 Sammon:        weighted stress, weights ∝ 1/d*ᵢⱼ
                 Stress_S = Σᵢⱼ (d*ᵢⱼ − dᵢⱼ)² / d*ᵢⱼ
                           → emphasizes SMALL original distances</div>
   <ul>
-    <li><b>Sammon</b> deliberately overweights short distances ⇒ preserves <em>local</em> structure better than plain MDS, reducing crowding</li>
+    <li><b>Sammon</b> deliberately overweights short distances ⇒ preserves <em>local</em> structure better than unweighted stress MDS, reducing crowding</li>
     <li>Both are non-parametric: no inductive map for new points without re-running</li>
   </ul>
 
@@ -435,7 +437,7 @@ Take the smallest non-trivial eigenvectors as embedding coords.</div>
   <p><b>Three core tricks:</b></p>
   <ol>
     <li><b>Distances → probabilities (SNE):</b> raw high-d distances are noisy, so model "probability that j is a neighbor of i" via a Gaussian kernel anchored at xᵢ (i indexes data <em>points</em>, not features). σᵢ is the std dev of that kernel — one scalar per point, isotropic across all d feature directions. It's tuned <em>per-point</em> so each point sees the same effective neighborhood size = <b>perplexity</b> (small σᵢ in dense regions, large σᵢ in sparse ones — adapts to local density).</li>
-    <li><b>Asymmetric KL ⇒ local emphasis:</b> minimizing KL(P ‖ Q) heavily penalizes "false friends" (far high-d points placed close in 2D) but cheaply forgives "missed neighbors" (close points placed apart). ⇒ aggressive preservation of local neighborhoods, willing sacrifice of global geometry.</li>
+    <li class="warn"><b>KL direction matters (exam trap):</b> minimizing <b>KL(P ‖ Q)</b> blows up when HD neighbors get tiny LD affinity <code>q</code> (<b>missed neighbors</b> — HD-close, LD-far): those pairs have sizable <code>p</code>, so <code>p log(p/q)</code> is huge. Pairs with tiny <code>p</code> (HD-distant) contribute almost nothing even if LD places them together (<b>false friends</b> are cheap): long-range layout is poorly constrained ⇒ locals dominate and global HD distances aren't faithful in the plot.</li>
     <li><b>Student-t in low-d (the "t" of t-SNE) fixes crowding:</b> high-d volume grows faster than 2D, so a Gaussian-Gaussian version (original SNE) crowds moderate-distance points in the middle. Heavy-tailed Student-t lets moderate distances spread out ⇒ visible cluster gaps.</li>
   </ol>
   <div class="box">High-d affinities P (Gaussian kernel; perplexity sets bandwidth):
@@ -487,7 +489,7 @@ Loss:  CE(w ‖ v) = Σ_{ij} [ w log(w/v) + (1−w) log((1−w)/(1−v)) ]
                    attractive term         repulsive term
                    (HD edges pull)      (non-edges push, via neg. sampling)</div>
 
-  <p class="ok"><b>Why this gives better global structure than t-SNE:</b> the cross-entropy loss penalizes BOTH "false friends" (close in 2D, far in HD) <em>and</em> "missed neighbors" (far in 2D, close in HD) — symmetric, unlike KL(P‖Q) which only punishes the first. So UMAP is less willing to crush long-range structure to perfect locals.</p>
+  <p class="ok"><b>Why this often looks more "globally organized" than t-SNE:</b> <b>KL(P‖Q)</b> cost is dominated by large-<code>p</code> pairs; tiny-<code>p</code> pairs barely nudge it, so long-range spacing has little supervisory signal. UMAP pairs HD edge attraction with sampled repulsive terms in <b>CE(w‖v)</b>, so HD↔LD agreement is pressured more evenly ⇒ less incentive to shred macro spacing just to micro-tune neighborhoods.</p>
 
   <ul>
     <li><b>n_neighbors:</b> like t-SNE perplexity — small=local, large=more global. <b>min_dist:</b> minimum spacing in 2D; smaller ⇒ tighter clusters with bigger gaps.</li>

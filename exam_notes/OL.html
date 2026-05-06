@@ -159,7 +159,8 @@ For maximization (fitness f):    ΔE = f(current) − f(candidate)
     <li><b>High T</b> → uphill moves likely (exploration); T → ∞ ≈ random walk</li>
     <li><b>Low T</b> → behaves greedily (exploitation); T → 0 ≈ RHC</li>
     <li>Acceptance depends on <b>ΔE</b> (difference), not absolute energies</li>
-    <li><b>Bigger downhill = exponentially less likely accepted</b> — algo prefers small detours over big plunges</li>
+    <li class="ok"><b>Downhill moves (ΔE ≤ 0):</b> accepted w.p. 1 — magnitude of improvement does not matter (no stochastic rejection).</li>
+    <li><b>Uphill moves (ΔE > 0):</b> acceptance <code>∝ exp(−ΔE/T)</code> — a <em>larger</em> worsen (larger ΔE) is exponentially <em>less</em> likely; small escapes over a hill ridge are favored over huge jumps backward.</li>
     <li>Derivative-free; no gradient/Hessian needed</li>
     <li class="warn">Beneficial moves are NOT accepted with exp(+ΔE/T) — they're accepted w.p. 1</li>
     <li class="warn">Track the <em>best ever seen</em>, not just current state — SA can wander away from a great solution</li>

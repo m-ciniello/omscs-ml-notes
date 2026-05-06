@@ -466,7 +466,7 @@ Von Neumann theorem (1928):
 
   <table>
     <tr><th></th><th>Zero-sum stochastic game</th><th>General-sum stochastic game</th></tr>
-    <tr><th>Reward structure</th><td>Σᵢ Rᵢ = 0 (strict competition)</td><td>Each Rᵢ independent (mix of cooperation & competition)</td></tr>
+    <tr><th>Reward structure</th><td>Σᵢ Rᵢ = 0 (strict competition)</td><td>Each Rᵢ independent (mix of cooperation &amp; competition)</td></tr>
     <tr><th>Equilibrium concept</th><td>Minimax (unique value)</td><td>Nash equilibrium (often multiple)</td></tr>
     <tr><th>Bellman backup</th><td><code>V*(s) = max_π1 min_π2 Σ_a₁,a₂ π1·π2·[r + γ·V*(s′)]</code></td><td><code>V*(s) = NashValue at stage game with continuation</code></td></tr>
     <tr><th>Backup is a contraction?</th><td class="ok">Yes (γ-contraction)</td><td class="warn">No in general — multiple NE break uniqueness</td></tr>
@@ -511,9 +511,10 @@ Von Neumann theorem (1928):
   <h3>Subgame Perfect Equilibrium (SPE)</h3>
   <p>Strategy profile is a <b>Nash equilibrium in every subgame</b>, including off-path histories. Stronger than Nash: rules out <em>empty threats</em> that wouldn't actually be carried out.</p>
   <ul>
-    <li>Solved via <b>backward induction</b>: start from the end of the game, find optimal play, propagate back</li>
-    <li>Not every Nash is SPE — non-credible punishment threats can support Nash but fail SPE</li>
-    <li>Requires <em>punishment to be optimal even when triggered</em> — else the deviator knows you won't follow through</li>
+    <li><b>Finite horizon / sequential structure:</b> SPE ⇔ backward induction starting from terminal nodes/subgames.</li>
+    <li class="warn"><b>Infinite repetitions:</b> there is no last round to anchor induction — SPE checks <em>credible continuation</em> after every observable history (<b>no profitable one-shot deviation</b>). Folk-theorem / grim-trigger constructions are defended that way; don't misapply naive finite backward induction.</li>
+    <li>Not every Nash is SPE — non-credible punishment threats can support Nash but fail SPE.</li>
+    <li>Requires <em>punishment that remains optimal if invoked</em> — else deviations aren't deterred.</li>
   </ul>
 
   <h3>Common Repeated-Game Strategies</h3>

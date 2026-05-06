@@ -270,7 +270,7 @@ AUC-ROC: perfect = 1.0,  random = 0.5</div>
   <table>
     <tr><th></th><th>Eager (ID3, NN, …)</th><th>Lazy (k-NN, lazy ID3)</th></tr>
     <tr><th>Train cost</th><td>O(n·d·depth) once</td><td>O(1) — just store data</td></tr>
-    <tr><th>Query cost</th><td>O(depth)</td><td>O(n·d·depth) per query</td></tr>
+    <tr><th>Query cost</th><td>O(depth)</td><td>k-NN: O(n·d) per query &nbsp;·&nbsp; lazy ID3: O(n·d·depth) per query</td></tr>
     <tr><th>Online updates</th><td class="warn">Costly (retrain)</td><td class="ok">Trivial (append to S)</td></tr>
     <tr><th>Reusable model</th><td class="ok">Yes — exportable, inspectable</td><td class="warn">No global structure</td></tr>
     <tr><th>Pruning, feat-importance</th><td class="ok">Easy (global view)</td><td class="warn">Awkward (no full tree)</td></tr>
@@ -407,19 +407,24 @@ Normalize:   wᵢ ← wᵢ' / Z      where  Z = Σⱼ wⱼ'</div>
   <p><b>Worked Example — AdaBoost round 1</b> (8 examples, w₀ = 1/8 each):</p>
   <div class="box">Learner h₁ misclassifies examples 3 and 8:
   ε₁ = 2/8 = 0.25
-  α₁ = ½ · ln(0.75 / 0.25) = ½ · ln(3) ≈ 0.549
+  α₁ = ½ · ln(0.75 / 0.25) = ½ · ln(3) ≈ 0.5493
+  e^{+α₁} = √3 ≈ 1.7321,   e^{−α₁} = 1/√3 ≈ 0.5774
 
 Unnormalized new weights:
-  correct (6 examples):  1/8 · e^{−0.549} ≈ 0.072
-  misclassified (2):     1/8 · e^{+0.549} ≈ 0.217
+  correct (6 examples):  1/8 · 0.5774 ≈ 0.0722
+  misclassified (2):     1/8 · 1.7321 ≈ 0.2165
 
-Z = 6·0.072 + 2·0.217 = 0.434 + 0.434 = 0.868
+Total weight on each side (key AdaBoost invariant):
+  correct sum       = 6 · 0.0722 = 0.4330  ← exactly √3/4
+  misclassified sum = 2 · 0.2165 = 0.4330  ← exactly √3/4
+  Z = 0.4330 + 0.4330 = 0.8660 = √3/2
 
 Normalized:
-  correct       → 0.072 / 0.868 ≈ 0.083
-  misclassified → 0.217 / 0.868 ≈ 0.250
+  correct       → 0.0722 / 0.866 ≈ 0.0833
+  misclassified → 0.2165 / 0.866 ≈ 0.2500
 
-Sanity: 6·0.083 + 2·0.250 ≈ 1.0  ✓</div>
+Sanity: 6·0.0833 + 2·0.2500 = 0.5 + 0.5 = 1.0  ✓</div>
+  <p class="ok"><b>The "0.5 + 0.5 = 1" structure isn't coincidence:</b> AdaBoost's α formula is calibrated so the new weights split exactly in half between correct and misclassified. After normalization, the next round's weighted error of h_t under the new weights is <em>exactly 0.5</em> — the previously-good learner becomes useless on the reweighted data, forcing diversity in h_{t+1}.</p>
 
   <p><b>NOT what ensembles do</b> (common distractors):</p>
   <ul>
@@ -504,7 +509,7 @@ Both networks output the same XOR truth table:
     <tr><th>Output</th><td><b>Thresholded:</b> o = sgn(w·x)</td><td><b>Unthresholded:</b> o = w·x (linear)</td></tr>
     <tr><th>Derived from</th><td>Heuristic: nudge boundary on errors</td><td>Gradient of ½Σ(t − o)²</td></tr>
     <tr><th>Differentiable</th><td class="warn">No (sgn step)</td><td class="ok">Yes — enables backprop</td></tr>
-    <tr><th>Convergence</th><td class="ok">Finite steps <em>iff</em> data linearly separable (Rosenblatt)</td><td class="ok">Always converges to local min for small η</td></tr>
+    <tr><th>Convergence</th><td class="ok">Finite steps <em>iff</em> data linearly separable (Rosenblatt)</td><td class="ok">Single linear unit: loss is convex ⇒ converges to <b>global</b> min for small η. Stacked nonlinear layers (MLP backprop): loss is non-convex ⇒ only local min / saddle point</td></tr>
     <tr><th>Inseparable data</th><td class="warn">Oscillates forever</td><td>Finds best linear fit (compromise)</td></tr>
   </table>
 
@@ -632,7 +637,7 @@ m ≥ (1/ε) · [ ln|H| + ln(1/δ) ]         sample complexity</div>
     <tr><td>1D threshold (x &gt; t)</td><td>1</td><td>2 points: (+,−) impossible when t flipped</td></tr>
     <tr><td>1D interval [a,b]</td><td>2</td><td>3 points: can't isolate middle as −</td></tr>
     <tr><td>Hyperplanes</td><td>d + 1</td><td>d+1 affinely independent points</td></tr>
-    <tr><td>Hyperspheres (free center)</td><td>d + 2</td><td>d center coords + 1 radius</td></tr>
+    <tr><td>Hyperspheres (free center)</td><td>d + 2 *</td><td>d center + 1 radius + 1 polarity. (* d+1 if only one polarity allowed; course convention is d+2.)</td></tr>
     <tr><td><b>Origin-centered circle/sphere</b></td><td><b>1</b> or <b>2</b> *</td><td>Only r free → 1D threshold on ‖x‖. <b>VC=1</b> if one polarity (‖x‖≤r positive); <b>VC=2</b> if both polarities allowed (course solutions usually take 2).</td></tr>
     <tr><td>Axis-aligned boxes</td><td>2d</td><td>2 thresholds (lower + upper) per dim</td></tr>
     <tr><td>sin(ωx), free ω</td><td>∞</td><td>Frequency can flip any subset → not PAC learnable</td></tr>
